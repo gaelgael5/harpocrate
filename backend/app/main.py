@@ -7,7 +7,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
-from app.api.v1 import auth, config_keycloak, config_public, grants, health, secrets, users, wallets
+from app.api.v1 import (
+    api_keys,
+    auth,
+    config_keycloak,
+    config_public,
+    grants,
+    health,
+    secrets,
+    users,
+    wallets,
+)
 from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
@@ -82,3 +92,4 @@ app.include_router(grants.router, prefix="/v1")
 app.include_router(grants.my_grant_router, prefix="/v1")
 app.include_router(users.router, prefix="/v1")
 app.include_router(secrets.router, prefix="/v1")
+app.include_router(api_keys.router, prefix="/v1")

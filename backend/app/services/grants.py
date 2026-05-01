@@ -319,10 +319,25 @@ async def delete_grant(
     grantee_user_id: UUID = grant_row["grantee_user_id"]
 
     async with conn.transaction():
-        # TODO LOT_08 : révoquer les API keys créées par grantee_user_id sur ce wallet
-        # après l'implémentation des api_keys (table api_keys) :
-        #   await api_keys_repo.revoke_by_owner_on_wallet(conn, wallet_id=wallet_id,
-        #                                                  owner_user_id=grantee_user_id)
+        # LOT_08 : cascade — révoque les API keys de grantee_user_id sur ce wallet
+        from app.core import api_key_cache as cache_mod
+        from app.db.repositories import api_keys as api_keys_repo
+
+        revoked_count = await api_keys_repo.revoke_api_keys_by_owner_on_wallet(
+            conn,
+            wallet_id=wallet_id,
+            owner_user_id=grantee_user_id,
+        )
+        # Invalide le cache pour les clés révoquées (on ne connaît pas leurs IDs ici,
+        # mais cache_invalidate par api_key_id nécessite les IDs individuels —
+        # on vide tout le cache pour ce wallet owner, acceptable pour MVP).
+        # Alternative : récupérer les IDs avant DELETE. Choix MVP : invalider globalement
+        # les entrées de cache pour cet owner est trop coûteux sans les IDs.
+        # La révocation DB suffit : le cache TTL 60s est un best-effort.
+        # Pour une invalidation propre on vide le cache complet de validation.
+        if revoked_count > 0:
+            cache_mod.cache_clear_all()
+
         await grants_repo.delete_grant(conn, grant_id=grant_id)
         await audit_log_insert(
             conn,
@@ -331,5 +346,5 @@ async def delete_grant(
             actor_ip=actor_ip,
             target_wallet_id=wallet_id,
             target_user_id=grantee_user_id,
-            metadata={"grant_id": str(grant_id)},
+            metadata={"grant_id": str(grant_id), "cascaded_api_keys_revoked": revoked_count},
         )

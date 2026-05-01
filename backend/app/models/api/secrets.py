@@ -1,4 +1,4 @@
-"""Schémas Pydantic pour les endpoints /v1/wallets/{id}/secrets/* — LOT_05."""
+"""Schémas Pydantic pour les endpoints /v1/wallets/{id}/secrets/* — LOT_05/06."""
 from __future__ import annotations
 
 import base64
@@ -6,6 +6,8 @@ import re
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator
+
+from app.models.api.generators import GenerationDescriptor
 
 # Limite : 5 MB après décodage base64
 _MAX_VALUE_BYTES = 5 * 1024 * 1024
@@ -167,3 +169,81 @@ class SecretPutResponse(BaseModel):
     """Réponse de PUT /v1/wallets/{id}/secrets/{name}."""
 
     generation_version: int
+
+
+# ─── LOT_06 — Placeholders ────────────────────────────────────────────────────
+
+
+class PlaceholderCreateRequest(BaseModel):
+    """Corps de POST /v1/wallets/{id}/secrets/placeholder."""
+
+    name: str
+    description: str | None = None
+    tags: list[str] = []
+    generation_descriptor: GenerationDescriptor
+    linked_secret_id: UUID | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_valid(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be empty")
+        if len(stripped) > 256:
+            raise ValueError("name must not exceed 256 characters")
+        if not _NAME_RE.match(stripped):
+            raise ValueError(
+                "name must match ^[A-Za-z0-9_.-]+ (env-var-safe characters only)"
+            )
+        return stripped
+
+    @field_validator("description")
+    @classmethod
+    def _desc_valid(cls, v: str | None) -> str | None:
+        if v is not None and len(v) > 1000:
+            raise ValueError("description must not exceed 1000 characters")
+        return v
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _tags_normalize(cls, v: object) -> list[str]:
+        if not isinstance(v, list):
+            raise ValueError("tags must be a list")
+        return [str(t).strip().lower() for t in v if str(t).strip()]
+
+
+class PopulateRequest(BaseModel):
+    """Corps de POST /v1/wallets/{id}/secrets/{name}/populate."""
+
+    encrypted_value: str  # base64
+
+    @field_validator("encrypted_value")
+    @classmethod
+    def _value_valid(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("encrypted_value must not be empty")
+        try:
+            raw = base64.b64decode(v)
+        except Exception as exc:
+            raise ValueError("encrypted_value must be valid base64") from exc
+        if len(raw) > _MAX_VALUE_BYTES:
+            raise ValueError(
+                f"encrypted_value exceeds max size of {_MAX_VALUE_BYTES} bytes after decoding"
+            )
+        return v
+
+
+class PopulateResponse(BaseModel):
+    """Réponse de POST /v1/wallets/{id}/secrets/{name}/populate."""
+
+    generation_version: int
+
+
+class DescriptorResponse(BaseModel):
+    """Réponse de GET /v1/wallets/{id}/secrets/{name}/descriptor."""
+
+    name: str
+    is_placeholder: bool
+    generation_descriptor: GenerationDescriptor | None
+    generation_version: int
+    linked_secret_id: UUID | None

@@ -1,7 +1,8 @@
-"""Service secrets — logique métier CRUD secrets (LOT_05)."""
+"""Service secrets — logique métier CRUD secrets (LOT_05/06)."""
 from __future__ import annotations
 
 import base64
+from typing import Any
 from uuid import UUID
 
 import asyncpg
@@ -9,7 +10,12 @@ from fastapi import HTTPException, status
 
 from app.db.repositories import secrets as secrets_repo
 from app.db.repositories import wallets as wallets_repo
+from app.models.api.generators import GenerationDescriptor
 from app.models.api.secrets import (
+    DescriptorResponse,
+    PlaceholderCreateRequest,
+    PopulateRequest,
+    PopulateResponse,
     SecretCreateRequest,
     SecretCreateResponse,
     SecretDetailResponse,
@@ -22,7 +28,14 @@ from app.models.api.secrets import (
 )
 from app.models.db.secret import SecretRow
 from app.services.audit import audit_log_insert
-from app.services.permissions import PERM_ADD, PERM_READ, PERM_REMOVE, PERM_WRITE, has
+from app.services.permissions import (
+    PERM_ADD,
+    PERM_INIT,
+    PERM_READ,
+    PERM_REMOVE,
+    PERM_WRITE,
+    has,
+)
 
 # ─── Helpers privés ───────────────────────────────────────────────────────────
 
@@ -176,6 +189,21 @@ async def get_secret(
             detail={"error": "secret_not_found", "message": "Secret not found"},
         )
 
+    # LOT_06 : placeholder → 424 Failed Dependency avec descripteur
+    if secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY,
+            detail={
+                "error": "placeholder_value_missing",
+                "message": "Secret has no value yet, populate it first.",
+                "details": {
+                    "name": secret.name,
+                    "is_placeholder": True,
+                    "generation_descriptor": secret.generation_descriptor,
+                },
+            },
+        )
+
     enc_wallet_key_bytes = await secrets_repo.get_caller_encrypted_wallet_key(
         conn, wallet_id=wallet_id, user_id=caller_user_id
     )
@@ -298,6 +326,19 @@ async def put_secret(
             detail={"error": "secret_not_found", "message": "Secret not found"},
         )
 
+    # LOT_06 : PUT sur un placeholder → 409 (utiliser populate à la place)
+    if secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "placeholder_expected",
+                "message": (
+                    "This secret is a placeholder. "
+                    "Use POST /populate (permission [init]) to set its value."
+                ),
+            },
+        )
+
     try:
         enc_value = base64.b64decode(req.encrypted_value)
     except Exception as exc:  # pragma: no cover — validé par Pydantic
@@ -411,3 +452,231 @@ async def delete_secret(
             target_secret_id=secret.id,
             metadata={"secret_name": name},
         )
+
+
+# ─── LOT_06 — Create placeholder ──────────────────────────────────────────────
+
+
+async def create_placeholder(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    req: PlaceholderCreateRequest,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> SecretCreateResponse:
+    """Crée un secret placeholder avec descripteur de génération. Requiert [add]."""
+    await _load_wallet_and_check(
+        conn,
+        wallet_id=wallet_id,
+        caller_user_id=caller_user_id,
+        required_perm=PERM_ADD,
+        perm_error_code="missing_add_permission",
+    )
+
+    # Validation linked_secret_id : doit appartenir au même wallet
+    if req.linked_secret_id is not None:
+        linked_wallet_id: UUID | None = await conn.fetchval(
+            "SELECT wallet_id FROM secrets WHERE id = $1",
+            req.linked_secret_id,
+        )
+        if linked_wallet_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "linked_secret_not_found",
+                    "message": "linked_secret_id does not refer to an existing secret.",
+                },
+            )
+        if linked_wallet_id != wallet_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "linked_secret_must_be_in_same_wallet",
+                    "message": "linked_secret_id must point to a secret in the same wallet.",
+                },
+            )
+
+    descriptor_dict: dict[str, Any] = req.generation_descriptor.model_dump()
+
+    try:
+        async with conn.transaction():
+            secret_id = await secrets_repo.insert_placeholder(
+                conn,
+                wallet_id=wallet_id,
+                name=req.name,
+                description=req.description,
+                generation_descriptor=descriptor_dict,
+                tags=req.tags,
+                linked_secret_id=req.linked_secret_id,
+                created_by_user_id=caller_user_id,
+            )
+            await audit_log_insert(
+                conn,
+                "secret.placeholder_created",
+                actor_user_id=caller_user_id,
+                actor_ip=actor_ip,
+                target_wallet_id=wallet_id,
+                target_secret_id=secret_id,
+                metadata={
+                    "secret_name": req.name,
+                    "generator_type": descriptor_dict.get("type"),
+                },
+            )
+    except asyncpg.UniqueViolationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "secret_name_exists",
+                "message": f"A secret named '{req.name}' already exists in this wallet.",
+            },
+        ) from exc
+
+    return SecretCreateResponse(secret_id=secret_id)
+
+
+# ─── LOT_06 — Populate placeholder ───────────────────────────────────────────
+
+
+async def populate_secret(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    name: str,
+    req: PopulateRequest,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> PopulateResponse:
+    """Peuple un placeholder avec sa valeur chiffrée. Requiert [init]."""
+    await _load_wallet_and_check(
+        conn,
+        wallet_id=wallet_id,
+        caller_user_id=caller_user_id,
+        required_perm=PERM_INIT,
+        perm_error_code="missing_init_permission",
+    )
+
+    secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
+    if secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "secret_not_found", "message": "Secret not found"},
+        )
+
+    if not secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "secret_already_populated",
+                "message": (
+                    "This secret already has a value. "
+                    "Use PUT (permission [write]) to update it."
+                ),
+            },
+        )
+
+    try:
+        enc_value = base64.b64decode(req.encrypted_value)
+    except Exception as exc:  # pragma: no cover — validé par Pydantic
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_base64", "message": "encrypted_value is not valid base64"},
+        ) from exc
+
+    descriptor_type = (secret.generation_descriptor or {}).get("type")
+
+    async with conn.transaction():
+        new_version = await secrets_repo.populate_secret(
+            conn,
+            secret_id=secret.id,
+            encrypted_value=enc_value,
+            updated_by_user_id=caller_user_id,
+        )
+        await audit_log_insert(
+            conn,
+            "secret.populated",
+            actor_user_id=caller_user_id,
+            actor_ip=actor_ip,
+            target_wallet_id=wallet_id,
+            target_secret_id=secret.id,
+            metadata={"secret_name": name, "generator_type": descriptor_type},
+        )
+
+    return PopulateResponse(generation_version=new_version)
+
+
+# ─── LOT_06 — Get descriptor ──────────────────────────────────────────────────
+
+
+async def get_descriptor(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    name: str,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> DescriptorResponse:
+    """Retourne le descripteur de génération. Requiert [read] ou [init].
+
+    Retourne 404 si le secret n'est pas (ou plus) un placeholder.
+    """
+    # Accepte [read] OU [init] : on vérifie qu'au moins l'un des deux est présent
+    wallet = await wallets_repo.get_wallet_for_user(
+        conn, wallet_id=wallet_id, user_id=caller_user_id
+    )
+    if wallet is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "wallet_not_found", "message": "Wallet not found"},
+        )
+
+    if not (has(wallet.my_permissions, PERM_READ) or has(wallet.my_permissions, PERM_INIT)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "missing_read_or_init_permission",
+                "message": "Missing required permission: [read] or [init]",
+            },
+        )
+
+    secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
+    if secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "secret_not_found", "message": "Secret not found"},
+        )
+
+    if not secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "secret_not_placeholder",
+                "message": "This secret is not a placeholder; it has no generation descriptor.",
+            },
+        )
+
+    await audit_log_insert(
+        conn,
+        "secret.descriptor_accessed",
+        actor_user_id=caller_user_id,
+        actor_ip=actor_ip,
+        target_wallet_id=wallet_id,
+        target_secret_id=secret.id,
+        metadata={"secret_name": name},
+    )
+
+    # Reconstruit le GenerationDescriptor validé depuis le dict brut stocké en DB
+    descriptor: GenerationDescriptor | None = None
+    if secret.generation_descriptor is not None:
+        from pydantic import TypeAdapter
+
+        _ta: TypeAdapter[GenerationDescriptor] = TypeAdapter(GenerationDescriptor)
+        descriptor = _ta.validate_python(secret.generation_descriptor)
+
+    return DescriptorResponse(
+        name=secret.name,
+        is_placeholder=secret.is_placeholder,
+        generation_descriptor=descriptor,
+        generation_version=secret.generation_version,
+        linked_secret_id=secret.linked_secret_id,
+    )

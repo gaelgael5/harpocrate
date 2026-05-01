@@ -140,6 +140,7 @@ def _fake_secret_row(
             "encrypted_value": enc_value,
             "is_placeholder": False,
             "generation_version": generation_version,
+            "generation_descriptor": None,
             "linked_secret_id": None,
             "created_at": _NOW,
             "updated_at": _NOW,

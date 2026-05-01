@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
+from typing import Any
 from uuid import UUID
 
 
@@ -25,3 +26,5 @@ class SecretRow:
     updated_by_user_id: UUID | None
     updated_by_api_key_id: UUID | None
     tags: list[str] = field(default_factory=list)
+    # JSONB brut décodé par asyncpg en dict Python (None si secret valorisé)
+    generation_descriptor: dict[str, Any] | None = None

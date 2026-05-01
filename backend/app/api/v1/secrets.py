@@ -15,6 +15,8 @@ from app.core.security import JwtUser
 from app.db.pool import get_pool
 from app.db.repositories import users as users_repo
 from app.models.api.secrets import (
+    PlaceholderCreateRequest,
+    PopulateRequest,
     SecretCreateRequest,
     SecretPatchRequest,
     SecretPutRequest,
@@ -214,6 +216,113 @@ async def patch_secret(
         )
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"ok": True})
+
+
+# ─── POST /v1/wallets/{wallet_id}/secrets/placeholder ────────────────────────
+
+# IMPORTANT : cette route doit être déclarée AVANT "/{name}" pour que FastAPI
+# ne l'interprète pas comme un secret nommé "placeholder".
+
+
+@router.post("/placeholder", status_code=status.HTTP_201_CREATED)
+async def create_placeholder(
+    wallet_id: UUID,
+    req: PlaceholderCreateRequest,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Crée un secret placeholder avec descripteur de génération. Requiert [add]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        result = await secrets_svc.create_placeholder(
+            conn,
+            wallet_id=wallet_id,
+            req=req,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content=result.model_dump(mode="json"),
+    )
+
+
+# ─── POST /v1/wallets/{wallet_id}/secrets/{name}/populate ────────────────────
+
+
+@router.post("/{name}/populate")
+async def populate_secret(
+    wallet_id: UUID,
+    name: str,
+    req: PopulateRequest,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Peuple un placeholder avec sa valeur chiffrée. Requiert [init]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        result = await secrets_svc.populate_secret(
+            conn,
+            wallet_id=wallet_id,
+            name=name,
+            req=req,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=result.model_dump(mode="json"),
+    )
+
+
+# ─── GET /v1/wallets/{wallet_id}/secrets/{name}/descriptor ───────────────────
+
+
+@router.get("/{name}/descriptor")
+async def get_descriptor(
+    wallet_id: UUID,
+    name: str,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Retourne le descripteur de génération du placeholder. Requiert [read] ou [init]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        result = await secrets_svc.get_descriptor(
+            conn,
+            wallet_id=wallet_id,
+            name=name,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=result.model_dump(mode="json"),
+    )
 
 
 # ─── DELETE /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────

@@ -1,8 +1,9 @@
-"""Requêtes SQL pour la table secrets + secret_tags — LOT_05."""
+"""Requêtes SQL pour la table secrets + secret_tags — LOT_05/06."""
 from __future__ import annotations
 
 import base64
 import datetime
+import json
 from typing import Any
 from uuid import UUID
 
@@ -31,6 +32,17 @@ def decode_cursor(cursor: str) -> tuple[datetime.datetime, UUID]:
 
 
 def _row_to_secret(row: Any, tags: list[str]) -> SecretRow:
+    # asyncpg décode JSONB → str en asyncpg < 0.30, dict en ≥ 0.30.
+    # On normalise en dict | None ici pour isoler le comportement.
+    raw_descriptor = row["generation_descriptor"]
+    descriptor: dict[str, Any] | None
+    if raw_descriptor is None:
+        descriptor = None
+    elif isinstance(raw_descriptor, dict):
+        descriptor = raw_descriptor
+    else:
+        descriptor = json.loads(str(raw_descriptor))
+
     return SecretRow(
         id=row["id"],
         wallet_id=row["wallet_id"],
@@ -49,6 +61,7 @@ def _row_to_secret(row: Any, tags: list[str]) -> SecretRow:
         updated_by_user_id=row["updated_by_user_id"],
         updated_by_api_key_id=row["updated_by_api_key_id"],
         tags=tags,
+        generation_descriptor=descriptor,
     )
 
 
@@ -72,6 +85,7 @@ async def list_secrets(
             s.id, s.wallet_id, s.name, s.description,
             s.encrypted_value, s.is_placeholder,
             s.generation_version, s.linked_secret_id,
+            s.generation_descriptor,
             s.created_at, s.updated_at,
             s.created_by_user_id, s.created_by_api_key_id,
             s.updated_by_user_id, s.updated_by_api_key_id
@@ -128,6 +142,7 @@ async def get_secret_by_name(
             id, wallet_id, name, description,
             encrypted_value, is_placeholder,
             generation_version, linked_secret_id,
+            generation_descriptor,
             created_at, updated_at,
             created_by_user_id, created_by_api_key_id,
             updated_by_user_id, updated_by_api_key_id
@@ -285,3 +300,115 @@ async def delete_secret(
 ) -> None:
     """Supprime le secret (cascade sur secret_tags)."""
     await conn.execute("DELETE FROM secrets WHERE id = $1", secret_id)
+
+
+# ─── INSERT placeholder ───────────────────────────────────────────────────────
+
+
+async def insert_placeholder(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    name: str,
+    description: str | None,
+    generation_descriptor: dict[str, Any],
+    tags: list[str],
+    linked_secret_id: UUID | None,
+    created_by_user_id: UUID,
+) -> UUID:
+    """Insère un secret placeholder (encrypted_value=NULL, is_placeholder=TRUE).
+
+    Lève UniqueViolationError si (wallet_id, name) existe déjà.
+    """
+    secret_id: UUID = await conn.fetchval(
+        """
+        INSERT INTO secrets (
+            wallet_id, name, description,
+            is_placeholder, generation_descriptor,
+            linked_secret_id, created_by_user_id
+        )
+        VALUES ($1, $2, $3, TRUE, $4::jsonb, $5, $6)
+        RETURNING id
+        """,
+        wallet_id,
+        name,
+        description,
+        json.dumps(generation_descriptor),
+        linked_secret_id,
+        created_by_user_id,
+    )
+
+    if tags:
+        await conn.executemany(
+            "INSERT INTO secret_tags (secret_id, tag) VALUES ($1, $2)",
+            [(secret_id, tag) for tag in tags],
+        )
+
+    return secret_id
+
+
+# ─── POPULATE placeholder → valued ────────────────────────────────────────────
+
+
+async def populate_secret(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    secret_id: UUID,
+    encrypted_value: bytes,
+    updated_by_user_id: UUID,
+) -> int:
+    """Peuple un placeholder : SET encrypted_value, is_placeholder=FALSE.
+
+    Retourne la nouvelle generation_version.
+    """
+    new_version: int = await conn.fetchval(
+        """
+        UPDATE secrets
+        SET
+            encrypted_value = $2,
+            is_placeholder = FALSE,
+            updated_by_user_id = $3,
+            generation_version = generation_version + 1
+        WHERE id = $1
+        RETURNING generation_version
+        """,
+        secret_id,
+        encrypted_value,
+        updated_by_user_id,
+    )
+    return new_version
+
+
+# ─── SELECT descriptor only ───────────────────────────────────────────────────
+
+
+async def get_secret_by_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    secret_id: UUID,
+) -> SecretRow | None:
+    """Retourne un secret par son UUID (avec tags). None si absent."""
+    row = await conn.fetchrow(
+        """
+        SELECT
+            id, wallet_id, name, description,
+            encrypted_value, is_placeholder,
+            generation_version, linked_secret_id,
+            generation_descriptor,
+            created_at, updated_at,
+            created_by_user_id, created_by_api_key_id,
+            updated_by_user_id, updated_by_api_key_id
+        FROM secrets
+        WHERE id = $1
+        """,
+        secret_id,
+    )
+    if row is None:
+        return None
+
+    tag_rows = await conn.fetch(
+        "SELECT tag FROM secret_tags WHERE secret_id = $1",
+        secret_id,
+    )
+    tags = [tr["tag"] for tr in tag_rows]
+    return _row_to_secret(row, tags)

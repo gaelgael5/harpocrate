@@ -4,9 +4,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 
-from app.api.v1 import auth, config_keycloak, config_public, grants, health, users, wallets
+from app.api.v1 import auth, config_keycloak, config_public, grants, health, secrets, users, wallets
 from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
@@ -38,6 +39,40 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# ─── Middleware : log des requêtes HTTP ───────────────────────────────────────
+#
+# RÈGLE DE SÉCURITÉ : les chemins /secrets ne doivent JAMAIS avoir leur body loggé.
+# Ce middleware ne lit pas du tout le body ; il se contente de noter body_logged=False
+# pour les chemins secrets afin de documenter explicitement l'intention.
+# Les handlers eux-mêmes ne loguent jamais les champs encrypted_value.
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next: object) -> Response:
+    """Log HTTP requests. Body NEVER read or logged for /secrets paths."""
+    import typing
+
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
+    path = request.url.path
+    # Détecte tout chemin contenant /secrets (liste ou item)
+    is_secrets_path = "/secrets" in path
+    body_logged = not is_secrets_path
+
+    response = await _call_next(request)
+
+    logger.info(
+        "http_request",
+        method=request.method,
+        path=path,
+        status=response.status_code,
+        body_logged=body_logged,
+    )
+    return response
+
+
+# ─── Routers ──────────────────────────────────────────────────────────────────
+
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")
@@ -46,3 +81,4 @@ app.include_router(wallets.router, prefix="/v1")
 app.include_router(grants.router, prefix="/v1")
 app.include_router(grants.my_grant_router, prefix="/v1")
 app.include_router(users.router, prefix="/v1")
+app.include_router(secrets.router, prefix="/v1")

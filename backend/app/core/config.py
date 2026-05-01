@@ -1,4 +1,5 @@
 """Settings Pydantic — validation des floors crypto au démarrage."""
+
 from __future__ import annotations
 
 import base64

@@ -1,4 +1,5 @@
 """Tests pour app.core.config — validation des floors KDF/RSA/HMAC."""
+
 from __future__ import annotations
 
 import base64
@@ -32,9 +33,7 @@ def test_settings_loads_with_minimal_env(base_env: None) -> None:
     assert s.passphrase_length_min == 12
 
 
-def test_settings_rejects_low_kdf_memory(
-    base_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_settings_rejects_low_kdf_memory(base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import Settings
 
     monkeypatch.setenv("HARPOCRATE_KDF_MEMORY_KB", "10000")
@@ -72,9 +71,7 @@ def test_settings_rejects_invalid_hmac_format(
         Settings()
 
 
-def test_settings_rejects_short_hmac_key(
-    base_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_settings_rejects_short_hmac_key(base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import Settings
 
     short = base64.b64encode(b"x" * 16).decode()
@@ -83,9 +80,7 @@ def test_settings_rejects_short_hmac_key(
         Settings()
 
 
-def test_settings_rejects_wrong_rsa_size(
-    base_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_settings_rejects_wrong_rsa_size(base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import Settings
 
     monkeypatch.setenv("HARPOCRATE_RSA_KEY_SIZE_MIN", "1024")
@@ -93,9 +88,7 @@ def test_settings_rejects_wrong_rsa_size(
         Settings()
 
 
-def test_settings_accepts_rsa_4096(
-    base_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_settings_accepts_rsa_4096(base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import Settings
 
     monkeypatch.setenv("HARPOCRATE_RSA_KEY_SIZE_MIN", "4096")

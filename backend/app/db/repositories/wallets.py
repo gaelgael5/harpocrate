@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import json
 from typing import Any
 from uuid import UUID
 
@@ -289,6 +290,191 @@ async def transfer_ownership(
         new_owner_user_id,
         wallet_id,
     )
+
+
+# ─── Export wallet structure ──────────────────────────────────────────────────
+
+
+async def export_wallet_data(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+) -> dict[str, Any]:
+    """Récupère la structure complète d'un wallet pour l'export.
+
+    Retourne: {wallet_row, wallet_tags, secrets: [{secret_row, tags, linked_secret_name}]}
+    Aucune valeur chiffrée n'est incluse.
+    """
+    wallet_row = await conn.fetchrow(
+        "SELECT id, name, description FROM wallets WHERE id = $1",
+        wallet_id,
+    )
+    if wallet_row is None:
+        return {}
+
+    wallet_tag_rows = await conn.fetch(
+        "SELECT tag FROM wallet_tags WHERE wallet_id = $1 ORDER BY tag",
+        wallet_id,
+    )
+    wallet_tags = [r["tag"] for r in wallet_tag_rows]
+
+    secret_rows = await conn.fetch(
+        """
+        SELECT
+            s.id, s.name, s.description, s.is_placeholder,
+            s.generation_descriptor, s.generation_version,
+            ls.name AS linked_secret_name
+        FROM secrets s
+        LEFT JOIN secrets ls ON ls.id = s.linked_secret_id
+        WHERE s.wallet_id = $1
+        ORDER BY s.created_at ASC, s.id ASC
+        """,
+        wallet_id,
+    )
+
+    secret_ids = [r["id"] for r in secret_rows]
+    tags_by_secret: dict[UUID, list[str]] = {}
+    if secret_ids:
+        tag_rows = await conn.fetch(
+            "SELECT secret_id, tag FROM secret_tags WHERE secret_id = ANY($1::uuid[])",
+            secret_ids,
+        )
+        for tr in tag_rows:
+            tags_by_secret.setdefault(tr["secret_id"], []).append(tr["tag"])
+
+    secrets: list[dict[str, Any]] = []
+    for sr in secret_rows:
+        raw_descriptor = sr["generation_descriptor"]
+        descriptor: dict[str, Any] | None
+        if raw_descriptor is None:
+            descriptor = None
+        elif isinstance(raw_descriptor, dict):
+            descriptor = raw_descriptor
+        else:
+            descriptor = json.loads(str(raw_descriptor))
+
+        secret_tags = sorted(tags_by_secret.get(sr["id"], []))
+        secrets.append(
+            {
+                "name": sr["name"],
+                "description": sr["description"],
+                "tags": secret_tags,
+                "is_placeholder": sr["is_placeholder"],
+                "generation_descriptor": descriptor,
+                "generation_version": sr["generation_version"],
+                "linked_secret_name": sr["linked_secret_name"],
+            }
+        )
+
+    return {
+        "wallet": {
+            "name": wallet_row["name"],
+            "description": wallet_row["description"],
+            "tags": wallet_tags,
+        },
+        "secrets": secrets,
+    }
+
+
+# ─── Import wallet atomique ───────────────────────────────────────────────────
+
+
+async def import_wallet_atomic(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_name: str,
+    wallet_description: str | None,
+    wallet_tags: list[str],
+    encrypted_wallet_key: bytes,
+    owner_user_id: UUID,
+    secrets: list[dict[str, Any]],
+) -> tuple[UUID, int]:
+    """Crée un wallet + grant owner + secrets en une transaction atomique.
+
+    Passes:
+    1. INSERT wallet + grant + wallet_tags
+    2. INSERT secrets (linked_secret_id=NULL)
+    3. UPDATE linked_secret_id par résolution de nom
+    4. INSERT secret_tags
+
+    Retourne (wallet_id, nb_secrets_créés).
+    """
+    async with conn.transaction():
+        wallet_id: UUID = await conn.fetchval(
+            """
+            INSERT INTO wallets (name, description, owner_user_id)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            """,
+            wallet_name,
+            wallet_description,
+            owner_user_id,
+        )
+
+        await conn.execute(
+            """
+            INSERT INTO wallet_grants (
+                wallet_id, grantee_user_id, encrypted_wallet_key,
+                permissions, granted_by_user_id
+            ) VALUES ($1, $2, $3, 63, $4)
+            """,
+            wallet_id,
+            owner_user_id,
+            encrypted_wallet_key,
+            owner_user_id,
+        )
+
+        if wallet_tags:
+            await conn.executemany(
+                "INSERT INTO wallet_tags (wallet_id, tag) VALUES ($1, $2)",
+                [(wallet_id, tag) for tag in wallet_tags],
+            )
+
+        # Passe 1 : INSERT secrets sans linked_secret_id
+        name_to_id: dict[str, UUID] = {}
+        for s in secrets:
+            descriptor_json: str | None = (
+                json.dumps(s["generation_descriptor"])
+                if s.get("generation_descriptor") is not None
+                else None
+            )
+            secret_id: UUID = await conn.fetchval(
+                """
+                INSERT INTO secrets (
+                    wallet_id, name, description,
+                    is_placeholder, generation_descriptor,
+                    created_by_user_id
+                ) VALUES ($1, $2, $3, TRUE, $4::jsonb, $5)
+                RETURNING id
+                """,
+                wallet_id,
+                s["name"],
+                s.get("description"),
+                descriptor_json,
+                owner_user_id,
+            )
+            name_to_id[s["name"]] = secret_id
+
+        # Passe 2 : UPDATE linked_secret_id par nom
+        for s in secrets:
+            linked_name = s.get("linked_secret_name")
+            if linked_name and linked_name in name_to_id:
+                await conn.execute(
+                    "UPDATE secrets SET linked_secret_id = $1 WHERE id = $2",
+                    name_to_id[linked_name],
+                    name_to_id[s["name"]],
+                )
+
+        # Passe 3 : INSERT secret_tags
+        for s in secrets:
+            tags = s.get("tags", [])
+            if tags:
+                await conn.executemany(
+                    "INSERT INTO secret_tags (secret_id, tag) VALUES ($1, $2)",
+                    [(name_to_id[s["name"]], tag) for tag in tags],
+                )
+
+    return wallet_id, len(secrets)
 
 
 # ─── Lookup utilisateur par email ─────────────────────────────────────────────

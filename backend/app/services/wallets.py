@@ -3,13 +3,24 @@ from __future__ import annotations
 
 import base64
 from collections import defaultdict
+from datetime import UTC, datetime
 from time import monotonic
+from typing import Any
 from uuid import UUID
 
 import asyncpg
 from fastapi import HTTPException, status
 
+from app.core.config import settings
 from app.db.repositories import wallets as wallets_repo
+from app.models.api.exports import (
+    ExportedSecret,
+    ExportedWallet,
+    WalletExport,
+    WalletImportRequest,
+    WalletImportResponse,
+)
+from app.models.api.generators import GenerationDescriptor
 from app.models.api.wallets import (
     WalletCreateRequest,
     WalletPatchRequest,
@@ -309,3 +320,143 @@ async def transfer_ownership(
     if updated is None:  # pragma: no cover
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
     return updated
+
+
+# ─── Export structure ─────────────────────────────────────────────────────────
+
+_READ_BIT = 0x01
+
+
+async def export_wallet(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> WalletExport:
+    """Exporte la structure du wallet (sans valeurs). Requiert permission [read]."""
+    wallet = await get_wallet(conn, wallet_id=wallet_id, caller_user_id=caller_user_id)
+
+    if not (wallet.my_permissions & _READ_BIT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "forbidden",
+                "message": "Permission [read] required to export this wallet",
+            },
+        )
+
+    data = await wallets_repo.export_wallet_data(conn, wallet_id=wallet_id)
+
+    secrets_exported: list[ExportedSecret] = []
+    for s in data.get("secrets", []):
+        descriptor: GenerationDescriptor | None = None
+        if s["generation_descriptor"] is not None:
+            descriptor = _parse_descriptor(s["generation_descriptor"])
+        secrets_exported.append(
+            ExportedSecret(
+                name=s["name"],
+                description=s["description"],
+                tags=s["tags"],
+                is_placeholder=s["is_placeholder"],
+                generation_descriptor=descriptor,
+                generation_version=s["generation_version"],
+                linked_secret_name=s["linked_secret_name"],
+            )
+        )
+
+    wallet_info = data["wallet"]
+    export = WalletExport(
+        format_version="1",
+        exported_at=datetime.now(tz=UTC),
+        exported_from=settings.public_url,
+        wallet=ExportedWallet(
+            name=wallet_info["name"],
+            description=wallet_info["description"],
+            tags=wallet_info["tags"],
+        ),
+        secrets=secrets_exported,
+    )
+
+    await audit_log_insert(
+        conn,
+        "wallet.exported_structure",
+        actor_user_id=caller_user_id,
+        actor_ip=actor_ip,
+        target_wallet_id=wallet_id,
+        metadata={"secret_count": len(secrets_exported)},
+    )
+
+    return export
+
+
+def _parse_descriptor(raw: dict[str, Any]) -> GenerationDescriptor | None:
+    """Reconstruit un GenerationDescriptor à partir du dict JSONB stocké."""
+    try:
+        from pydantic import TypeAdapter
+
+        adapter: TypeAdapter[GenerationDescriptor] = TypeAdapter(GenerationDescriptor)
+        return adapter.validate_python(raw)
+    except Exception:
+        return None
+
+
+# ─── Import structure ─────────────────────────────────────────────────────────
+
+
+async def import_wallet(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    req: WalletImportRequest,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> WalletImportResponse:
+    """Importe un wallet depuis une structure exportée. Atomique."""
+    enc_key = _decode_key(req.encrypted_wallet_key_for_owner)
+
+    secrets_dicts: list[dict[str, Any]] = []
+    for s in req.secrets:
+        descriptor_dict: dict[str, Any] | None = None
+        if s.generation_descriptor is not None:
+            descriptor_dict = s.generation_descriptor.model_dump()
+        secrets_dicts.append(
+            {
+                "name": s.name,
+                "description": s.description,
+                "tags": [t.strip().lower() for t in s.tags if t.strip()],
+                "is_placeholder": s.is_placeholder,
+                "generation_descriptor": descriptor_dict,
+                "generation_version": s.generation_version,
+                "linked_secret_name": s.linked_secret_name,
+            }
+        )
+
+    wallet_tags = [t.strip().lower() for t in req.wallet.tags if t.strip()]
+
+    wallet_id, secrets_created = await wallets_repo.import_wallet_atomic(
+        conn,
+        wallet_name=req.wallet.name,
+        wallet_description=req.wallet.description,
+        wallet_tags=wallet_tags,
+        encrypted_wallet_key=enc_key,
+        owner_user_id=caller_user_id,
+        secrets=secrets_dicts,
+    )
+
+    await audit_log_insert(
+        conn,
+        "wallet.imported",
+        actor_user_id=caller_user_id,
+        actor_ip=actor_ip,
+        target_wallet_id=wallet_id,
+        metadata={
+            "source_wallet_name": req.wallet.name,
+            "secret_count": secrets_created,
+        },
+    )
+
+    return WalletImportResponse(
+        wallet_id=str(wallet_id),
+        secrets_created=secrets_created,
+        skipped=[],
+    )

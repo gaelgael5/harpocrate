@@ -1,6 +1,7 @@
-"""Endpoints /v1/wallets/* — CRUD wallets et transfer d'ownership (LOT_03)."""
+"""Endpoints /v1/wallets/* — CRUD wallets, transfer ownership, export/import (LOT_03/07)."""
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, status
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.core.security import JwtUser
 from app.db.pool import get_pool
 from app.db.repositories import users as users_repo
+from app.models.api.exports import WalletImportRequest
 from app.models.api.wallets import (
     TransferOwnershipRequest,
     WalletCreateRequest,
@@ -20,6 +22,8 @@ from app.models.api.wallets import (
 )
 from app.models.db.wallet import WalletWithGrant
 from app.services import wallets as wallets_svc
+
+_UNSAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9_\-]")
 
 router = APIRouter(prefix="/wallets", tags=["wallets"])
 
@@ -249,4 +253,80 @@ async def transfer_ownership(
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content=_wallet_item(updated, user.id).model_dump(mode="json"),
+    )
+
+
+# ─── GET /v1/wallets/{id}/export ─────────────────────────────────────────────
+
+
+@router.get("/{wallet_id}/export")
+async def export_wallet(
+    wallet_id: UUID,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Exporte la structure du wallet en JSON versionné (sans valeurs chiffrées).
+
+    Requiert JWT uniquement (pas d'API keys) et permission [read].
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        export = await wallets_svc.export_wallet(
+            conn,
+            wallet_id=wallet_id,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    payload = export.model_dump(mode="json")
+    safe_name = _UNSAFE_FILENAME_RE.sub("_", export.wallet.name)[:64]
+    date_str = export.exported_at.strftime("%Y%m%d") if export.exported_at else "export"
+    filename = f"vault-{safe_name}-{date_str}.json"
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ─── POST /v1/wallets/import ─────────────────────────────────────────────────
+
+
+@router.post("/import", status_code=status.HTTP_201_CREATED)
+async def import_wallet(
+    req: WalletImportRequest,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Importe un wallet depuis une structure exportée. Atomique.
+
+    Requiert JWT uniquement (pas d'API keys).
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        result = await wallets_svc.import_wallet(
+            conn,
+            req=req,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content=result.model_dump(mode="json"),
     )

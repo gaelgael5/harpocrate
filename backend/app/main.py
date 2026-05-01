@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.v1 import auth, config_keycloak, config_public, health, users, wallets
+from app.api.v1 import auth, config_keycloak, config_public, grants, health, users, wallets
 from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
@@ -43,4 +43,6 @@ app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")
 app.include_router(auth.router, prefix="/v1")
 app.include_router(wallets.router, prefix="/v1")
+app.include_router(grants.router, prefix="/v1")
+app.include_router(grants.my_grant_router, prefix="/v1")
 app.include_router(users.router, prefix="/v1")

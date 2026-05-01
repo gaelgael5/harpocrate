@@ -1,0 +1,252 @@
+"""Endpoints /v1/wallets/* — CRUD wallets et transfer d'ownership (LOT_03)."""
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, Query, Request, status
+from fastapi.responses import JSONResponse
+
+from app.core.security import JwtUser
+from app.db.pool import get_pool
+from app.db.repositories import users as users_repo
+from app.models.api.wallets import (
+    TransferOwnershipRequest,
+    WalletCreateRequest,
+    WalletCreateResponse,
+    WalletDeleteRequest,
+    WalletItem,
+    WalletListResponse,
+    WalletPatchRequest,
+)
+from app.models.db.wallet import WalletWithGrant
+from app.services import wallets as wallets_svc
+
+router = APIRouter(prefix="/wallets", tags=["wallets"])
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _wallet_item(w: WalletWithGrant, caller_user_id: UUID) -> WalletItem:
+    return WalletItem(
+        id=w.id,
+        name=w.name,
+        description=w.description,
+        tags=sorted(w.tags),
+        owner_user_id=w.owner_user_id,
+        is_owner=w.owner_user_id == caller_user_id,
+        my_permissions=w.my_permissions,
+        valued_secrets_count=w.valued_secrets_count,
+        placeholder_secrets_count=w.placeholder_secrets_count,
+        created_at=w.created_at,
+        updated_at=w.updated_at,
+    )
+
+
+def _client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+# ─── GET /v1/wallets ──────────────────────────────────────────────────────────
+
+
+@router.get("")
+async def list_wallets(
+    current_user: JwtUser,
+    request: Request,
+    tag: str | None = Query(default=None),
+    name_contains: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None),
+) -> JSONResponse:
+    """Liste les wallets accessibles par le caller, avec pagination cursor-based."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        wallets, next_cursor = await wallets_svc.list_wallets(
+            conn,
+            caller_user_id=user.id,
+            limit=limit,
+            cursor=cursor,
+            tag_filter=tag,
+            name_contains=name_contains,
+        )
+
+    items = [_wallet_item(w, user.id) for w in wallets]
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=WalletListResponse(
+            wallets=items,
+            next_cursor=next_cursor,
+        ).model_dump(mode="json"),
+    )
+
+
+# ─── POST /v1/wallets ─────────────────────────────────────────────────────────
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_wallet(
+    req: WalletCreateRequest,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Crée un wallet et le grant owner (permissions=63)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        wallet_id = await wallets_svc.create_wallet(
+            conn,
+            req=req,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content=WalletCreateResponse(wallet_id=wallet_id).model_dump(mode="json"),
+    )
+
+
+# ─── GET /v1/wallets/{id} ─────────────────────────────────────────────────────
+
+
+@router.get("/{wallet_id}")
+async def get_wallet(
+    wallet_id: UUID,
+    current_user: JwtUser,
+) -> JSONResponse:
+    """Retourne le wallet si le caller y a un grant (404 sinon)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        wallet = await wallets_svc.get_wallet(
+            conn,
+            wallet_id=wallet_id,
+            caller_user_id=user.id,
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=_wallet_item(wallet, user.id).model_dump(mode="json"),
+    )
+
+
+# ─── PATCH /v1/wallets/{id} ───────────────────────────────────────────────────
+
+
+@router.patch("/{wallet_id}")
+async def patch_wallet(
+    wallet_id: UUID,
+    req: WalletPatchRequest,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Mise à jour partielle nom/description/tags."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        updated = await wallets_svc.patch_wallet(
+            conn,
+            wallet_id=wallet_id,
+            req=req,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=_wallet_item(updated, user.id).model_dump(mode="json"),
+    )
+
+
+# ─── DELETE /v1/wallets/{id} ──────────────────────────────────────────────────
+
+
+@router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_wallet(
+    wallet_id: UUID,
+    req: WalletDeleteRequest,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Hard-delete avec confirmation par nom exact."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        await wallets_svc.delete_wallet(
+            conn,
+            wallet_id=wallet_id,
+            confirmation=req.confirmation,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+
+
+# ─── POST /v1/wallets/{id}/transfer-ownership ─────────────────────────────────
+
+
+@router.post("/{wallet_id}/transfer-ownership")
+async def transfer_ownership(
+    wallet_id: UUID,
+    req: TransferOwnershipRequest,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Transfère l'ownership au new_owner (doit avoir un grant existant)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        updated = await wallets_svc.transfer_ownership(
+            conn,
+            wallet_id=wallet_id,
+            new_owner_user_id=req.new_owner_user_id,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=_wallet_item(updated, user.id).model_dump(mode="json"),
+    )

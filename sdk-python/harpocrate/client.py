@@ -1,0 +1,276 @@
+"""Client haut niveau VaultClient — LOT_09 SDK.
+
+Interface principale du SDK :
+    from harpocrate import VaultClient
+    client = VaultClient(token="hrpv_...", base_url="https://vault.yoops.org")
+    value = client.secrets.get("ANTHROPIC_API_KEY")
+
+Crypto :
+  - La wallet_key est déchiffrée depuis api_keys.encrypted_wallet_key via decryption_key
+  - La wallet_key est mise en cache (TTL configurable)
+  - Chaque appel à secrets.get() déchiffre encrypted_value avec wallet_key (AES-GCM)
+"""
+from __future__ import annotations
+
+import base64
+import re
+from typing import Any
+from uuid import UUID
+
+from harpocrate.cache import WalletKeyCache
+from harpocrate.crypto.aes_gcm import aes_gcm_decrypt, aes_gcm_encrypt
+from harpocrate.exceptions import (
+    GeneratorError,
+    HarpocrateError,
+    PlaceholderNotPopulated,
+    VaultDecryptionError,
+)
+from harpocrate.generators import dispatch as generate_value
+from harpocrate.http import VaultHttpClient
+from harpocrate.models.secret import PopulateResult, SecretInfo, SecretListResponse
+from harpocrate.models.wallet import ApiKeyInfo, WalletInfo
+from harpocrate.token import ParsedToken, parse_token
+
+_NAME_RE = re.compile(r"^[A-Za-z0-9_.\\-]+$")
+
+
+class SecretsClient:
+    """Sous-client pour les opérations sur les secrets d'un wallet."""
+
+    def __init__(
+        self,
+        http: VaultHttpClient,
+        wallet_id: UUID,
+        parsed_token: ParsedToken,
+        cache: WalletKeyCache,
+    ) -> None:
+        self._http = http
+        self._wallet_id = wallet_id
+        self._parsed = parsed_token
+        self._cache = cache
+
+    def _wallet_key(self) -> bytes:
+        """Retourne la wallet_key déchiffrée (depuis cache ou serveur)."""
+        cache_key = str(self._wallet_id)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Récupère encrypted_wallet_key depuis l'endpoint my-api-key-grant
+        path = f"/v1/wallets/{self._wallet_id}/my-api-key-grant"
+        data = self._http.get(path)
+        enc_wk_b64: str = data["encrypted_wallet_key"]
+        enc_wk_bytes = base64.b64decode(enc_wk_b64)
+        wallet_key = aes_gcm_decrypt(enc_wk_bytes, self._parsed.decryption_key)
+        self._cache.set(cache_key, wallet_key)
+        return wallet_key
+
+    def _path(self, name: str | None = None) -> str:
+        base = f"/v1/wallets/{self._wallet_id}/secrets"
+        if name:
+            return f"{base}/{name}"
+        return base
+
+    def list_secrets(
+        self,
+        tag: str | None = None,
+        name_contains: str | None = None,
+        limit: int = 50,
+    ) -> SecretListResponse:
+        """Liste les secrets du wallet (sans valeurs).
+
+        Retourne un SecretListResponse avec .secrets (list[SecretInfo]) et .next_cursor.
+        """
+        params: dict[str, Any] = {"limit": limit}
+        if tag:
+            params["tag"] = tag
+        if name_contains:
+            params["name_contains"] = name_contains
+
+        data = self._http.get(self._path(), **params)
+        items = [SecretInfo.from_dict(s) for s in data.get("secrets", [])]
+        return SecretListResponse(
+            secrets=items,
+            next_cursor=data.get("next_cursor"),
+        )
+
+    def get(self, name: str) -> str:
+        """Lit et déchiffre la valeur d'un secret.
+
+        Retourne la valeur en clair (str UTF-8).
+        Lève PlaceholderNotPopulated si le secret n'a pas de valeur.
+        Lève VaultDecryptionError si le déchiffrement échoue.
+        """
+        data = self._http.get(self._path(name))
+        wallet_key = self._wallet_key()
+
+        enc_value = base64.b64decode(data["encrypted_value"])
+        enc_wk = base64.b64decode(data["encrypted_wallet_key"])
+
+        # Le serveur retourne encrypted_wallet_key du caller.
+        # Pour une API key, on utilise la wallet_key du cache.
+        # Mais le serveur peut aussi retourner une wk spécifique à ce secret pour les grants.
+        # On essaie d'abord avec la wallet_key du cache, puis avec celle du serveur.
+        try:
+            plaintext = aes_gcm_decrypt(enc_value, wallet_key)
+        except VaultDecryptionError:
+            # Essai avec la wallet_key chiffrée par la grant (pour JWT callers)
+            try:
+                wk_from_grant = aes_gcm_decrypt(enc_wk, self._parsed.decryption_key)
+                plaintext = aes_gcm_decrypt(enc_value, wk_from_grant)
+                # Met à jour le cache avec la clé correcte
+                self._cache.set(str(self._wallet_id), wk_from_grant)
+            except VaultDecryptionError as exc:
+                raise VaultDecryptionError(
+                    f"Failed to decrypt secret '{name}': invalid key or corrupted data"
+                ) from exc
+
+        return plaintext.decode("utf-8")
+
+    def get_bytes(self, name: str) -> bytes:
+        """Lit et déchiffre la valeur d'un secret en bytes bruts.
+
+        Utile pour les certificats TLS et autres données binaires.
+        """
+        return self.get(name).encode("utf-8")
+
+    def get_descriptor(self, name: str) -> dict[str, Any]:
+        """Récupère le descripteur de génération d'un placeholder."""
+        data = self._http.get(f"{self._path(name)}/descriptor")
+        return dict(data.get("generation_descriptor") or {})
+
+    def populate(
+        self,
+        name: str,
+        auto_generate: bool = True,
+        value: str | None = None,
+    ) -> PopulateResult:
+        """Peuple un placeholder avec une valeur générée ou fournie.
+
+        Si auto_generate=True : récupère le descripteur et génère la valeur localement.
+        Si value est fourni : utilise cette valeur directement.
+
+        Retourne PopulateResult.
+        """
+        if not auto_generate and value is None:
+            raise HarpocrateError("Either auto_generate=True or value must be provided")
+
+        if auto_generate:
+            descriptor = self.get_descriptor(name)
+            try:
+                plain = generate_value(descriptor)
+            except GeneratorError as exc:
+                return PopulateResult.failed(name, str(exc))
+        else:
+            assert value is not None
+            plain = value
+
+        wallet_key = self._wallet_key()
+        enc_value = aes_gcm_encrypt(plain.encode("utf-8"), wallet_key)
+        enc_value_b64 = base64.b64encode(enc_value).decode()
+
+        result = self._http.post(
+            f"{self._path(name)}/populate",
+            json={"encrypted_value": enc_value_b64},
+        )
+        version: int = result.get("generation_version", 0)
+        return PopulateResult.ok(name, version)
+
+    def populate_all(self) -> list[PopulateResult]:
+        """Peuple tous les placeholders du wallet.
+
+        Retourne la liste des résultats (success ou failure par secret).
+        """
+        listing = self.list_secrets(limit=200)
+        results: list[PopulateResult] = []
+
+        for secret_info in listing.secrets:
+            if not secret_info.is_placeholder:
+                continue
+            try:
+                result = self.populate(secret_info.name, auto_generate=True)
+                results.append(result)
+            except Exception as exc:
+                results.append(PopulateResult.failed(secret_info.name, str(exc)))
+
+        return results
+
+    def get_or_populate(self, name: str) -> str:
+        """Lit la valeur d'un secret, ou génère et populate si c'est un placeholder.
+
+        Retourne la valeur en clair.
+        """
+        try:
+            return self.get(name)
+        except PlaceholderNotPopulated:
+            self.populate(name, auto_generate=True)
+            return self.get(name)
+
+
+class VaultClient:
+    """Client haut niveau pour l'API Harpocrate.
+
+    Usage :
+        from harpocrate import VaultClient
+
+        client = VaultClient(
+            token="hrpv_1_xxx...",
+            base_url="https://vault.yoops.org",
+        )
+
+        value = client.secrets.get("ANTHROPIC_API_KEY")
+        results = client.secrets.populate_all()
+    """
+
+    def __init__(
+        self,
+        token: str,
+        base_url: str,
+        wallet_key_cache_ttl: int = 600,
+        timeout: float = 30.0,
+    ) -> None:
+        """Initialise le client Vault.
+
+        Paramètres :
+            token              : token hrpv_* d'API key
+            base_url           : URL de base du serveur (HTTPS requis en prod)
+            wallet_key_cache_ttl : TTL du cache wallet_key en secondes (défaut 600)
+            timeout            : timeout HTTP en secondes (défaut 30)
+        """
+        self._parsed = parse_token(token)
+        self._http = VaultHttpClient(base_url=base_url, token=token, timeout=timeout)
+        self._cache = WalletKeyCache(ttl_seconds=wallet_key_cache_ttl)
+        self._wallet_id: UUID | None = None
+
+        self.secrets = SecretsClient(
+            http=self._http,
+            wallet_id=self._resolve_wallet_id(),
+            parsed_token=self._parsed,
+            cache=self._cache,
+        )
+
+    def _resolve_wallet_id(self) -> UUID:
+        """Résout le wallet_id depuis l'endpoint my-api-key-grant."""
+        if self._wallet_id is not None:
+            return self._wallet_id
+
+        # Utilise l'API key whoami-style endpoint
+        data = self._http.get(f"/v1/api-keys/{self._parsed.api_key_id}/wallet-id")
+        self._wallet_id = UUID(data["wallet_id"])
+        return self._wallet_id
+
+    def whoami(self) -> ApiKeyInfo:
+        """Retourne les informations sur l'API key courante."""
+        data = self._http.get(f"/v1/api-keys/{self._parsed.api_key_id}")
+        return ApiKeyInfo(
+            api_key_id=self._parsed.api_key_id,
+            wallet_id=UUID(data.get("wallet_id", str(self.secrets._wallet_id))),
+            permissions=self._parsed.permissions,
+            expires_at=self._parsed.exp,
+        )
+
+    def info(self) -> WalletInfo:
+        """Retourne les informations sur le wallet associé à l'API key."""
+        wallet_id = self.secrets._wallet_id
+        data = self._http.get(f"/v1/wallets/{wallet_id}")
+        return WalletInfo.from_dict(data)

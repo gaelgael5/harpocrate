@@ -900,6 +900,90 @@ class TestApiKeyEndpoints:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+class TestApiKeySelfEndpoints:
+    """Tests pour GET /v1/api-keys/{api_key_id}/wallet-id (LOT_09 SDK endpoint)."""
+
+    def _make_caller(
+        self,
+        api_key_id: uuid.UUID = _API_KEY_ID,
+        wallet_id: uuid.UUID = _WALLET_ID,
+    ) -> "Any":
+        from app.core.api_key_auth import ApiKeyCaller
+
+        return ApiKeyCaller(
+            api_key_id=api_key_id,
+            owner_user_id=_CALLER_ID,
+            wallet_id=wallet_id,
+            permissions=_PERM_ALL,
+            decryption_key_b64=base64.urlsafe_b64encode(b"d" * 32).rstrip(b"=").decode(),
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_wallet_id_returns_200(self) -> None:
+        """GET /api-keys/{id}/wallet-id avec token valide → 200 + wallet_id."""
+        from app.core.api_key_auth import require_api_key
+        from app.main import app
+
+        caller = self._make_caller()
+        conn = _make_conn()
+
+        async def _fake_require_api_key() -> "Any":
+            return caller
+
+        app.dependency_overrides[require_api_key] = _fake_require_api_key
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                resp = await client.get(
+                    f"/v1/api-keys/{_API_KEY_ID}/wallet-id",
+                    headers={"Authorization": f"Bearer fake-token"},
+                )
+        finally:
+            app.dependency_overrides.pop(require_api_key, None)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["wallet_id"] == str(_WALLET_ID)
+        assert data["api_key_id"] == str(_API_KEY_ID)
+
+    @pytest.mark.asyncio
+    async def test_get_wallet_id_path_mismatch_403(self) -> None:
+        """GET /api-keys/{other_id}/wallet-id avec token d'une autre clé → 403."""
+        from app.core.api_key_auth import require_api_key
+        from app.main import app
+
+        caller = self._make_caller(api_key_id=_API_KEY_ID)
+        other_id = uuid.UUID("dddddddd-0000-0000-0000-000000000002")
+
+        async def _fake_require_api_key() -> "Any":
+            return caller
+
+        app.dependency_overrides[require_api_key] = _fake_require_api_key
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                resp = await client.get(
+                    f"/v1/api-keys/{other_id}/wallet-id",
+                    headers={"Authorization": f"Bearer fake-token"},
+                )
+        finally:
+            app.dependency_overrides.pop(require_api_key, None)
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"]["error"] == "forbidden"
+
+    @pytest.mark.asyncio
+    async def test_get_wallet_id_no_token_401(self) -> None:
+        """GET /api-keys/{id}/wallet-id sans Authorization → 401."""
+        conn = _make_conn()
+        async with _make_client(_make_pool(conn)) as client:
+            resp = await client.get(f"/v1/api-keys/{_API_KEY_ID}/wallet-id")
+
+        assert resp.status_code == 401
+
+
 class TestCascadeRevocation:
     @pytest.mark.asyncio
     async def test_cascade_revoke_on_owner_grant_removal(self) -> None:

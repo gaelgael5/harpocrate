@@ -9,6 +9,7 @@ from fastapi.responses import Response
 
 from app.api.v1 import (
     api_keys,
+    api_keys_self,
     auth,
     config_keycloak,
     config_public,
@@ -93,3 +94,4 @@ app.include_router(grants.my_grant_router, prefix="/v1")
 app.include_router(users.router, prefix="/v1")
 app.include_router(secrets.router, prefix="/v1")
 app.include_router(api_keys.router, prefix="/v1")
+app.include_router(api_keys_self.router, prefix="/v1")

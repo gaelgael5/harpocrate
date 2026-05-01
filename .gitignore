@@ -16,6 +16,7 @@ eggs/
 .eggs/
 lib/
 lib64/
+!cli-bash/lib/
 parts/
 sdist/
 var/
@@ -150,6 +151,9 @@ activemq-data/
 # Environments
 .env
 .envrc
+
+# Données runtime (volumes Docker bind-mountés)
+/data/
 .venv
 env/
 venv/

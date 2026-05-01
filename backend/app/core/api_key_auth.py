@@ -243,7 +243,7 @@ async def validate_api_key_token(
 
 async def require_api_key(
     authorization: Annotated[str | None, Header()] = None,
-    pool: asyncpg.Pool[asyncpg.Record] = Depends(get_pool),  # noqa: B008
+    pool: asyncpg.Pool = Depends(get_pool),
 ) -> ApiKeyCaller:
     """Dependency FastAPI — valide un token hrpv_* (aucune permission spécifique requise)."""
     if not authorization or not authorization.startswith("Bearer "):
@@ -296,7 +296,7 @@ def require_any_auth_with_permission(required_permission: int):  # type: ignore[
     async def _check(
         wallet_id: UUID,
         authorization: Annotated[str | None, Header()] = None,
-        pool: asyncpg.Pool[asyncpg.Record] = Depends(get_pool),  # noqa: B008
+        pool: asyncpg.Pool = Depends(get_pool),
     ) -> AuthContext:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(

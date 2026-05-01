@@ -33,7 +33,7 @@ async def close_pool() -> None:
         logger.info("db_pool_closed")
 
 
-async def get_pool() -> asyncpg.Pool[asyncpg.Record]:
+async def get_pool() -> asyncpg.Pool:
     """Return the initialized pool or raise RuntimeError if not initialized."""
     if _pool is None:
         raise RuntimeError("DB pool not initialized")

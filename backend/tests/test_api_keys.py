@@ -907,7 +907,7 @@ class TestApiKeySelfEndpoints:
         self,
         api_key_id: uuid.UUID = _API_KEY_ID,
         wallet_id: uuid.UUID = _WALLET_ID,
-    ) -> "Any":
+    ) -> Any:
         from app.core.api_key_auth import ApiKeyCaller
 
         return ApiKeyCaller(
@@ -925,9 +925,8 @@ class TestApiKeySelfEndpoints:
         from app.main import app
 
         caller = self._make_caller()
-        conn = _make_conn()
 
-        async def _fake_require_api_key() -> "Any":
+        async def _fake_require_api_key() -> Any:
             return caller
 
         app.dependency_overrides[require_api_key] = _fake_require_api_key
@@ -937,7 +936,7 @@ class TestApiKeySelfEndpoints:
             ) as client:
                 resp = await client.get(
                     f"/v1/api-keys/{_API_KEY_ID}/wallet-id",
-                    headers={"Authorization": f"Bearer fake-token"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
         finally:
             app.dependency_overrides.pop(require_api_key, None)
@@ -956,7 +955,7 @@ class TestApiKeySelfEndpoints:
         caller = self._make_caller(api_key_id=_API_KEY_ID)
         other_id = uuid.UUID("dddddddd-0000-0000-0000-000000000002")
 
-        async def _fake_require_api_key() -> "Any":
+        async def _fake_require_api_key() -> Any:
             return caller
 
         app.dependency_overrides[require_api_key] = _fake_require_api_key
@@ -966,7 +965,7 @@ class TestApiKeySelfEndpoints:
             ) as client:
                 resp = await client.get(
                     f"/v1/api-keys/{other_id}/wallet-id",
-                    headers={"Authorization": f"Bearer fake-token"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
         finally:
             app.dependency_overrides.pop(require_api_key, None)

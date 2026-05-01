@@ -3,3 +3,24 @@ target-version = "py312"
 
 [lint]
 select = ["E", "F", "I", "B", "N", "UP", "SIM", "RUF"]
+
+[lint.flake8-bugbear]
+# FastAPI/Starlette patterns using Query, Depends, Header, etc. in defaults
+extend-immutable-calls = [
+    "fastapi.Query",
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Body",
+    "fastapi.Path",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Cookie",
+    "Query",
+    "Depends",
+    "Header",
+    "Body",
+    "Path",
+    "File",
+    "Form",
+    "Cookie",
+]

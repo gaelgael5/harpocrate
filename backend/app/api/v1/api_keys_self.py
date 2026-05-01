@@ -28,7 +28,7 @@ router = APIRouter(
 @router.get("/{api_key_id}/wallet-id")
 async def get_api_key_wallet_id(
     api_key_id: UUID,
-    caller: ApiKeyCaller = Depends(require_api_key),  # noqa: B008
+    caller: ApiKeyCaller = Depends(require_api_key),
 ) -> JSONResponse:
     """Retourne le wallet_id associé à l'API key courante.
 

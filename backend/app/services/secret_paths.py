@@ -1,0 +1,50 @@
+"""Validation et normalisation des noms de secrets avec paths (LOT_18)."""
+from __future__ import annotations
+
+import re
+
+_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9@._-]+$")
+_MAX_DEPTH = 10
+
+
+def validate_secret_name(name: str) -> str:
+    """Valide et normalise un nom de secret (peut contenir des '/').
+
+    - Sans '/' → retourné tel quel (secret racine)
+    - Avec '/' → '/' initial ajouté si absent, pas de '/' final
+
+    Lève ValueError si invalide.
+    """
+    if "/" not in name:
+        return name
+
+    normalized = name if name.startswith("/") else "/" + name
+
+    if "//" in normalized:
+        raise ValueError("Empty path segments not allowed (found '//')")
+
+    segments = [s for s in normalized.split("/") if s]
+
+    if len(segments) > _MAX_DEPTH + 1:
+        raise ValueError(f"Path too deep (max {_MAX_DEPTH} levels, got {len(segments) - 1})")
+
+    for seg in segments:
+        if seg in (".", ".."):
+            raise ValueError("Relative path navigation not allowed ('.' or '..')")
+        if not _SEGMENT_RE.match(seg):
+            raise ValueError(
+                f"Invalid path segment '{seg}': only [a-zA-Z0-9@._-] allowed"
+            )
+
+    return normalized
+
+
+def normalize_path(path: str | None) -> str:
+    """Normalise un path de répertoire : '/' final garanti, '' → '/'.
+
+    Utilisé pour les paramètres ?path= des endpoints /tree et /secrets.
+    """
+    if not path or path == "/":
+        return "/"
+    normalized = path if path.startswith("/") else "/" + path
+    return normalized if normalized.endswith("/") else normalized + "/"

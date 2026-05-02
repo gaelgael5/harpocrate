@@ -19,6 +19,7 @@ from app.api.v1 import (
     config_public,
     grants,
     health,
+    sdk_downloads,
     secrets,
     users,
     wallets,
@@ -103,3 +104,4 @@ app.include_router(api_keys_self.router, prefix="/v1")
 app.include_router(audit_log.router, prefix="/v1")
 app.include_router(apps.router, prefix="/v1")
 app.include_router(api_key_openapi.router, prefix="/v1")
+app.include_router(sdk_downloads.router, prefix="/v1")

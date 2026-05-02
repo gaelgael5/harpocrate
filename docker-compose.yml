@@ -51,6 +51,8 @@ services:
       - ./backend/migrations:/app/migrations
       - ./apps.json:/app/apps.json:ro
       # Cross-app launcher menu — éditable côté CT sans rebuild
+      - ./releases:/app/releases:ro
+      # Artefacts SDK Python + CLI bash — exposes via /v1/sdk/*
 
   frontend:
     build:

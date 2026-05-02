@@ -26,9 +26,15 @@ from app.models.api.audit_log import (
 def _row_to_item(row: asyncpg.Record) -> AuditLogItem:
     """Convertit une ligne DB en AuditLogItem, en filtrant les metadata sensibles."""
     raw_metadata: dict[str, Any] | None = None
-    if row["metadata"] is not None:
-        # asyncpg retourne le JSONB comme dict Python directement
-        raw_metadata = dict(row["metadata"])
+    raw = row["metadata"]
+    if raw is not None:
+        # asyncpg retourne JSONB en string par defaut (pas de codec installe).
+        # Si on a deja installe un codec ailleurs, ce sera un dict directement.
+        if isinstance(raw, str):
+            import json
+            raw_metadata = json.loads(raw)
+        elif isinstance(raw, dict):
+            raw_metadata = dict(raw)
 
     cleaned_metadata = audit_log_repo.strip_sensitive_metadata(raw_metadata)
 

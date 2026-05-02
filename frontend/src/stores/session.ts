@@ -57,8 +57,13 @@ export const useSessionStore = create<SessionState>()(
     {
       name: 'harpocrate-session',
       storage: createJSONStorage(() => sessionStorage),
-      // Only persist user metadata, never crypto material or tokens
-      partialize: (state) => ({ user: state.user }),
+      // Persiste user + localAdminToken (sessionStorage uniquement, pas localStorage).
+      // Pas de crypto material persiste (rsa_priv / sym_key / wallet_keys restent en RAM).
+      // Le localAdminToken survit au refresh mais pas a la fermeture de l'onglet.
+      partialize: (state) => ({
+        user: state.user,
+        localAdminToken: state.localAdminToken,
+      }),
     },
   ),
 )

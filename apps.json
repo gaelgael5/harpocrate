@@ -1,0 +1,10 @@
+{
+  "urls": [
+    {
+      "key": "docker",
+      "label": "Docker",
+      "icon": "https://docker-agflow.yoops.org/favicon.ico",
+      "url": "https://docker-agflow.yoops.org/"
+    }
+  ]
+}

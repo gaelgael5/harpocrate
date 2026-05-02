@@ -1,0 +1,82 @@
+// Grafana Alloy — collecteur logs Docker + journald
+// Module : harpocrate
+// Pousse vers la stack Loki centrale (LXC 116, agflow-logs).
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// ── Découverte des containers Docker ─────────────────────────────────────────
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "docker" {
+  targets = discovery.docker.containers.targets
+
+  // Extrait le nom du container (supprime le "/" initial)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Service docker compose
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+
+  // Projet docker compose
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker.output
+  forward_to = [loki.write.central.receiver]
+  labels     = {
+    host   = env("HOSTNAME"),
+    module = "harpocrate",
+  }
+}
+
+// ── Collecte journald ─────────────────────────────────────────────────────────
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "host"
+  }
+}
+
+loki.source.journal "system" {
+  path          = "/run/log/journal"
+  forward_to    = [loki.write.central.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  labels        = {
+    host   = env("HOSTNAME"),
+    module = "harpocrate",
+  }
+}
+
+// ── Sortie Loki centrale ──────────────────────────────────────────────────────
+
+loki.write "central" {
+  endpoint {
+    url = env("LOKI_URL")
+  }
+}

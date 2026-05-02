@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(ssh 192.168.10.123 \"cd /root/harpocrate && docker compose ps 2>&1\" 2>&1 | Select-Object -First 20)",
+      "PowerShell(ssh 192.168.10.123 \"cd /root/harpocrate && docker compose ps\" 2>&1)",
+      "PowerShell(ssh -o ConnectTimeout=10 root@192.168.10.123 \"cd /root/harpocrate && docker compose ps 2>&1\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- ls /root/ 2>&1\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- cat /opt/harpocrate/docker-compose.yml 2>&1\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'docker exec harpocrate-backend pip show pyjwt cryptography argon2-cffi 2>&1'\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- ls /opt/harpocrate/backend/app/api/v1/ 2>&1\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- ls /opt/harpocrate/backend/app/db/repositories/ /opt/harpocrate/backend/app/services/ /opt/harpocrate/backend/app/models/api/ /opt/harpocrate/backend/app/models/db/ 2>&1\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'ls /opt/harpocrate/.git 2>&1 || echo NOT_GIT'\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'cd /opt/harpocrate && docker compose build frontend 2>&1'\" 2>&1)",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'cd /opt/harpocrate && docker compose up -d frontend 2>&1'\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'docker logs harpocrate-backend --tail 20 2>&1'\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'curl -sk https://localhost:8443/v1/health 2>&1'\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'curl -sk https://localhost:8443/v1/me/identities 2>&1' | python3 -c 'import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\(\\\\\"error\\\\\", d\\)\\)'  2>&1\")",
+      "PowerShell(ssh -o ConnectTimeout=10 pve \"pct exec 202 -- bash -c 'curl -sk https://localhost:8443/v1/me/identities 2>&1'\")"
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: harpocrate-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    image: ghcr.io/gaelgael5/harpocrate-backend:${TAG:-latest}
+    container_name: harpocrate-backend
+    restart: unless-stopped
+    environment:
+      HARPOCRATE_DB_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      HARPOCRATE_KEYCLOAK_URL: ${HARPOCRATE_KEYCLOAK_URL}
+      HARPOCRATE_KEYCLOAK_REALM: ${HARPOCRATE_KEYCLOAK_REALM}
+      HARPOCRATE_KEYCLOAK_CLIENT_ID: ${HARPOCRATE_KEYCLOAK_CLIENT_ID}
+      HARPOCRATE_HMAC_KEY: ${HARPOCRATE_HMAC_KEY}
+      HARPOCRATE_PUBLIC_URL: ${HARPOCRATE_PUBLIC_URL}
+      HARPOCRATE_LOG_LEVEL: ${HARPOCRATE_LOG_LEVEL:-INFO}
+      HARPOCRATE_ADMIN_LOCAL_ENABLED: ${HARPOCRATE_ADMIN_LOCAL_ENABLED:-false}
+      HARPOCRATE_ADMIN_LOCAL_USERNAME: ${HARPOCRATE_ADMIN_LOCAL_USERNAME:-}
+      HARPOCRATE_ADMIN_LOCAL_PASSWORD: ${HARPOCRATE_ADMIN_LOCAL_PASSWORD:-}
+      HARPOCRATE_ADMIN_LOCAL_EMAIL: ${HARPOCRATE_ADMIN_LOCAL_EMAIL:-admin@harpocrate.local}
+      HARPOCRATE_ADMIN_LOCAL_DISPLAY_NAME: ${HARPOCRATE_ADMIN_LOCAL_DISPLAY_NAME:-Local Admin}
+      HARPOCRATE_DEV_MODE: ${HARPOCRATE_DEV_MODE:-false}
+      HARPOCRATE_DEV_MODE_LABEL: ${HARPOCRATE_DEV_MODE_LABEL:-DEV}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./apps.json:/app/apps.json:ro
+      - ./releases:/app/releases:ro
+      # Cross-app launcher menu — éditable côté CT sans rebuild

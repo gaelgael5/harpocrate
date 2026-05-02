@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# harpocrate-cli — CLI Bash pour Harpocrate Vault (LOT_09)
+#
+# Usage :
+#   harpocrate-cli [--token TOKEN] [--url URL] COMMAND [ARGS...]
+#
+# Commandes :
+#   list [--placeholder|--valued|--json]  — Liste les secrets
+#   get <name>                            — Affiche la valeur d'un secret
+#   populate <name>                       — Peuple un placeholder
+#   populate-all                          — Peuple tous les placeholders
+#   whoami                                — Infos sur l'API key courante
+#   info                                  — Infos sur le wallet courant
+#   get-or-populate <name>                — Lit ou génère si placeholder
+#
+# Variables d'environnement :
+#   HARPOCRATE_TOKEN   — Token hrpv_* (requis)
+#   HARPOCRATE_URL     — URL du serveur (requis)
+#   HARPOCRATE_ALLOW_INSECURE — Autorise HTTP (dev uniquement, défaut: non)
+#
+# Dépendances :
+#   - bash >= 4.0
+#   - harpocrate-gen (Python helper, depuis le SDK harpocrate)
+#
+# Sécurité :
+#   - Le token n'est JAMAIS écrit dans les logs ni dans stdout
+#   - set -x est désactivé (évite la fuite du token)
+#   - HTTPS requis sauf HARPOCRATE_ALLOW_INSECURE=1
+#
+# NOTA : Ce script délègue TOUTES les opérations crypto au helper Python
+#        harpocrate-gen. Le bash ne fait qu'orchestrer les appels.
+
+set -euo pipefail
+# Ne jamais activer set -x (fuite du token dans les logs)
+
+# ─── Configuration ────────────────────────────────────────────────────────────
+
+VAULT_TOKEN="${HARPOCRATE_TOKEN:-}"
+VAULT_URL="${HARPOCRATE_URL:-}"
+OUTPUT_FORMAT="text"
+
+# ─── Parsing des options globales ─────────────────────────────────────────────
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --token)
+            VAULT_TOKEN="$2"
+            shift 2
+            ;;
+        --url)
+            VAULT_URL="$2"
+            shift 2
+            ;;
+        --json)
+            OUTPUT_FORMAT="json"
+            shift
+            ;;
+        --quiet)
+            # Future : supprime les messages info
+            shift
+            ;;
+        --help|-h)
+            sed -n '/^# harpocrate-cli/,/^#.*Sécurité/p' "$0" | sed 's/^# \?//'
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "ERROR: Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# ─── Vérifications des prérequis ──────────────────────────────────────────────
+
+require_deps() {
+    if [[ -z "${VAULT_TOKEN}" ]]; then
+        echo "ERROR: HARPOCRATE_TOKEN not set (use --token or export HARPOCRATE_TOKEN=...)" >&2
+        exit 1
+    fi
+    if [[ -z "${VAULT_URL}" ]]; then
+        echo "ERROR: HARPOCRATE_URL not set (use --url or export HARPOCRATE_URL=...)" >&2
+        exit 1
+    fi
+    if ! command -v harpocrate-gen >/dev/null 2>&1; then
+        echo "ERROR: harpocrate-gen not found in PATH" >&2
+        echo "  Install with: pip install harpocrate" >&2
+        exit 1
+    fi
+}
+
+# ─── Commandes ────────────────────────────────────────────────────────────────
+
+cmd_list() {
+    local filter_arg=""
+    local json_flag=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --placeholder) filter_arg="--placeholder"; shift ;;
+            --valued) filter_arg="--valued"; shift ;;
+            --json) json_flag="--json"; shift ;;
+            *) echo "ERROR: Unknown option: $1" >&2; exit 1 ;;
+        esac
+    done
+
+    if [[ "${OUTPUT_FORMAT}" == "json" ]] || [[ -n "${json_flag}" ]]; then
+        harpocrate-gen list \
+            --token "${VAULT_TOKEN}" \
+            --url "${VAULT_URL}" \
+            --json \
+            ${filter_arg}
+    else
+        harpocrate-gen list \
+            --token "${VAULT_TOKEN}" \
+            --url "${VAULT_URL}" \
+            ${filter_arg}
+    fi
+}
+
+cmd_get() {
+    local name="${1:-}"
+    if [[ -z "${name}" ]]; then
+        echo "ERROR: secret name required (harpocrate-cli get <name>)" >&2
+        exit 1
+    fi
+    harpocrate-gen get \
+        --token "${VAULT_TOKEN}" \
+        --url "${VAULT_URL}" \
+        --name "${name}"
+}
+
+cmd_populate() {
+    local name="${1:-}"
+    if [[ -z "${name}" ]]; then
+        echo "ERROR: secret name required (harpocrate-cli populate <name>)" >&2
+        exit 1
+    fi
+    harpocrate-gen populate \
+        --token "${VAULT_TOKEN}" \
+        --url "${VAULT_URL}" \
+        --name "${name}"
+}
+
+cmd_populate_all() {
+    harpocrate-gen populate-all \
+        --token "${VAULT_TOKEN}" \
+        --url "${VAULT_URL}"
+}
+
+cmd_whoami() {
+    harpocrate-gen whoami \
+        --token "${VAULT_TOKEN}" \
+        --url "${VAULT_URL}"
+}
+
+cmd_get_or_populate() {
+    local name="${1:-}"
+    if [[ -z "${name}" ]]; then
+        echo "ERROR: secret name required" >&2
+        exit 1
+    fi
+    # Tente get, sinon populate puis get
+    if ! harpocrate-gen get \
+            --token "${VAULT_TOKEN}" \
+            --url "${VAULT_URL}" \
+            --name "${name}" 2>/dev/null; then
+        harpocrate-gen populate \
+            --token "${VAULT_TOKEN}" \
+            --url "${VAULT_URL}" \
+            --name "${name}" >&2
+        harpocrate-gen get \
+            --token "${VAULT_TOKEN}" \
+            --url "${VAULT_URL}" \
+            --name "${name}"
+    fi
+}
+
+# ─── Dispatch ─────────────────────────────────────────────────────────────────
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: harpocrate-cli [--token TOKEN] [--url URL] COMMAND [ARGS...]" >&2
+    echo "Commands: list, get, populate, populate-all, whoami, info, get-or-populate" >&2
+    exit 1
+fi
+
+COMMAND="${1}"
+shift
+
+require_deps
+
+case "${COMMAND}" in
+    list)           cmd_list "$@" ;;
+    get)            cmd_get "$@" ;;
+    populate)       cmd_populate "$@" ;;
+    populate-all)   cmd_populate_all ;;
+    whoami)         cmd_whoami ;;
+    get-or-populate) cmd_get_or_populate "$@" ;;
+    info)           cmd_whoami ;;  # Alias pour MVP
+    *)
+        echo "ERROR: Unknown command: ${COMMAND}" >&2
+        echo "Commands: list, get, populate, populate-all, whoami, info, get-or-populate" >&2
+        exit 1
+        ;;
+esac

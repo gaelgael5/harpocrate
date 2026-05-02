@@ -41,9 +41,15 @@ export function setTokenProvider(fn: () => Promise<string | null>): void {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  if (!_tokenProvider) return {}
+  if (!_tokenProvider) {
+    console.warn('[Harpocrate] tokenProvider not configured — no Authorization header')
+    return {}
+  }
   const token = await _tokenProvider()
-  if (!token) return {}
+  if (!token) {
+    console.warn('[Harpocrate] tokenProvider returned null — no Authorization header')
+    return {}
+  }
   return { Authorization: `Bearer ${token}` }
 }
 

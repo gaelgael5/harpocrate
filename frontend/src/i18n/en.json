@@ -54,6 +54,7 @@
     "recoveryWarning": "⚠️ IMPORTANT: These 24 words are your only way to recover your data if you forget your passphrase. They will NEVER be shown again. Write them down now.",
     "recoveryConfirm": "I have saved my 24 recovery words in a safe place",
     "download": "Download",
+    "no_session": "No active session. Returning to login.",
     "generating": "Generating cryptographic keys...",
     "bootstrapping": "Sending to server...",
     "success": "Vault initialized successfully!",

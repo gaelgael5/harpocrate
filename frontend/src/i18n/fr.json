@@ -54,6 +54,7 @@
     "recoveryWarning": "⚠️ IMPORTANT : Ces 24 mots sont votre seule façon de récupérer vos données si vous oubliez votre passphrase. Ils ne seront JAMAIS réaffichés. Notez-les maintenant.",
     "recoveryConfirm": "J'ai noté mes 24 mots de récupération en lieu sûr",
     "download": "Télécharger",
+    "no_session": "Pas de session active. Retour à la page de connexion.",
     "generating": "Génération des clés cryptographiques...",
     "bootstrapping": "Envoi au serveur...",
     "success": "Coffre-fort initialisé avec succès !",

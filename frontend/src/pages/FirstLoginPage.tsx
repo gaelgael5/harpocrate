@@ -8,7 +8,7 @@
  * 4. POST /v1/me/bootstrap with encrypted blobs
  * 5. Store crypto state in RAM, redirect to /
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Center,
@@ -39,6 +39,31 @@ export function FirstLoginPage() {
   const navigate = useNavigate()
   const setUnlocked = useCryptoStore((s) => s.setUnlocked)
   const setUser = useSessionStore((s) => s.setUser)
+
+  // Guard : si pas de session (ni OIDC ni local-admin), retour /login.
+  // Sinon le bootstrap call serait fait sans Authorization header → 401 cryptique.
+  useEffect(() => {
+    void (async () => {
+      const hasLocalToken = !!useSessionStore.getState().localAdminToken
+      // OIDC : on ne ré-importe pas userManager ici, on se contente de lire le store local.
+      // Si pas de localAdminToken et pas d'utilisateur OIDC déjà set, on n'a pas de session.
+      const hasUser = !!useSessionStore.getState().user
+      console.info(
+        '[Harpocrate] FirstLogin mount — localAdminToken:',
+        hasLocalToken ? 'present' : 'absent',
+        '| user:',
+        hasUser ? 'present' : 'absent',
+      )
+      if (!hasLocalToken && !hasUser) {
+        notifications.show({
+          color: 'orange',
+          title: t('firstLogin.error'),
+          message: t('firstLogin.no_session'),
+        })
+        navigate('/login', { replace: true })
+      }
+    })()
+  }, [navigate, t])
 
   const [step, setStep] = useState(0)
   const [passphrase, setPassphrase] = useState('')

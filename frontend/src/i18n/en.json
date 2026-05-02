@@ -33,7 +33,14 @@
     "invalidPassphrase": "Invalid passphrase",
     "unlockSuccess": "Vault unlocked",
     "sessionExpired": "Session expired, please login again",
-    "callbackProcessing": "Processing authentication..."
+    "callbackProcessing": "Processing authentication...",
+    "local_login": {
+      "tab": "Local admin",
+      "username": "Username",
+      "password": "Password",
+      "submit": "Login",
+      "invalid_credentials": "Invalid username or password"
+    }
   },
   "firstLogin": {
     "title": "Welcome to Harpocrate",

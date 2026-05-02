@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     apps_file: str = Field(default="/app/apps.json")
 
+    # ─── Auth locale (alternative à Keycloak OIDC) ────────────────────────────
+    # WARNING : mot de passe stocké en clair dans .env — le fichier doit être en 600.
+    # Activer uniquement pour dev / break-glass.
+    admin_local_enabled: bool = False
+    admin_local_username: str = ""
+    admin_local_password: str = ""
+    admin_local_email: str = "admin@local"
+    admin_local_display_name: str = "Local Admin"
+
     @field_validator("rsa_key_size_min")
     @classmethod
     def _validate_rsa(cls, v: int) -> int:
@@ -53,6 +62,19 @@ class Settings(BaseSettings):
         if len(decoded) != 32:
             raise ValueError("hmac_key must be 32 bytes when decoded")
         return v
+
+    @model_validator(mode="after")
+    def _validate_local_admin(self) -> Settings:
+        if self.admin_local_enabled:
+            if not self.admin_local_username:
+                raise ValueError(
+                    "admin_local_username must not be empty when admin_local_enabled=True"
+                )
+            if not self.admin_local_password:
+                raise ValueError(
+                    "admin_local_password must not be empty when admin_local_enabled=True"
+                )
+        return self
 
 
 settings = Settings()

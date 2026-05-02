@@ -33,7 +33,14 @@
     "invalidPassphrase": "Passphrase invalide",
     "unlockSuccess": "Coffre déverrouillé",
     "sessionExpired": "Session expirée, veuillez vous reconnecter",
-    "callbackProcessing": "Traitement de l'authentification..."
+    "callbackProcessing": "Traitement de l'authentification...",
+    "local_login": {
+      "tab": "Admin local",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "submit": "Connexion",
+      "invalid_credentials": "Nom d'utilisateur ou mot de passe invalide"
+    }
   },
   "firstLogin": {
     "title": "Bienvenue dans Harpocrate",

@@ -13,6 +13,7 @@ from app.api.v1 import (
     apps,
     audit_log,
     auth,
+    auth_local,
     config_keycloak,
     config_public,
     grants,
@@ -89,6 +90,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")
+app.include_router(auth_local.router, prefix="/v1")
 app.include_router(auth.router, prefix="/v1")
 app.include_router(wallets.router, prefix="/v1")
 app.include_router(grants.router, prefix="/v1")

@@ -29,6 +29,7 @@ _API_KEY_ENDPOINTS: set[tuple[str, str]] = {
     ("/v1/wallets/{wallet_id}", "get"),
     ("/v1/wallets/{wallet_id}/export", "get"),
     ("/v1/wallets/{wallet_id}/my-api-key-grant", "get"),
+    ("/v1/wallets/{wallet_id}/tree", "get"),
     # Secrets (toutes les operations selon les permissions du token)
     ("/v1/wallets/{wallet_id}/secrets", "get"),
     ("/v1/wallets/{wallet_id}/secrets", "post"),

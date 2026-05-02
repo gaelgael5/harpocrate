@@ -160,7 +160,7 @@ export function IntegrationPage() {
         <Text fw={500} mt="xs">{t('integration.python.install')}</Text>
         <CodeBlock>
           {`# Depuis le wheel téléchargé
-pip install harpocrate-0.1.0-py3-none-any.whl
+pip install harpocrate-0.2.0-py3-none-any.whl
 
 # Ou directement depuis le vault (remplacer l'URL)
 pip install https://vault.yoops.org/v1/sdk/python-wheel`}

@@ -34,6 +34,7 @@ import { ApiKeysPage } from '@/pages/ApiKeysPage'
 import { WalletImportPage } from '@/pages/WalletImportPage'
 import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AccountPage } from '@/pages/AccountPage'
+import { IntegrationPage } from '@/pages/IntegrationPage'
 
 /** Wrapper qui pousse tout le contenu sous le bandeau dev (s'il est actif). */
 function ContentWithBannerOffset({ children }: { children: ReactNode }) {
@@ -123,6 +124,7 @@ export default function App() {
             />
             <Route path="/audit" element={<AuditLogPage />} />
             <Route path="/account" element={<AccountPage />} />
+            <Route path="/integration" element={<IntegrationPage />} />
           </Route>
 
           {/* Fallback */}

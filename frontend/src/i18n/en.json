@@ -231,10 +231,39 @@
     "remove": "Remove",
     "share": "Share"
   },
+  "integration": {
+    "title": "Integration & SDK",
+    "subtitle": "Download the SDK and CLI clients to automate access to your secrets from scripts and pipelines.",
+    "downloads": "Downloads",
+    "download": "Download",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "apiKeyNote": {
+      "title": "API key required",
+      "body": "To use the SDK or CLI, first create an API key (hrpv_* token) from a vault page → API Keys. Grant it the required permissions (read, init, write)."
+    },
+    "python": {
+      "title": "Python SDK",
+      "desc": "Async Python client with client-side E2E decryption, wallet_key cache and 9 secret generators.",
+      "install": "Installation",
+      "quickstart": "Quick start",
+      "env": "Using environment variables"
+    },
+    "bash": {
+      "title": "Bash CLI",
+      "desc": "Lightweight bash orchestrator delegating all cryptography to a Python helper. Ideal for CI/CD scripts and Dockerfiles.",
+      "install": "Installation",
+      "quickstart": "Quick start",
+      "getOrPopulate": "get-or-populate command"
+    },
+    "apiDocsHint": "Full REST API reference:",
+    "apiDocsLink": "Open API docs"
+  },
   "nav": {
     "wallets": "Vaults",
     "audit": "Audit",
     "account": "Account",
+    "integration": "Integration",
     "lock": "Lock",
     "api_docs": "API docs",
     "theme_dark": "Switch to dark theme",

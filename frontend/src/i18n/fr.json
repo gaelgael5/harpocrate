@@ -231,10 +231,39 @@
     "remove": "Supprimer",
     "share": "Partager"
   },
+  "integration": {
+    "title": "Intégration & SDK",
+    "subtitle": "Téléchargez les clients SDK et CLI pour automatiser l'accès à vos secrets depuis vos scripts et pipelines.",
+    "downloads": "Téléchargements",
+    "download": "Télécharger",
+    "available": "Disponible",
+    "unavailable": "Non disponible",
+    "apiKeyNote": {
+      "title": "Clé API requise",
+      "body": "Pour utiliser le SDK ou le CLI, créez d'abord une clé API (token hrpv_*) depuis la page d'un coffre → Clés API. Accordez-lui les permissions nécessaires (read, init, write)."
+    },
+    "python": {
+      "title": "SDK Python",
+      "desc": "Client Python asynchrone avec déchiffrement E2E côté client, cache wallet_key et 9 générateurs de secrets.",
+      "install": "Installation",
+      "quickstart": "Démarrage rapide",
+      "env": "Via variables d'environnement"
+    },
+    "bash": {
+      "title": "CLI Bash",
+      "desc": "Orchestrateur bash léger délégant toute la cryptographie au helper Python. Idéal pour les scripts CI/CD et les Dockerfiles.",
+      "install": "Installation",
+      "quickstart": "Démarrage rapide",
+      "getOrPopulate": "Commande get-or-populate"
+    },
+    "apiDocsHint": "Référence complète de l'API REST :",
+    "apiDocsLink": "Ouvrir la doc API"
+  },
   "nav": {
     "wallets": "Coffres",
     "audit": "Audit",
     "account": "Compte",
+    "integration": "Intégration",
     "lock": "Verrouiller",
     "api_docs": "API docs",
     "theme_dark": "Passer en thème sombre",

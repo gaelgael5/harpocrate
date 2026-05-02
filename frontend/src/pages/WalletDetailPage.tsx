@@ -16,9 +16,11 @@ import {
   Center,
   Alert,
 } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
 
 import { api, ApiError } from '@/lib/api-client'
+import { exportWallet } from '@/lib/exportImportApi'
 import { WalletItemSchema } from '@/schemas/wallets'
 import { SecretListResponseSchema, type SecretListItem } from '@/schemas/secrets'
 
@@ -65,6 +67,27 @@ export function WalletDetailPage() {
   const { walletId } = useParams<{ walletId: string }>()
   const navigate = useNavigate()
 
+  async function handleExport() {
+    if (!walletId) return
+    try {
+      const data = await exportWallet(walletId)
+      const json = JSON.stringify(data, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const safeName = (data.wallet.name ?? 'wallet').replace(/[^A-Za-z0-9_-]/g, '_')
+      const date = new Date().toISOString().slice(0, 10)
+      a.download = `vault-${safeName}-${date}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      notifications.show({ color: 'green', message: t('wallets.export.success') })
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    }
+  }
+
   const { data: wallet, isLoading: walletLoading, error: walletError } = useQuery({
     queryKey: ['wallet', walletId],
     queryFn: async () => {
@@ -110,6 +133,9 @@ export function WalletDetailPage() {
           )}
         </Stack>
         <Group>
+          <Button variant="outline" onClick={() => void handleExport()}>
+            {t('wallets.export.button')}
+          </Button>
           <Button
             variant="outline"
             onClick={() => navigate(`/wallets/${walletId ?? ''}/grants`)}

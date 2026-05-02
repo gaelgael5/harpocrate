@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 
@@ -27,3 +27,9 @@ class UserRow:
     created_at: datetime.datetime
     updated_at: datetime.datetime
     last_unlock_at: datetime.datetime | None
+    # Colonnes de gouvernance d'identité (LOT_02 — migration 002)
+    quarantine_until: datetime.datetime | None = field(default=None)
+    quarantine_reason: str | None = field(default=None)
+    force_reverify_next_login: bool = field(default=False)
+    disabled_at: datetime.datetime | None = field(default=None)
+    disabled_reason: str | None = field(default=None)

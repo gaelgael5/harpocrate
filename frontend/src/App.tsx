@@ -31,6 +31,7 @@ import { SecretDetailPage } from '@/pages/SecretDetailPage'
 import { SecretNewPage } from '@/pages/SecretNewPage'
 import { GrantsPage } from '@/pages/GrantsPage'
 import { ApiKeysPage } from '@/pages/ApiKeysPage'
+import { WalletImportPage } from '@/pages/WalletImportPage'
 import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AccountPage } from '@/pages/AccountPage'
 
@@ -102,6 +103,7 @@ export default function App() {
             <Route index element={<Navigate to="/wallets" replace />} />
             <Route path="/wallets" element={<WalletsPage />} />
             <Route path="/wallets/new" element={<WalletNewPage />} />
+            <Route path="/wallets/import" element={<WalletImportPage />} />
             <Route path="/wallets/:walletId" element={<WalletDetailPage />} />
             <Route
               path="/wallets/:walletId/secrets/new"

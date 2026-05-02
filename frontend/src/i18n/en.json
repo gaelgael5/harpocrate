@@ -92,7 +92,30 @@
     "deleteConfirm": "Type the vault name to confirm deletion",
     "deleteSuccess": "Vault deleted",
     "shared": "Shared",
-    "myPerms": "My permissions"
+    "myPerms": "My permissions",
+    "export": {
+      "button": "Export",
+      "success": "Export downloaded",
+      "error": "Export error"
+    },
+    "import": {
+      "button": "Import",
+      "title": "Import a vault",
+      "fileLabel": "Export file (.json)",
+      "filePlaceholder": "Select a file…",
+      "invalidJson": "The file is not valid JSON",
+      "invalidFormat": "Invalid export format",
+      "cryptoRequired": "Vault must be unlocked to import",
+      "preview": "Preview",
+      "secrets": "{{count}} secret(s) to import",
+      "noSecrets": "No secrets in this file",
+      "placeholder": "Placeholder",
+      "hasValue": "Has value",
+      "confirm": "Confirm import",
+      "success": "Import successful",
+      "successDetail": "{{count}} secret(s) created",
+      "skipped": "{{count}} secret(s) skipped (already exist): {{names}}"
+    }
   },
   "secrets": {
     "title": "Secrets",

@@ -92,7 +92,30 @@
     "deleteConfirm": "Tapez le nom du coffre pour confirmer la suppression",
     "deleteSuccess": "Coffre supprimé",
     "shared": "Partagé",
-    "myPerms": "Mes permissions"
+    "myPerms": "Mes permissions",
+    "export": {
+      "button": "Exporter",
+      "success": "Export téléchargé",
+      "error": "Erreur lors de l'export"
+    },
+    "import": {
+      "button": "Importer",
+      "title": "Importer un coffre-fort",
+      "fileLabel": "Fichier d'export (.json)",
+      "filePlaceholder": "Sélectionner un fichier…",
+      "invalidJson": "Le fichier n'est pas un JSON valide",
+      "invalidFormat": "Format d'export invalide",
+      "cryptoRequired": "Le coffre doit être déverrouillé pour importer",
+      "preview": "Aperçu",
+      "secrets": "{{count}} secret(s) à importer",
+      "noSecrets": "Aucun secret dans ce fichier",
+      "placeholder": "Placeholder",
+      "hasValue": "Valorisé",
+      "confirm": "Confirmer l'import",
+      "success": "Import réussi",
+      "successDetail": "{{count}} secret(s) créés",
+      "skipped": "{{count}} secret(s) ignorés (déjà existants) : {{names}}"
+    }
   },
   "secrets": {
     "title": "Secrets",

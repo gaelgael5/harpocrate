@@ -14,7 +14,10 @@ RUN pip install --no-cache-dir --upgrade pip \
     "asyncpg>=0.29" \
     "structlog>=24.1" \
     "python-json-logger>=2.0" \
-    "httpx>=0.27"
+    "httpx>=0.27" \
+    "pyjwt[crypto]>=2.8" \
+    "cryptography>=42.0" \
+    "argon2-cffi>=23.1"
 
 # Stage dev : bind-mount du code, reload activé
 FROM base AS dev

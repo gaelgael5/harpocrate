@@ -29,6 +29,11 @@ def _row_to_user(row: Any) -> UserRow:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         last_unlock_at=row["last_unlock_at"],
+        quarantine_until=row.get("quarantine_until", None),
+        quarantine_reason=row.get("quarantine_reason", None),
+        force_reverify_next_login=row.get("force_reverify_next_login", False),
+        disabled_at=row.get("disabled_at", None),
+        disabled_reason=row.get("disabled_reason", None),
     )
 
 
@@ -173,4 +178,45 @@ async def touch_last_unlock(
     await conn.execute(
         "UPDATE users SET last_unlock_at = NOW() WHERE id = $1",
         user_id,
+    )
+
+
+async def get_by_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    user_id: UUID,
+) -> UserRow | None:
+    """Retourne l'utilisateur par son UUID interne, ou None."""
+    row = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+    return _row_to_user(row) if row else None
+
+
+async def clear_quarantine(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    user_id: UUID,
+) -> None:
+    """Lève la quarantaine et réinitialise force_reverify_next_login."""
+    await conn.execute(
+        """
+        UPDATE users
+        SET quarantine_until = NULL,
+            quarantine_reason = NULL,
+            force_reverify_next_login = FALSE
+        WHERE id = $1
+        """,
+        user_id,
+    )
+
+
+async def set_email(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    user_id: UUID,
+    email: str,
+) -> None:
+    """Met à jour l'email de l'utilisateur."""
+    await conn.execute(
+        "UPDATE users SET email = $2 WHERE id = $1",
+        user_id,
+        email,
     )

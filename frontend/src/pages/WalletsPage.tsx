@@ -107,9 +107,14 @@ export function WalletsPage() {
     <Stack>
       <Group justify="space-between">
         <Title order={2}>{t('wallets.title')}</Title>
-        <Button onClick={() => navigate('/wallets/new')}>
-          {t('wallets.create')}
-        </Button>
+        <Group>
+          <Button variant="outline" onClick={() => navigate('/wallets/import')}>
+            {t('wallets.import.button')}
+          </Button>
+          <Button onClick={() => navigate('/wallets/new')}>
+            {t('wallets.create')}
+          </Button>
+        </Group>
       </Group>
 
       {wallets.length === 0 ? (

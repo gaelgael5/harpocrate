@@ -25,6 +25,7 @@ import { notifications } from '@mantine/notifications'
 
 import { api, ApiError } from '@/lib/api-client'
 import { getUserManager } from '@/lib/oidc'
+import { useSessionStore } from '@/stores/session'
 import { deriveKey } from '@/crypto/argon2'
 import { aesGcmDecrypt } from '@/crypto/aes-gcm'
 import { fromBase64 } from '@/crypto/helpers'
@@ -55,7 +56,10 @@ export function UnlockPage() {
       try {
         const mgr = getUserManager()
         const user = await mgr.getUser()
-        if (!user || user.expired) {
+        // Accepte OIDC OU local-admin (les deux sont des sessions valides).
+        const localToken = useSessionStore.getState().localAdminToken
+        const authenticated = (user && !user.expired) || !!localToken
+        if (!authenticated) {
           navigate('/login', { replace: true })
           return
         }

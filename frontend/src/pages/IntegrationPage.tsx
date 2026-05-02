@@ -45,7 +45,7 @@ const ARTIFACT_META: Record<string, { label: string; icon: string; tech: string 
 }
 
 function downloadUrl(artifact: Artifact): string {
-  return `/v1${artifact.url}`
+  return artifact.url
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────

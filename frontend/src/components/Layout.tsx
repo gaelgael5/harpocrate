@@ -44,7 +44,7 @@ export function Layout() {
       padding="md"
       style={{ paddingTop: offset }}
     >
-      <AppShell.Header style={{ top: offset }}>
+      <AppShell.Header style={{ top: offset, height: 60 }}>
         <Group h="100%" px="md" justify="space-between">
           <Group>
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
@@ -73,7 +73,7 @@ export function Layout() {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="xs">
+      <AppShell.Navbar p="xs" style={{ top: offset + 60 }}>
         <NavLink
           component={RouterNavLink}
           to="/wallets"
@@ -88,6 +88,13 @@ export function Layout() {
           component={RouterNavLink}
           to="/account"
           label={t('nav.account')}
+        />
+        <NavLink
+          component="a"
+          href="/v1/api-docs"
+          target="_blank"
+          rel="noopener noreferrer"
+          label={t('nav.api_docs')}
         />
       </AppShell.Navbar>
 

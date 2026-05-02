@@ -117,7 +117,12 @@
     "valueTimeout": "La valeur sera masquée dans {{seconds}}s",
     "generationVersion": "Version {{version}}",
     "isPlaceholder": "Placeholder",
-    "hasValue": "Valorisé"
+    "hasValue": "Valorisé",
+    "delete": "Supprimer",
+    "delete_confirm": "Supprimer définitivement le secret « {{name}} » ? Cette action est irréversible.",
+    "delete_success": "Secret supprimé",
+    "newValue": "Nouvelle valeur",
+    "edit_success": "Valeur mise à jour"
   },
   "grants": {
     "title": "Partages",
@@ -195,7 +200,8 @@
     "wallets": "Coffres",
     "audit": "Audit",
     "account": "Compte",
-    "lock": "Verrouiller"
+    "lock": "Verrouiller",
+    "api_docs": "API docs"
   },
   "topbar": {
     "apps_menu": "Applications"

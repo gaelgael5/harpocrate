@@ -117,7 +117,12 @@
     "valueTimeout": "Value will be hidden in {{seconds}}s",
     "generationVersion": "Version {{version}}",
     "isPlaceholder": "Placeholder",
-    "hasValue": "Has value"
+    "hasValue": "Has value",
+    "delete": "Delete",
+    "delete_confirm": "Permanently delete the secret \"{{name}}\"? This action cannot be undone.",
+    "delete_success": "Secret deleted",
+    "newValue": "New value",
+    "edit_success": "Value updated"
   },
   "grants": {
     "title": "Shares",
@@ -195,7 +200,8 @@
     "wallets": "Vaults",
     "audit": "Audit",
     "account": "Account",
-    "lock": "Lock"
+    "lock": "Lock",
+    "api_docs": "API docs"
   },
   "topbar": {
     "apps_menu": "Applications"

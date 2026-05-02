@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
 from app.api.v1 import (
+    api_key_openapi,
     api_keys,
     api_keys_self,
     apps,
@@ -101,3 +102,4 @@ app.include_router(api_keys.router, prefix="/v1")
 app.include_router(api_keys_self.router, prefix="/v1")
 app.include_router(audit_log.router, prefix="/v1")
 app.include_router(apps.router, prefix="/v1")
+app.include_router(api_key_openapi.router, prefix="/v1")

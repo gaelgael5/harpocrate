@@ -9,7 +9,7 @@
  */
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Stack,
   Title,
@@ -24,6 +24,7 @@ import {
   Alert,
   ActionIcon,
   Tooltip,
+  PasswordInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
@@ -31,8 +32,8 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '@/lib/api-client'
 import { SecretDetailResponseSchema } from '@/schemas/secrets'
 import { rsaOaepDecrypt } from '@/crypto/rsa-oaep'
-import { aesGcmDecrypt } from '@/crypto/aes-gcm'
-import { fromBase64, bytesToText } from '@/crypto/helpers'
+import { aesGcmDecrypt, aesGcmEncrypt } from '@/crypto/aes-gcm'
+import { fromBase64, toBase64, bytesToText, textToBytes } from '@/crypto/helpers'
 import { useCryptoStore } from '@/stores/crypto'
 
 const SHOW_TIMEOUT_SECS = 30
@@ -48,10 +49,64 @@ export function SecretDetailPage() {
   const cacheWalletKey = useCryptoStore((s) => s.cacheWalletKey)
   const getCachedKey = useCryptoStore((s) => s.getWalletKey)
 
+  const queryClient = useQueryClient()
   const [shownValue, setShownValue] = useState<string | null>(null)
   const [showCountdown, setShowCountdown] = useState<number | null>(null)
   const [isDecrypting, setIsDecrypting] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editValue, setEditValue] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
   const [decryptError, setDecryptError] = useState<string | null>(null)
+
+  async function handleSaveEdit() {
+    if (!secret || isSaving) return
+    if (!editValue) return
+    setIsSaving(true)
+    try {
+      const walletKey = await getWalletKey()
+      const plainBytes = textToBytes(editValue)
+      const encValue = await aesGcmEncrypt(plainBytes, walletKey)
+      await api.put<unknown>(
+        `/wallets/${walletId}/secrets/${secret.name}`,
+        { encrypted_value: toBase64(encValue) },
+      )
+      notifications.show({ color: 'green', message: t('secrets.edit_success') })
+      setIsEditing(false)
+      setEditValue('')
+      setShownValue(null)
+      // refresh la query
+      await queryClient.invalidateQueries({ queryKey: ['secret', walletId, secret.name] })
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!secret || isDeleting) return
+    if (!window.confirm(t('secrets.delete_confirm', { name: secret.name }))) return
+    setIsDeleting(true)
+    try {
+      await api.delete<unknown>(`/wallets/${walletId}/secrets/${secret.name}`)
+      notifications.show({
+        color: 'green',
+        message: t('secrets.delete_success'),
+      })
+      navigate(`/wallets/${walletId}`)
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({
+        color: 'red',
+        title: t('common.error'),
+        message: msg,
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   const { data: secret, isLoading, error } = useQuery({
     queryKey: ['secret', walletId, secretName],
@@ -241,7 +296,43 @@ export function SecretDetailPage() {
             >
               {t('secrets.copyValue')}
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditing(!isEditing)
+                setEditValue('')
+              }}
+              disabled={secret.is_placeholder}
+            >
+              {isEditing ? t('common.cancel') : t('secrets.editValue')}
+            </Button>
+            <Button
+              variant="outline"
+              color="red"
+              onClick={() => void handleDelete()}
+              loading={isDeleting}
+            >
+              {t('secrets.delete')}
+            </Button>
           </Group>
+        )}
+        {isEditing && !secret.is_placeholder && (
+          <Stack gap="xs" mt="md">
+            <PasswordInput
+              label={t('secrets.newValue')}
+              value={editValue}
+              onChange={(e) => setEditValue(e.currentTarget.value)}
+              autoFocus
+            />
+            <Group>
+              <Button onClick={() => void handleSaveEdit()} loading={isSaving} disabled={!editValue}>
+                {t('common.save')}
+              </Button>
+              <Button variant="subtle" onClick={() => { setIsEditing(false); setEditValue('') }}>
+                {t('common.cancel')}
+              </Button>
+            </Group>
+          </Stack>
         )}
       </Paper>
     </Stack>

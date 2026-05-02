@@ -24,3 +24,5 @@ class AuthModesResponse(BaseModel):
 
     oidc: bool = True
     local_login: bool
+    dev_mode: bool = False
+    dev_mode_label: str = "DEV"

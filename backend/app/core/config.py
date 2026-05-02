@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     admin_local_email: str = "admin@local"
     admin_local_display_name: str = "Local Admin"
 
+    # Mode developpement — affiche un bandeau d'avertissement permanent dans l'UI.
+    # Aucun impact sur la crypto ou la securite : juste un repere visuel pour ne
+    # JAMAIS confondre une instance dev avec la prod. A activer explicitement.
+    dev_mode: bool = False
+    dev_mode_label: str = "DEV"
+
     @field_validator("rsa_key_size_min")
     @classmethod
     def _validate_rsa(cls, v: int) -> int:

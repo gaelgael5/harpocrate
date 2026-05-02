@@ -207,5 +207,8 @@
     "serverError": "Erreur serveur",
     "cryptoRequired": "Le coffre doit être déverrouillé",
     "decryptFailed": "Échec du déchiffrement"
+  },
+  "devMode": {
+    "banner": "Mode développement actif — instance non destinée à la production. N'y stockez aucun secret réel."
   }
 }

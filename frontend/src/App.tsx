@@ -16,6 +16,7 @@ import { useSessionStore } from '@/stores/session'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { Layout } from '@/components/Layout'
 import { InactivityGuard } from '@/components/InactivityGuard'
+import { DevModeBanner } from '@/components/DevModeBanner'
 
 import { LoginPage } from '@/pages/LoginPage'
 import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage'
@@ -60,6 +61,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <DevModeBanner />
       <InactivityGuard
         timeoutMs={15 * 60 * 1000}
         onTimeout={() => {

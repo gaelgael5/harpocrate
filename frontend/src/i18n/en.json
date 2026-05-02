@@ -207,5 +207,8 @@
     "serverError": "Server error",
     "cryptoRequired": "Vault must be unlocked",
     "decryptFailed": "Decryption failed"
+  },
+  "devMode": {
+    "banner": "Dev mode is active — this instance is NOT for production. Do not store any real secret here."
   }
 }

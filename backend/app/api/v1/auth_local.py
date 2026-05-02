@@ -63,6 +63,8 @@ async def get_auth_modes() -> JSONResponse:
         content=AuthModesResponse(
             oidc=True,
             local_login=settings.admin_local_enabled,
+            dev_mode=settings.dev_mode,
+            dev_mode_label=settings.dev_mode_label,
         ).model_dump(),
     )
 

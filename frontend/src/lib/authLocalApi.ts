@@ -13,6 +13,8 @@ export interface LocalLoginResponse {
 export interface AuthModesResponse {
   oidc: boolean
   local_login: boolean
+  dev_mode?: boolean
+  dev_mode_label?: string
 }
 
 export class LocalAuthError extends Error {

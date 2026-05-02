@@ -10,11 +10,13 @@ export interface KdfParams {
   parallelism: number
 }
 
-// Default parameters matching backend defaults
+// Default parameters matching backend floors (OVERVIEW.md §3) :
+// memory_kb >= 65536, iterations >= 3, parallelism >= 4.
+// Le serveur rejette toute config en dessous des floors (400 kdf_floor_violation).
 export const DEFAULT_KDF_PARAMS: KdfParams = {
   memory_kb: 65536,
   iterations: 3,
-  parallelism: 1,
+  parallelism: 4,
 }
 
 /**

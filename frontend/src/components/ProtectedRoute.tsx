@@ -8,6 +8,7 @@ import { Center, Loader } from '@mantine/core'
 
 import { getUserManager } from '@/lib/oidc'
 import { useCryptoStore } from '@/stores/crypto'
+import { useSessionStore } from '@/stores/session'
 
 interface Props {
   children: ReactNode
@@ -29,7 +30,12 @@ export function ProtectedRoute({ children }: Props) {
 
         if (cancelled) return
 
-        if (!user || user.expired) {
+        // Authentifie : soit OIDC, soit local-admin token (les deux sont equivalents
+        // pour ProtectedRoute — distinction faite cote backend via le claim `iss`).
+        const localToken = useSessionStore.getState().localAdminToken
+        const isAuthenticated = (user && !user.expired) || !!localToken
+
+        if (!isAuthenticated) {
           setAuthState('logged-out')
         } else if (!isUnlocked) {
           setAuthState('needs-unlock')

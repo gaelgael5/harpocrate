@@ -210,5 +210,14 @@
   },
   "devMode": {
     "banner": "Mode développement actif — instance non destinée à la production. N'y stockez aucun secret réel."
+  },
+  "insecureContext": {
+    "title": "Contexte non sécurisé",
+    "crypto_disabled": "Crypto navigateur indisponible",
+    "message": "Cette page est servie en HTTP non chiffré. Le navigateur n'expose pas window.crypto.subtle dans ce contexte, ce qui empêche toute opération cryptographique côté client (génération RSA, chiffrement AES, dérivation de passphrase).",
+    "why": "Harpocrate fait toute sa cryptographie côté navigateur (E2E zero-knowledge). Sans secure context, le coffre ne peut tout simplement pas fonctionner — c'est une protection du standard Web, pas un bug de l'application.",
+    "solution": "Bascule vers HTTPS pour continuer :",
+    "switch_button": "Ouvrir en HTTPS",
+    "cert_warning": "Le certificat est auto-signé en mode dev — le navigateur affichera un avertissement. Accepte-le une fois (\"Paramètres avancés → Continuer\")."
   }
 }

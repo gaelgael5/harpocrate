@@ -17,6 +17,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { Layout } from '@/components/Layout'
 import { InactivityGuard } from '@/components/InactivityGuard'
 import { DevModeBanner } from '@/components/DevModeBanner'
+import { InsecureContextGuard } from '@/components/InsecureContextGuard'
 
 import { LoginPage } from '@/pages/LoginPage'
 import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage'
@@ -62,6 +63,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <DevModeBanner />
+      <InsecureContextGuard>
       <InactivityGuard
         timeoutMs={15 * 60 * 1000}
         onTimeout={() => {
@@ -108,6 +110,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </InactivityGuard>
+      </InsecureContextGuard>
     </BrowserRouter>
   )
 }

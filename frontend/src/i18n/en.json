@@ -210,5 +210,14 @@
   },
   "devMode": {
     "banner": "Dev mode is active — this instance is NOT for production. Do not store any real secret here."
+  },
+  "insecureContext": {
+    "title": "Insecure context",
+    "crypto_disabled": "Browser crypto unavailable",
+    "message": "This page is served over plain HTTP. Browsers do not expose window.crypto.subtle in this context, which blocks all client-side cryptography (RSA generation, AES encryption, passphrase derivation).",
+    "why": "Harpocrate runs all crypto in the browser (E2E zero-knowledge). Without a secure context, the vault simply cannot work — this is a Web standard restriction, not an app bug.",
+    "solution": "Switch to HTTPS to continue:",
+    "switch_button": "Open over HTTPS",
+    "cert_warning": "The certificate is self-signed in dev — your browser will show a warning. Accept it once (\"Advanced → Continue\")."
   }
 }

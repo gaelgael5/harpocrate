@@ -1,0 +1,23 @@
+services:
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: harpocrate-alloy-agent
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+    environment:
+      LOKI_URL: ${LOKI_URL:?LOKI_URL is required}
+      HOSTNAME: ${HOSTNAME:?HOSTNAME is required}
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - alloy_data:/var/lib/alloy/data
+
+volumes:
+  alloy_data:

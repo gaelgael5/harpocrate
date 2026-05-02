@@ -1,7 +1,7 @@
 /**
  * App root — sets up OIDC, router, and inactivity timeout.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { LoadingOverlay } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
@@ -18,6 +18,7 @@ import { Layout } from '@/components/Layout'
 import { InactivityGuard } from '@/components/InactivityGuard'
 import { DevModeBanner } from '@/components/DevModeBanner'
 import { InsecureContextGuard } from '@/components/InsecureContextGuard'
+import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
 
 import { LoginPage } from '@/pages/LoginPage'
 import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage'
@@ -31,6 +32,16 @@ import { SecretNewPage } from '@/pages/SecretNewPage'
 import { GrantsPage } from '@/pages/GrantsPage'
 import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AccountPage } from '@/pages/AccountPage'
+
+/** Wrapper qui pousse tout le contenu sous le bandeau dev (s'il est actif). */
+function ContentWithBannerOffset({ children }: { children: ReactNode }) {
+  const { enabled } = useDevMode()
+  return (
+    <div style={{ paddingTop: enabled ? DEV_BANNER_HEIGHT : 0, minHeight: '100vh' }}>
+      {children}
+    </div>
+  )
+}
 
 export default function App() {
   const { t } = useTranslation()
@@ -63,6 +74,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <DevModeBanner />
+      <ContentWithBannerOffset>
       <InsecureContextGuard>
       <InactivityGuard
         timeoutMs={15 * 60 * 1000}
@@ -111,6 +123,7 @@ export default function App() {
         </Routes>
       </InactivityGuard>
       </InsecureContextGuard>
+      </ContentWithBannerOffset>
     </BrowserRouter>
   )
 }

@@ -5,7 +5,7 @@
  * éviter de confondre une instance dev avec la prod.
  */
 import { useTranslation } from 'react-i18next'
-import { useDevMode } from '@/hooks/useDevMode'
+import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
 
 export function DevModeBanner() {
   const { t } = useTranslation()
@@ -17,9 +17,12 @@ export function DevModeBanner() {
     <div
       role="alert"
       style={{
-        position: 'sticky',
+        position: 'fixed',
         top: 0,
-        zIndex: 1000,
+        left: 0,
+        right: 0,
+        height: DEV_BANNER_HEIGHT,
+        zIndex: 1100,
         backgroundColor: '#c92a2a',
         color: '#fff',
         padding: '6px 16px',
@@ -28,6 +31,7 @@ export function DevModeBanner() {
         textAlign: 'center',
         letterSpacing: '0.5px',
         borderBottom: '2px solid #fff3bf',
+        boxSizing: 'border-box',
       }}
     >
       <span style={{

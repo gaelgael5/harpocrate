@@ -10,6 +10,7 @@ import { useCryptoStore } from '@/stores/crypto'
 import { useSessionStore } from '@/stores/session'
 import { logout } from '@/lib/oidc'
 import { AppsMenu } from '@/components/AppsMenu'
+import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
 
 export function Layout() {
   const { t } = useTranslation()
@@ -30,13 +31,20 @@ export function Layout() {
     navigate('/login')
   }
 
+  // Quand le bandeau dev est actif, on decale le header AppShell + on retire la
+  // hauteur du bandeau de la viewport disponible. Le bandeau lui-meme est rendu
+  // au niveau App.tsx en position fixed top:0.
+  const devMode = useDevMode()
+  const offset = devMode.enabled ? DEV_BANNER_HEIGHT : 0
+
   return (
     <AppShell
       header={{ height: 60 }}
       navbar={{ width: 220, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
+      style={{ paddingTop: offset }}
     >
-      <AppShell.Header>
+      <AppShell.Header style={{ top: offset }}>
         <Group h="100%" px="md" justify="space-between">
           <Group>
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />

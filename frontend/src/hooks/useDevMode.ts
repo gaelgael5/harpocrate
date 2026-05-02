@@ -6,6 +6,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchAuthModes } from '@/lib/authLocalApi'
 
+/** Hauteur du bandeau dev en pixels (utilisee pour decaler les layouts). */
+export const DEV_BANNER_HEIGHT = 32
+
 export interface DevModeState {
   enabled: boolean
   label: string

@@ -1,7 +1,16 @@
 /**
  * Main application layout with navbar and outlet.
  */
-import { AppShell, Burger, Group, NavLink, Text, ActionIcon } from '@mantine/core'
+import {
+  AppShell,
+  Burger,
+  Group,
+  NavLink,
+  Text,
+  ActionIcon,
+  useMantineColorScheme,
+  useComputedColorScheme,
+} from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { Outlet, useNavigate, NavLink as RouterNavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +46,10 @@ export function Layout() {
   const devMode = useDevMode()
   const offset = devMode.enabled ? DEV_BANNER_HEIGHT : 0
 
+  const { setColorScheme } = useMantineColorScheme()
+  const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
+  const isDark = computedColorScheme === 'dark'
+
   return (
     <AppShell
       header={{ height: 60 }}
@@ -54,6 +67,13 @@ export function Layout() {
           </Group>
           <Group>
             <AppsMenu />
+            <ActionIcon
+              variant="subtle"
+              onClick={() => setColorScheme(isDark ? 'light' : 'dark')}
+              title={isDark ? t('nav.theme_light') : t('nav.theme_dark')}
+            >
+              {isDark ? '☀️' : '🌙'}
+            </ActionIcon>
             <ActionIcon
               variant="subtle"
               onClick={() => void handleLock()}

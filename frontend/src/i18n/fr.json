@@ -201,7 +201,9 @@
     "audit": "Audit",
     "account": "Compte",
     "lock": "Verrouiller",
-    "api_docs": "API docs"
+    "api_docs": "API docs",
+    "theme_dark": "Passer en thème sombre",
+    "theme_light": "Passer en thème clair"
   },
   "topbar": {
     "apps_menu": "Applications"

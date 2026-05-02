@@ -1,4 +1,4 @@
-"""Requêtes SQL pour la table secrets + secret_tags — LOT_05/06."""
+"""Requêtes SQL pour la table secrets + secret_tags — LOT_05/06/18."""
 from __future__ import annotations
 
 import base64
@@ -380,6 +380,150 @@ async def populate_secret(
 
 
 # ─── SELECT descriptor only ───────────────────────────────────────────────────
+
+
+# ─── LOT_18 : path-aware queries ─────────────────────────────────────────────
+
+
+async def list_by_path(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    path: str,
+    limit: int,
+    cursor_updated_at: datetime.datetime | None,
+    cursor_id: UUID | None,
+) -> list[SecretRow]:
+    """Liste les secrets directs d'un path (non récursif).
+
+    path='/' → secrets sans '/' dans leur nom.
+    path='/bob/' → secrets dont le nom commence par '/bob/' sans second '/'.
+    """
+    if path == "/":
+        rows = await conn.fetch(
+            """
+            SELECT
+                s.id, s.wallet_id, s.name, s.description,
+                s.encrypted_value, s.is_placeholder,
+                s.generation_version, s.linked_secret_id,
+                s.generation_descriptor,
+                s.created_at, s.updated_at,
+                s.created_by_user_id, s.created_by_api_key_id,
+                s.updated_by_user_id, s.updated_by_api_key_id
+            FROM secrets s
+            WHERE s.wallet_id = $1
+              AND s.name NOT LIKE '%/%'
+              AND ($2::timestamptz IS NULL
+                   OR (s.updated_at, s.id) < ($2::timestamptz, $3::uuid))
+            ORDER BY s.updated_at DESC, s.id DESC
+            LIMIT $4
+            """,
+            wallet_id, cursor_updated_at, cursor_id, limit,
+        )
+    else:
+        rows = await conn.fetch(
+            """
+            SELECT
+                s.id, s.wallet_id, s.name, s.description,
+                s.encrypted_value, s.is_placeholder,
+                s.generation_version, s.linked_secret_id,
+                s.generation_descriptor,
+                s.created_at, s.updated_at,
+                s.created_by_user_id, s.created_by_api_key_id,
+                s.updated_by_user_id, s.updated_by_api_key_id
+            FROM secrets s
+            WHERE s.wallet_id = $1
+              AND s.name LIKE $2 || '%'
+              AND s.name NOT LIKE $2 || '%/%'
+              AND ($3::timestamptz IS NULL
+                   OR (s.updated_at, s.id) < ($3::timestamptz, $4::uuid))
+            ORDER BY s.updated_at DESC, s.id DESC
+            LIMIT $5
+            """,
+            wallet_id, path, cursor_updated_at, cursor_id, limit,
+        )
+
+    if not rows:
+        return []
+
+    secret_ids = [r["id"] for r in rows]
+    tag_rows = await conn.fetch(
+        "SELECT secret_id, tag FROM secret_tags WHERE secret_id = ANY($1::uuid[])",
+        secret_ids,
+    )
+    tags_by_secret: dict[UUID, list[str]] = {}
+    for tr in tag_rows:
+        tags_by_secret.setdefault(tr["secret_id"], []).append(tr["tag"])
+    return [_row_to_secret(row, tags_by_secret.get(row["id"], [])) for row in rows]
+
+
+async def get_tree_data(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    path: str,
+) -> dict[str, object]:
+    """Retourne les sous-répertoires directs d'un path + count secrets à ce niveau."""
+    target_depth = 1 if path == "/" else path.count("/")
+
+    folder_rows = await conn.fetch(
+        """
+        SELECT DISTINCT
+            pi.path_segment,
+            (
+                SELECT COUNT(DISTINCT pi2.secret_id)
+                FROM secret_path_index pi2
+                WHERE pi2.wallet_id = $1
+                  AND pi2.path_segment = pi.path_segment
+            ) AS secrets_count,
+            (
+                SELECT COUNT(DISTINCT pi3.secret_id)
+                FROM secret_path_index pi3
+                WHERE pi3.wallet_id = $1
+                  AND pi3.depth > $3
+                  AND pi3.path_segment LIKE pi.path_segment || '%'
+            ) AS subfolders_count
+        FROM secret_path_index pi
+        WHERE pi.wallet_id = $1
+          AND pi.depth = $3
+          AND pi.path_segment LIKE $2 || '%'
+          AND pi.path_segment != $2
+        ORDER BY pi.path_segment
+        """,
+        wallet_id, path, target_depth,
+    )
+
+    if path == "/":
+        secrets_at_level: int = await conn.fetchval(
+            "SELECT COUNT(*) FROM secrets WHERE wallet_id = $1 AND name NOT LIKE '%/%'",
+            wallet_id,
+        )
+    else:
+        secrets_at_level = await conn.fetchval(
+            """SELECT COUNT(*) FROM secrets
+               WHERE wallet_id = $1
+                 AND name LIKE $2 || '%'
+                 AND name NOT LIKE $2 || '%/%'""",
+            wallet_id, path,
+        )
+
+    def _folder_name(full_path: str, parent: str) -> str:
+        suffix = full_path[len(parent):]
+        return suffix.rstrip("/")
+
+    return {
+        "path": path,
+        "secrets_at_this_level_count": secrets_at_level,
+        "folders": [
+            {
+                "name": _folder_name(r["path_segment"], path),
+                "full_path": r["path_segment"],
+                "secrets_count": r["secrets_count"],
+                "subfolders_count": r["subfolders_count"],
+            }
+            for r in folder_rows
+        ],
+    }
 
 
 async def get_secret_by_id(

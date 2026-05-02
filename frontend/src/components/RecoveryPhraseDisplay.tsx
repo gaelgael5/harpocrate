@@ -55,7 +55,7 @@ export function RecoveryPhraseDisplay({
       </Paper>
 
       <Button variant="outline" onClick={downloadText}>
-        {t('firstLogin.downloadPdf')}
+        {t('firstLogin.download')}
       </Button>
 
       <Paper withBorder p="sm">

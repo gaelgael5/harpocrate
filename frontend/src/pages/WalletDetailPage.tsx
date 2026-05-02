@@ -116,6 +116,12 @@ export function WalletDetailPage() {
           >
             {t('grants.title')}
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/wallets/${walletId ?? ''}/api-keys`)}
+          >
+            {t('apiKeys.apiKeysButton')}
+          </Button>
           <Button onClick={() => navigate(`/wallets/${walletId ?? ''}/secrets/new`)}>
             {t('secrets.create')}
           </Button>

@@ -30,6 +30,7 @@ import { WalletNewPage } from '@/pages/WalletNewPage'
 import { SecretDetailPage } from '@/pages/SecretDetailPage'
 import { SecretNewPage } from '@/pages/SecretNewPage'
 import { GrantsPage } from '@/pages/GrantsPage'
+import { ApiKeysPage } from '@/pages/ApiKeysPage'
 import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AccountPage } from '@/pages/AccountPage'
 
@@ -113,6 +114,10 @@ export default function App() {
             <Route
               path="/wallets/:walletId/grants"
               element={<GrantsPage />}
+            />
+            <Route
+              path="/wallets/:walletId/api-keys"
+              element={<ApiKeysPage />}
             />
             <Route path="/audit" element={<AuditLogPage />} />
             <Route path="/account" element={<AccountPage />} />

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     dev_mode: bool = False
     dev_mode_label: str = "DEV"
 
+    # Gouvernance d'identite (LOT_02) : duree d'inactivite avant quarantaine.
+    quarantine_inactivity_days: int = 90
+    # Duree de la quarantaine elle-meme (combien de temps l'utilisateur est bloque).
+    quarantine_duration_days: int = 30
+
     @field_validator("rsa_key_size_min")
     @classmethod
     def _validate_rsa(cls, v: int) -> int:

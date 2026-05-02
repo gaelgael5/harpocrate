@@ -33,5 +33,7 @@ async def config_public() -> dict[str, object]:
         "passphrase_minimum_length": settings.passphrase_length_min,
         "supported_generators": _SUPPORTED_GENERATORS,
         "audit_retention_days": settings.audit_retention_days,
+        "quarantine_inactivity_days": settings.quarantine_inactivity_days,
+        "quarantine_duration_days": settings.quarantine_duration_days,
         "version": _VERSION,
     }

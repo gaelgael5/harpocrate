@@ -143,18 +143,59 @@ async def list_audit_log(
 
 # ─── GET /v1/audit-log/actions ────────────────────────────────────────────────
 
+# Liste statique exhaustive des actions auditables — utilisee pour peupler les
+# dropdowns de l'UI meme quand la table audit_log est encore vide. Ajouter les
+# nouvelles actions ici quand on en cree dans le code metier.
+_KNOWN_AUDIT_ACTIONS: list[str] = [
+    # auth
+    "auth.local_login",
+    "user.bootstrapped",
+    "user.crypto_accessed",
+    "user.recovery_accessed",
+    "user.passphrase_changed",
+    "user.recovery_renewed",
+    "user.lookup",
+    # wallets
+    "wallet.created",
+    "wallet.updated",
+    "wallet.deleted",
+    "wallet.ownership_transferred",
+    "wallet.exported_structure",
+    "wallet.imported",
+    # grants
+    "wallet.grant_created",
+    "wallet.grant_updated",
+    "wallet.grant_deleted",
+    # secrets
+    "secret.created",
+    "secret.read",
+    "secret.updated",
+    "secret.deleted",
+    "secret.placeholder_created",
+    "secret.populated",
+    "secret.descriptor_accessed",
+    # api keys
+    "api_key.created",
+    "api_key.updated",
+    "api_key.revoked",
+    "api_key.used",
+]
+
 
 @router.get("/actions")
 async def list_audit_actions(
     caller: AuditAuth,
 ) -> JSONResponse:
-    """Retourne la liste des actions distinctes présentes dans audit_log.
+    """Retourne la liste exhaustive des actions auditables.
 
     Accessible par JWT ou API key — utile pour peupler les dropdowns UI.
+    On retourne l'union de la liste statique et des actions reellement
+    presentes en DB, pour rester resilient aux ajouts.
     """
     pool = await get_pool()
     async with pool.acquire() as conn:
-        actions = await audit_log_repo.get_distinct_actions(conn)
+        from_db = await audit_log_repo.get_distinct_actions(conn)
 
+    actions = sorted(set(_KNOWN_AUDIT_ACTIONS) | set(from_db))
     response = AuditLogActionsResponse(actions=actions)
     return JSONResponse(content=response.model_dump(mode="json"))

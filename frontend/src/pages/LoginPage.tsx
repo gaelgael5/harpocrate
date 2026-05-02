@@ -22,7 +22,7 @@ import {
 } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 
-import { api, ApiError, setTokenProvider } from '@/lib/api-client'
+import { api, ApiError } from '@/lib/api-client'
 import { startLogin, getUserManager } from '@/lib/oidc'
 import { localLogin, LocalAuthError } from '@/lib/authLocalApi'
 import { useLocalLoginAvailable } from '@/hooks/useLocalLoginAvailable'
@@ -122,9 +122,11 @@ export function LoginPage() {
     try {
       const resp = await localLogin(localUsername, localPassword)
 
-      // Store token and wire it into the token provider
+      // Stocke le token dans le store (persist sessionStorage). Le tokenProvider
+      // configure par initOidc lit deja useSessionStore.getState().localAdminToken
+      // en fallback — l'override permanent ici creait un trou si initOidc etait
+      // rappele lors d'un re-render (la closure capturant resp etait perdue).
       setLocalAdminToken(resp.access_token)
-      setTokenProvider(async () => resp.access_token)
 
       // Check /me to determine next route
       const me = await api.get<unknown>('/me')

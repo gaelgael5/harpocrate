@@ -189,6 +189,9 @@
     "account": "Account",
     "lock": "Lock"
   },
+  "topbar": {
+    "apps_menu": "Applications"
+  },
   "errors": {
     "network": "Network error",
     "unauthorized": "Unauthorized",

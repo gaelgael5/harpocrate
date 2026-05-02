@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     public_url: str
     log_level: str = "INFO"
+    apps_file: str = Field(default="/app/apps.json")
 
     @field_validator("rsa_key_size_min")
     @classmethod

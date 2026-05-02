@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { useCryptoStore } from '@/stores/crypto'
 import { useSessionStore } from '@/stores/session'
 import { logout } from '@/lib/oidc'
+import { AppsMenu } from '@/components/AppsMenu'
 
 export function Layout() {
   const { t } = useTranslation()
@@ -44,6 +45,7 @@ export function Layout() {
             </Text>
           </Group>
           <Group>
+            <AppsMenu />
             <ActionIcon
               variant="subtle"
               onClick={() => void handleLock()}

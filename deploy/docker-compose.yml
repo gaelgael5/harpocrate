@@ -36,3 +36,6 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
+    volumes:
+      - ./apps.json:/app/apps.json:ro
+      # Cross-app launcher menu — éditable côté CT sans rebuild

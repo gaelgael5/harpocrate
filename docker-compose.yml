@@ -42,3 +42,17 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/migrations:/app/migrations
+      - ./apps.json:/app/apps.json:ro
+      # Cross-app launcher menu — éditable côté CT sans rebuild
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+    image: harpocrate-frontend:test
+    container_name: harpocrate-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:8080:80"

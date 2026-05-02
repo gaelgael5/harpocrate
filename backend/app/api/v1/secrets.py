@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
+from app.db.repositories import secrets as secrets_repo
 from app.db.repositories import users as users_repo
 from app.models.api.secrets import (
     PlaceholderCreateRequest,
@@ -21,7 +22,9 @@ from app.models.api.secrets import (
     SecretPatchRequest,
     SecretPutRequest,
 )
+from app.models.db.secret import SecretRow
 from app.services import secrets as secrets_svc
+from app.services.secret_paths import normalize_path
 
 router = APIRouter(
     prefix="/wallets/{wallet_id}/secrets",
@@ -30,6 +33,20 @@ router = APIRouter(
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _secret_to_dict(s: SecretRow) -> dict[str, object]:
+    return {
+        "id": str(s.id),
+        "wallet_id": str(s.wallet_id),
+        "name": s.name,
+        "description": s.description,
+        "is_placeholder": s.is_placeholder,
+        "generation_version": s.generation_version,
+        "tags": s.tags,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+    }
 
 
 def _client_ip(request: Request) -> str | None:
@@ -47,12 +64,16 @@ async def list_secrets(
     wallet_id: UUID,
     current_user: JwtUser,
     request: Request,
+    path: str | None = Query(default=None, description="Filtrer par répertoire"),
     tag: str | None = Query(default=None),
     name_contains: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
 ) -> JSONResponse:
-    """Liste les secrets du wallet (sans encrypted_value). Requiert un grant."""
+    """Liste les secrets du wallet (sans encrypted_value). Requiert un grant.
+
+    Avec ?path=, retourne uniquement les secrets directs du répertoire donné.
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
         user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
@@ -60,6 +81,36 @@ async def list_secrets(
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        if path is not None:
+            cursor_updated_at, cursor_id = None, None
+            if cursor:
+                try:
+                    cursor_updated_at, cursor_id = secrets_repo.decode_cursor(cursor)
+                except ValueError:
+                    return JSONResponse(status_code=400, content={"error": "invalid_cursor"})
+
+            normalized = normalize_path(path)
+            rows = await secrets_repo.list_by_path(
+                conn,
+                wallet_id=wallet_id,
+                path=normalized,
+                limit=limit,
+                cursor_updated_at=cursor_updated_at,
+                cursor_id=cursor_id,
+            )
+            next_cursor = None
+            if len(rows) == limit:
+                last = rows[-1]
+                next_cursor = secrets_repo.encode_cursor(last.updated_at, last.id)
+
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "secrets": [_secret_to_dict(s) for s in rows],
+                    "next_cursor": next_cursor,
+                },
             )
 
         result = await secrets_svc.list_secrets(

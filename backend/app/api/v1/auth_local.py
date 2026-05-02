@@ -10,13 +10,14 @@ import hmac
 import time
 
 import jwt
+import structlog
 from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.db.pool import get_pool
 from app.models.api.auth_local import AuthModesResponse, LocalLoginRequest, LocalLoginResponse
-from app.services.audit import audit_log_insert
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["auth-local"])
 
@@ -81,18 +82,17 @@ async def local_login(req: LocalLoginRequest, request: Request) -> JSONResponse:
 
     matched = _credentials_match(req.username, req.password)
 
-    # Audit — ne loguer ni le mot de passe ni son résultat partiel
+    # Audit via structlog (le local-admin n'est pas en DB → impossible d'utiliser
+    # audit_log qui exige un actor_user_id ou actor_api_key_id).
+    # Le log JSON part dans Loki via Alloy → traçable côté Grafana.
     actor_ip = request.client.host if request.client else None
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await audit_log_insert(
-            conn,
-            "auth.local_login",
-            actor_ip=actor_ip,
-            metadata={"username": req.username},
-            success=matched,
-            error_code=None if matched else "invalid_credentials",
-        )
+    log.info(
+        "auth.local_login",
+        username=req.username,
+        actor_ip=actor_ip,
+        success=matched,
+        error_code=None if matched else "invalid_credentials",
+    )
 
     if not matched:
         return JSONResponse(

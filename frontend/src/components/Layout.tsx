@@ -110,6 +110,11 @@ export function Layout() {
           label={t('nav.account')}
         />
         <NavLink
+          component={RouterNavLink}
+          to="/integration"
+          label={t('nav.integration')}
+        />
+        <NavLink
           component="a"
           href="/v1/api-docs"
           target="_blank"

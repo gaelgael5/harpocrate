@@ -12,13 +12,13 @@ LXC cible (202, etc.)
               │
               ▼
   LXC 116 (agflow-logs)
-        ├── Loki  : http://192.168.10.158:3100/loki/api/v1/push
+        ├── Loki  : http://192.168.10.110:3100/loki/api/v1/push
         └── Grafana : https://log.yoops.org
 ```
 
 ## Stack centrale (LXC 116 — agflow-logs)
 
-- **Loki** : accepte les pushes entrants sur `http://192.168.10.158:3100/loki/api/v1/push`
+- **Loki** : accepte les pushes entrants sur `http://192.168.10.110:3100/loki/api/v1/push`
 - **Grafana** : `https://log.yoops.org`
   - Auth : Keycloak SSO, realm `yoops`, client `grafana`
   - Rôles disponibles : `admin`, `editor`, `viewer`

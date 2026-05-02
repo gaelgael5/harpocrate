@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     admin_local_enabled: bool = False
     admin_local_username: str = ""
     admin_local_password: str = ""
-    admin_local_email: str = "admin@local"
+    admin_local_email: str = "admin@harpocrate.local"
     admin_local_display_name: str = "Local Admin"
 
     # Mode developpement — affiche un bandeau d'avertissement permanent dans l'UI.

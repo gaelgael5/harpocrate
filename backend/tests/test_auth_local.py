@@ -45,7 +45,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_ENABLED", "false")
     monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_USERNAME", "admin")
     monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_PASSWORD", "secret123")
-    monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_EMAIL", "admin@local")
+    monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_EMAIL", "admin@harpocrate.local")
     monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_DISPLAY_NAME", "Local Admin")
 
     # Patch les settings dans les modules qui les ont importés
@@ -61,7 +61,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     _auth_local_settings = app.api.v1.auth_local.__dict__["settings"]
     monkeypatch.setattr(_auth_local_settings, "keycloak_client_id", TEST_AUDIENCE)
     monkeypatch.setattr(_auth_local_settings, "hmac_key", _HMAC_KEY_B64)
-    monkeypatch.setattr(_auth_local_settings, "admin_local_email", "admin@local")
+    monkeypatch.setattr(_auth_local_settings, "admin_local_email", "admin@harpocrate.local")
     monkeypatch.setattr(_auth_local_settings, "admin_local_display_name", "Local Admin")
 
 
@@ -130,7 +130,7 @@ def _make_local_jwt(
     now = int(time.time())
     payload = {
         "sub": sub,
-        "email": "admin@local",
+        "email": "admin@harpocrate.local",
         "name": "Local Admin",
         "iss": issuer,
         "aud": audience,
@@ -260,7 +260,7 @@ async def test_local_login_happy_path_returns_jwt(
         issuer=_LOCAL_ISSUER,
     )
     assert decoded["sub"] == "local-admin"
-    assert decoded["email"] == "admin@local"
+    assert decoded["email"] == "admin@harpocrate.local"
     assert decoded["iss"] == _LOCAL_ISSUER
 
 
@@ -275,7 +275,7 @@ async def test_local_token_accepted_by_require_jwt_user() -> None:
     token = _make_local_jwt()
     result = await require_jwt_user(authorization=f"Bearer {token}")
     assert result.keycloak_sub == "local-admin"
-    assert result.email == "admin@local"
+    assert result.email == "admin@harpocrate.local"
     assert result.display_name == "Local Admin"
 
 

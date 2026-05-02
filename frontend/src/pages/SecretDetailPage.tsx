@@ -95,6 +95,10 @@ export function SecretDetailPage() {
         color: 'green',
         message: t('secrets.delete_success'),
       })
+      // Invalide la liste des secrets et le wallet (pour les compteurs) avant
+      // de retourner sur la page wallet — sinon TanStack Query sert l'ancien cache.
+      await queryClient.invalidateQueries({ queryKey: ['secrets', walletId] })
+      await queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
       navigate(`/wallets/${walletId}`)
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : String(err)

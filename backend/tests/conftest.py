@@ -1,6 +1,7 @@
 """Shared pytest fixtures."""
 from __future__ import annotations
 
+import base64
 import os
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
@@ -9,6 +10,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import asyncpg
 import pytest
 import pytest_asyncio
+
+# Clé HMAC stable pour tous les tests — doit correspondre à _HMAC_KEY_B64
+# dans test_api_keys.py (b"k" * 32 en base64) afin d'éviter les pollutions
+# inter-fichiers quand les fixtures function-scoped changent les env vars.
+_TEST_HMAC_KEY_B64 = base64.b64encode(b"k" * 32).decode()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _initialize_settings_singleton() -> None:
+    """Crée le singleton settings avant le premier test avec des valeurs stables.
+
+    Empêche la pollution de settings.hmac_key entre fichiers de test causée
+    par l'ordre d'exécution des fixtures function-scoped.
+    """
+    os.environ.setdefault("HARPOCRATE_DB_DSN", "postgresql://x:y@h:5432/d")
+    os.environ.setdefault("HARPOCRATE_KEYCLOAK_URL", "https://keycloak.yoops.org")
+    os.environ.setdefault("HARPOCRATE_KEYCLOAK_REALM", "yoops")
+    os.environ.setdefault("HARPOCRATE_KEYCLOAK_CLIENT_ID", "harpocrate-vault")
+    os.environ.setdefault("HARPOCRATE_HMAC_KEY", _TEST_HMAC_KEY_B64)
+    os.environ.setdefault("HARPOCRATE_PUBLIC_URL", "https://vault.yoops.org")
+
+    from app.core.config import settings as _settings  # noqa: F401
 
 
 @pytest.fixture(autouse=True)

@@ -179,6 +179,15 @@ _KNOWN_AUDIT_ACTIONS: list[str] = [
     "api_key.updated",
     "api_key.revoked",
     "api_key.used",
+    # admin backup/restore (LOT_12A)
+    "admin.backup_created",
+    "admin.backup_downloaded",
+    "admin.backup_uploaded",
+    "admin.backup_verified",
+    "admin.backup_deleted",
+    "admin.restore_executed",
+    "admin.maintenance_enabled",
+    "admin.maintenance_disabled",
 ]
 
 

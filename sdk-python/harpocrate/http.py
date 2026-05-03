@@ -64,6 +64,7 @@ class VaultHttpClient:
         self._base_url = base_url
         self._token = token
         self._timeout = timeout
+        self._verify_tls = os.environ.get("HARPOCRATE_ALLOW_INSECURE", "0") != "1"
 
     def _headers(self) -> dict[str, str]:
         """Headers HTTP communs (Authorization non loggé)."""
@@ -79,7 +80,7 @@ class VaultHttpClient:
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
         """Convertit les codes HTTP en exceptions SDK."""
-        if resp.status_code == 200 or resp.status_code == 201:
+        if resp.status_code in (200, 201, 204):
             return
 
         try:
@@ -119,6 +120,18 @@ class VaultHttpClient:
         """POST synchrone avec retry."""
         return self._request("POST", path, json=json)
 
+    def put(self, path: str, json: Any = None) -> Any:
+        """PUT synchrone avec retry."""
+        return self._request("PUT", path, json=json)
+
+    def patch(self, path: str, json: Any = None) -> Any:
+        """PATCH synchrone avec retry."""
+        return self._request("PATCH", path, json=json)
+
+    def delete(self, path: str) -> None:
+        """DELETE synchrone avec retry."""
+        self._request("DELETE", path)
+
     def _request(
         self,
         method: str,
@@ -139,8 +152,11 @@ class VaultHttpClient:
                     params=params,
                     json=json,
                     timeout=self._timeout,
+                    verify=self._verify_tls,
                 )
                 self._raise_for_status(resp)
+                if resp.status_code == 204:
+                    return None
                 return resp.json()
             except (httpx.ConnectError, httpx.TimeoutException) as exc:
                 last_exc = exc

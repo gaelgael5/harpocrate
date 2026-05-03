@@ -117,6 +117,81 @@ class SecretsClient:
         tree_path = f"/v1/wallets/{self._wallet_id}/tree"
         return self._http.get(tree_path, path=path)  # type: ignore[return-value]
 
+    def create(
+        self,
+        name: str,
+        value: str,
+        description: str | None = None,
+        tags: list[str] | None = None,
+    ) -> str:
+        """Crée un secret avec une valeur chiffrée côté client.
+
+        Retourne le secret_id (UUID string). Requiert [add].
+        """
+        wallet_key = self._wallet_key()
+        enc_value = aes_gcm_encrypt(value.encode("utf-8"), wallet_key)
+        enc_value_b64 = base64.b64encode(enc_value).decode()
+        body: dict[str, Any] = {"name": name, "encrypted_value": enc_value_b64}
+        if description is not None:
+            body["description"] = description
+        if tags is not None:
+            body["tags"] = tags
+        result = self._http.post(self._path(), json=body)
+        return str(result["secret_id"])
+
+    def put(self, name: str, value: str) -> int:
+        """Remplace la valeur d'un secret existant (incrémente generation_version).
+
+        Retourne la nouvelle generation_version. Requiert [write].
+        """
+        wallet_key = self._wallet_key()
+        enc_value = aes_gcm_encrypt(value.encode("utf-8"), wallet_key)
+        enc_value_b64 = base64.b64encode(enc_value).decode()
+        result = self._http.put(self._path(name), json={"encrypted_value": enc_value_b64})
+        return int(result["generation_version"])
+
+    def patch(
+        self,
+        name: str,
+        description: str | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        """Met à jour les métadonnées d'un secret (description et/ou tags).
+
+        Ne modifie pas la valeur chiffrée. Requiert [write].
+        """
+        body: dict[str, Any] = {}
+        if description is not None:
+            body["description"] = description
+        if tags is not None:
+            body["tags"] = tags
+        self._http.patch(self._path(name), json=body)
+
+    def delete(self, name: str) -> None:
+        """Supprime un secret. Requiert [remove]."""
+        self._http.delete(self._path(name))
+
+    def create_placeholder(
+        self,
+        name: str,
+        descriptor: dict[str, Any],
+        description: str | None = None,
+        tags: list[str] | None = None,
+    ) -> str:
+        """Crée un placeholder avec son descripteur de génération.
+
+        Retourne le secret_id. Requiert [add].
+        """
+        body: dict[str, Any] = {"name": name, "generation_descriptor": descriptor}
+        if description is not None:
+            body["description"] = description
+        if tags is not None:
+            body["tags"] = tags
+        result = self._http.post(
+            f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body
+        )
+        return str(result["secret_id"])
+
     def get(self, name: str) -> str:
         """Lit et déchiffre la valeur d'un secret.
 

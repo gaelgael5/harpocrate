@@ -36,6 +36,8 @@ import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { IntegrationPage } from '@/pages/IntegrationPage'
 import { AdminBackupsPage } from '@/pages/AdminBackupsPage'
+import { AdminUsersPage } from '@/pages/AdminUsersPage'
+import { AdminSystemPage } from '@/pages/AdminSystemPage'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 
 /** Wrapper qui pousse tout le contenu sous le bandeau dev (s'il est actif). */
@@ -129,6 +131,8 @@ export default function App() {
             <Route path="/account" element={<AccountPage />} />
             <Route path="/integration" element={<IntegrationPage />} />
             <Route path="/admin/backups" element={<AdminBackupsPage />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/system" element={<AdminSystemPage />} />
           </Route>
 
           {/* Fallback */}

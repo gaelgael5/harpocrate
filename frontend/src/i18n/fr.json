@@ -299,6 +299,34 @@
   },
   "admin": {
     "title": "Administration",
+    "nav_backups": "Sauvegardes",
+    "nav_users": "Utilisateurs",
+    "nav_system": "Système",
+    "system": {
+      "title": "Informations système",
+      "users": "Utilisateurs",
+      "bootstrapped": "Bootstrappés",
+      "wallets": "Coffres",
+      "secrets": "Secrets",
+      "apiKeys": "Clés API actives",
+      "backups": "Sauvegardes",
+      "auditEvents": "Événements d'audit"
+    },
+    "users": {
+      "title": "Utilisateurs",
+      "email": "Email",
+      "displayName": "Nom",
+      "createdAt": "Créé le",
+      "lastUnlock": "Dernier déverrouillage",
+      "hasBootstrap": "Bootstrappé",
+      "quarantine": "Quarantaine",
+      "disabled": "Désactivé",
+      "noUsers": "Aucun utilisateur.",
+      "yes": "Oui",
+      "no": "Non",
+      "never": "Jamais",
+      "total": "{{count}} utilisateur(s) au total"
+    },
     "backups": {
       "title": "Sauvegardes",
       "create": "Créer une sauvegarde",

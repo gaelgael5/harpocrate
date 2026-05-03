@@ -299,6 +299,34 @@
   },
   "admin": {
     "title": "Administration",
+    "nav_backups": "Backups",
+    "nav_users": "Users",
+    "nav_system": "System",
+    "system": {
+      "title": "System information",
+      "users": "Users",
+      "bootstrapped": "Bootstrapped",
+      "wallets": "Vaults",
+      "secrets": "Secrets",
+      "apiKeys": "Active API keys",
+      "backups": "Backups",
+      "auditEvents": "Audit events"
+    },
+    "users": {
+      "title": "Users",
+      "email": "Email",
+      "displayName": "Name",
+      "createdAt": "Created",
+      "lastUnlock": "Last unlock",
+      "hasBootstrap": "Bootstrapped",
+      "quarantine": "Quarantine",
+      "disabled": "Disabled",
+      "noUsers": "No users.",
+      "yes": "Yes",
+      "no": "No",
+      "never": "Never",
+      "total": "{{count}} user(s) total"
+    },
     "backups": {
       "title": "Backups",
       "create": "Create backup",

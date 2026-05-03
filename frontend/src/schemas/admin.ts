@@ -30,6 +30,38 @@ export const BackupListResponseSchema = z.object({
 
 export type BackupListResponse = z.infer<typeof BackupListResponseSchema>
 
+export const SystemInfoSchema = z.object({
+  users_count: z.number(),
+  bootstrapped_users_count: z.number(),
+  wallets_count: z.number(),
+  secrets_count: z.number(),
+  active_api_keys_count: z.number(),
+  backups_count: z.number(),
+  audit_events_count: z.number(),
+})
+
+export type SystemInfo = z.infer<typeof SystemInfoSchema>
+
+export const AdminUserSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string(),
+  display_name: z.string().nullable(),
+  created_at: z.string(),
+  last_unlock_at: z.string().nullable(),
+  has_bootstrap: z.boolean(),
+  quarantine_until: z.string().nullable(),
+  disabled_at: z.string().nullable(),
+})
+
+export type AdminUser = z.infer<typeof AdminUserSchema>
+
+export const AdminUsersResponseSchema = z.object({
+  users: z.array(AdminUserSchema),
+  total: z.number(),
+})
+
+export type AdminUsersResponse = z.infer<typeof AdminUsersResponseSchema>
+
 export const RestoreResultSchema = z.object({
   success: z.boolean(),
   restored_from_backup_id: z.string().uuid(),

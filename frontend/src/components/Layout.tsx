@@ -125,11 +125,23 @@ export function Layout() {
           label={t('nav.api_docs')}
         />
         {isAdmin && (
-          <NavLink
-            component={RouterNavLink}
-            to="/admin/backups"
-            label={t('nav.admin')}
-          />
+          <NavLink label={t('nav.admin')} childrenOffset={12} defaultOpened>
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/backups"
+              label={t('admin.nav_backups')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/users"
+              label={t('admin.nav_users')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/system"
+              label={t('admin.nav_system')}
+            />
+          </NavLink>
         )}
       </AppShell.Navbar>
 

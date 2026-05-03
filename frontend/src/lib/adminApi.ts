@@ -4,10 +4,14 @@ import {
   BackupListResponseSchema,
   BackupSchema,
   RestoreResultSchema,
+  SystemInfoSchema,
+  AdminUsersResponseSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
   type RestoreResult,
+  type SystemInfo,
+  type AdminUsersResponse,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -58,4 +62,20 @@ export async function restoreBackup(
 ): Promise<RestoreResult> {
   const raw = await api.post<unknown>(`/admin/backups/${id}/restore`, body)
   return RestoreResultSchema.parse(raw)
+}
+
+export async function fetchSystemInfo(): Promise<SystemInfo> {
+  const raw = await api.get<unknown>('/admin/system/info')
+  return SystemInfoSchema.parse(raw)
+}
+
+export async function fetchAdminUsers(params?: {
+  limit?: number
+  offset?: number
+}): Promise<AdminUsersResponse> {
+  const q = new URLSearchParams()
+  if (params?.limit) q.set('limit', String(params.limit))
+  if (params?.offset) q.set('offset', String(params.offset))
+  const raw = await api.get<unknown>(`/admin/users?${q.toString()}`)
+  return AdminUsersResponseSchema.parse(raw)
 }

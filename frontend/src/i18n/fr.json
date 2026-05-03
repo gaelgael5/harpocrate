@@ -274,6 +274,7 @@
     "account": "Compte",
     "integration": "Intégration",
     "admin": "Admin",
+    "export_all": "Export global",
     "lock": "Verrouiller",
     "api_docs": "API docs",
     "theme_dark": "Passer en thème sombre",
@@ -367,6 +368,20 @@
     "serverError": "Erreur serveur",
     "cryptoRequired": "Le coffre doit être déverrouillé",
     "decryptFailed": "Échec du déchiffrement"
+  },
+  "export": {
+    "title": "Export global (parachute Dashlane)",
+    "warningTitle": "Attention — données sensibles",
+    "warningBody": "Cette action exporte TOUTES vos valeurs de secrets en clair dans un fichier CSV. Stockez ce fichier en lieu sûr et supprimez-le après import dans votre gestionnaire de mots de passe.",
+    "whatIsExported": "Ce fichier contiendra :",
+    "item1": "Tous vos secrets valorisés (coffres possédés + partagés en lecture)",
+    "item2": "Format CSV compatible Dashlane, 1Password, Bitwarden",
+    "item3": "Colonnes : titre, mot de passe, note, catégorie",
+    "button": "Exporter vers CSV",
+    "exporting": "Export en cours...",
+    "success": "Export réussi — {{count}} secret(s) exportés",
+    "stepFetchWallets": "Récupération des coffres...",
+    "stepDecrypting": "Déchiffrement des secrets..."
   },
   "devMode": {
     "banner": "Mode développement actif — instance non destinée à la production. N'y stockez aucun secret réel."

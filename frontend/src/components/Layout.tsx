@@ -124,6 +124,11 @@ export function Layout() {
           rel="noopener noreferrer"
           label={t('nav.api_docs')}
         />
+        <NavLink
+          component={RouterNavLink}
+          to="/export-all"
+          label={t('nav.export_all')}
+        />
         {isAdmin && (
           <NavLink label={t('nav.admin')} childrenOffset={12} defaultOpened>
             <NavLink

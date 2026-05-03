@@ -274,6 +274,7 @@
     "account": "Account",
     "integration": "Integration",
     "admin": "Admin",
+    "export_all": "Global export",
     "lock": "Lock",
     "api_docs": "API docs",
     "theme_dark": "Switch to dark theme",
@@ -367,6 +368,20 @@
     "serverError": "Server error",
     "cryptoRequired": "Vault must be unlocked",
     "decryptFailed": "Decryption failed"
+  },
+  "export": {
+    "title": "Global export (Dashlane parachute)",
+    "warningTitle": "Warning — sensitive data",
+    "warningBody": "This action exports ALL your secret values in plaintext to a CSV file. Store this file safely and delete it after importing into your password manager.",
+    "whatIsExported": "This file will contain:",
+    "item1": "All your valued secrets (owned vaults + shared with read access)",
+    "item2": "CSV format compatible with Dashlane, 1Password, Bitwarden",
+    "item3": "Columns: title, password, note, category",
+    "button": "Export to CSV",
+    "exporting": "Exporting...",
+    "success": "Export successful — {{count}} secret(s) exported",
+    "stepFetchWallets": "Fetching vaults...",
+    "stepDecrypting": "Decrypting secrets..."
   },
   "devMode": {
     "banner": "Dev mode is active — this instance is NOT for production. Do not store any real secret here."

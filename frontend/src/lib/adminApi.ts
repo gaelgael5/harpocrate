@@ -7,6 +7,8 @@ import {
   SystemInfoSchema,
   AdminUsersResponseSchema,
   EnvConfigSchema,
+  S3BackupListResponseSchema,
+  S3PushResultSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
@@ -14,6 +16,8 @@ import {
   type SystemInfo,
   type AdminUsersResponse,
   type EnvConfig,
+  type S3BackupListResponse,
+  type S3PushResult,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -85,4 +89,19 @@ export async function fetchAdminUsers(params?: {
 export async function fetchEnvConfig(): Promise<EnvConfig> {
   const raw = await api.get<unknown>('/admin/system/env')
   return EnvConfigSchema.parse(raw)
+}
+
+export async function fetchS3Backups(): Promise<S3BackupListResponse> {
+  const raw = await api.get<unknown>('/admin/backups/s3')
+  return S3BackupListResponseSchema.parse(raw)
+}
+
+export async function pushBackupToS3(backupId: string): Promise<S3PushResult> {
+  const raw = await api.post<unknown>(`/admin/backups/${backupId}/push-s3`, {})
+  return S3PushResultSchema.parse(raw)
+}
+
+export async function pullBackupFromS3(s3Key: string): Promise<Backup> {
+  const raw = await api.post<unknown>('/admin/backups/s3/pull', { s3_key: s3Key })
+  return BackupSchema.parse(raw)
 }

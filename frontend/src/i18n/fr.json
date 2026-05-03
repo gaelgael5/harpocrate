@@ -363,7 +363,20 @@
       "restoreError": "Erreur lors de la restauration",
       "descriptionLabel": "Description (optionnel)",
       "createSuccess": "Sauvegarde créée",
-      "deleteSuccess": "Sauvegarde supprimée"
+      "deleteSuccess": "Sauvegarde supprimée",
+      "pushS3": "Pousser vers S3",
+      "pushingS3": "Envoi...",
+      "pushS3Success": "Sauvegarde envoyée vers S3 (clé : {{key}})",
+      "pushS3Error": "Erreur lors de l'envoi vers S3",
+      "s3Section": "Sauvegardes distantes (S3)",
+      "s3NotConfigured": "S3 non configuré — définissez HARPOCRATE_S3_BUCKET, HARPOCRATE_S3_ACCESS_KEY_ID et HARPOCRATE_S3_SECRET_ACCESS_KEY.",
+      "s3Key": "Clé S3",
+      "s3Size": "Taille",
+      "s3Date": "Modifié le",
+      "s3Pull": "Importer en local",
+      "s3Pulling": "Import...",
+      "s3PullSuccess": "Backup importé depuis S3",
+      "s3PullError": "Erreur lors de l'import S3"
     }
   },
   "topbar": {

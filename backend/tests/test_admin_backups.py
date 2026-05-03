@@ -222,3 +222,148 @@ async def test_restore_wrong_confirmation() -> None:
         )
     assert r.status_code == 400
     assert r.json()["detail"]["error"] == "wrong_confirmation"
+
+
+# ─── LOT 13 — S3 endpoints ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_push_s3_requires_admin() -> None:
+    """POST /v1/admin/backups/{id}/push-s3 → 403 si pas admin."""
+    conn = _make_conn()
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-s3",
+            headers=_user_header(),
+        )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_push_s3_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /v1/admin/backups/{id}/push-s3 → 503 si S3 non configuré."""
+    from app.services import backup_s3 as s3_svc
+    from app.services.backup_s3 import S3Error
+
+    async def _fail(*a: Any, **kw: Any) -> str:
+        raise S3Error("S3 not configured")
+
+    monkeypatch.setattr(s3_svc, "push_backup_to_s3", _fail)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=_fake_backup_row())
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-s3",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 503
+    assert r.json()["detail"]["error"] == "s3_push_failed"
+
+
+@pytest.mark.asyncio
+async def test_push_s3_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /v1/admin/backups/{id}/push-s3 → 202 avec s3_key."""
+    from app.services import backup_s3 as s3_svc
+
+    async def _ok(backup_id: str, conn: Any) -> str:
+        return "harpocrate-backups/harpocrate-backup-2026-01-01-12-00-00.tar.age"
+
+    monkeypatch.setattr(s3_svc, "push_backup_to_s3", _ok)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=_fake_backup_row())
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-s3",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 202
+    assert "s3_key" in r.json()
+
+
+@pytest.mark.asyncio
+async def test_list_s3_backups_requires_admin() -> None:
+    """GET /v1/admin/backups/s3 → 403 si pas admin."""
+    conn = _make_conn()
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.get("/v1/admin/backups/s3", headers=_user_header())
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_s3_backups_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /v1/admin/backups/s3 → 200 avec liste."""
+    import datetime as dt
+    from app.services import backup_s3 as s3_svc
+    from app.services.backup_s3 import S3BackupItem
+
+    async def _ok() -> list[S3BackupItem]:
+        return [
+            S3BackupItem(
+                key="harpocrate-backups/file.tar.age",
+                size_bytes=100,
+                last_modified=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                etag="abc123",
+            )
+        ]
+
+    monkeypatch.setattr(s3_svc, "list_s3_backups", _ok)
+
+    conn = _make_conn()
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.get("/v1/admin/backups/s3", headers=_admin_header())
+    assert r.status_code == 200
+    backups = r.json()["backups"]
+    assert len(backups) == 1
+    assert backups[0]["key"] == "harpocrate-backups/file.tar.age"
+
+
+@pytest.mark.asyncio
+async def test_pull_s3_requires_admin() -> None:
+    """POST /v1/admin/backups/s3/pull → 403 si pas admin."""
+    conn = _make_conn()
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            "/v1/admin/backups/s3/pull",
+            json={"s3_key": "harpocrate-backups/file.tar.age"},
+            headers=_user_header(),
+        )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_pull_s3_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /v1/admin/backups/s3/pull → 201 avec record."""
+    from app.services import backup_s3 as s3_svc
+    from app.db.repositories.backups import BackupRecord
+
+    fake = _fake_backup_row()
+    fake_record = BackupRecord(
+        id=fake["id"],
+        filename=fake["filename"],
+        size_bytes=fake["size_bytes"],
+        checksum_sha256=fake["checksum_sha256"],
+        age_recipient=fake["age_recipient"],
+        manifest=json.loads(fake["manifest"]),
+        description=fake["description"],
+        created_at=fake["created_at"],
+        created_by_user_id=fake["created_by_user_id"],
+        imported=True,
+    )
+
+    async def _ok(s3_key: str, conn: Any) -> BackupRecord:
+        return fake_record
+
+    monkeypatch.setattr(s3_svc, "pull_backup_from_s3", _ok)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=_fake_backup_row())
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            "/v1/admin/backups/s3/pull",
+            json={"s3_key": "harpocrate-backups/file.tar.age"},
+            headers=_admin_header(),
+        )
+    assert r.status_code == 201
+    assert r.json()["imported"] is True

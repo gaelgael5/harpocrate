@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     admin_role_name: str = Field(default="harpocrate-admin")
     backup_upload_max_bytes: int = Field(default=1 * 1024 * 1024 * 1024)
 
+    # ─── S3 remote backup (LOT_13) ────────────────────────────────────────────
+    s3_endpoint: str = Field(default="")
+    s3_bucket: str = Field(default="")
+    s3_access_key_id: str = Field(default="", json_schema_extra={"is_secret": True})
+    s3_secret_access_key: str = Field(default="", json_schema_extra={"is_secret": True})
+    s3_region: str = Field(default="us-east-1")
+    s3_key_prefix: str = Field(default="harpocrate-backups/")
+
+    @property
+    def s3_configured(self) -> bool:
+        return bool(self.s3_bucket and self.s3_access_key_id and self.s3_secret_access_key)
+
     def get_sensitive_fields(self) -> list[str]:
         """Retourne les noms des champs Settings marqués is_secret=True."""
         result = []

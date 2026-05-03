@@ -430,6 +430,16 @@ async def test_placeholder_create_happy_path() -> None:
 async def test_placeholder_create_invalid_descriptor_422() -> None:
     """POST /secrets/placeholder avec descripteur invalide → 422."""
     conn = _make_conn()
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        return _fake_wallet_row(permissions=_PERM_ALL)
+
+    conn.fetchrow = fetchrow_side
 
     async with _make_client(_make_pool(conn)) as client:
         r = await client.post(
@@ -471,7 +481,7 @@ async def test_placeholder_requires_add_permission() -> None:
         )
 
     assert r.status_code == 403
-    assert r.json()["detail"]["error"] == "missing_add_permission"
+    assert r.json()["detail"]["error"] == "insufficient_permissions"
 
 
 @pytest.mark.asyncio
@@ -536,7 +546,7 @@ async def test_populate_requires_init_permission() -> None:
         )
 
     assert r.status_code == 403
-    assert r.json()["detail"]["error"] == "missing_init_permission"
+    assert r.json()["detail"]["error"] == "insufficient_permissions"
 
 
 @pytest.mark.asyncio

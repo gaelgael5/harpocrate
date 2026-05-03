@@ -266,6 +266,27 @@ async def require_api_key(
 # ─── Mixed dependency (JWT ou API key) ────────────────────────────────────────
 
 
+@dataclass(frozen=True)
+class AuthContext:
+    """Résultat de l'authentification mixte JWT/API key (retourné par require_any_auth_with_permission)."""
+
+    user_db_id: UUID | None
+    api_key: ApiKeyCaller | None
+    my_permissions: int
+
+    @property
+    def is_api_key(self) -> bool:
+        return self.api_key is not None
+
+    @property
+    def caller_user_id(self) -> UUID:
+        """User DB ID : depuis le JWT ou depuis l'owner de l'API key."""
+        if self.user_db_id is not None:
+            return self.user_db_id
+        assert self.api_key is not None
+        return self.api_key.owner_user_id
+
+
 def require_any_auth_with_permission(required_permission: int):  # type: ignore[no-untyped-def]
     """Retourne une dependency FastAPI acceptant JWT ou API key.
 
@@ -279,19 +300,6 @@ def require_any_auth_with_permission(required_permission: int):  # type: ignore[
     from app.db.repositories import users as users_repo
     from app.db.repositories import wallets as wallets_repo
     from app.services.permissions import has
-
-    @dataclass(frozen=True)
-    class AuthContext:
-        """Résultat de l'authentification mixte JWT/API key."""
-
-        user: CurrentUser | None
-        user_db_id: UUID | None
-        api_key: ApiKeyCaller | None
-        my_permissions: int
-
-        @property
-        def is_api_key(self) -> bool:
-            return self.api_key is not None
 
     async def _check(
         wallet_id: UUID,
@@ -323,7 +331,6 @@ def require_any_auth_with_permission(required_permission: int):  # type: ignore[
                     detail={"error": "not_found", "message": "Wallet not found"},
                 )
             return AuthContext(
-                user=None,
                 user_db_id=None,
                 api_key=api_key_caller,
                 my_permissions=api_key_caller.permissions,
@@ -365,7 +372,98 @@ def require_any_auth_with_permission(required_permission: int):  # type: ignore[
                 )
 
             return AuthContext(
-                user=user,
+                user_db_id=user_row.id,
+                api_key=None,
+                my_permissions=wallet.my_permissions,
+            )
+
+    return _check
+
+
+def require_any_auth_with_any_of_permissions(required_any: int):  # type: ignore[no-untyped-def]
+    """Comme require_any_auth_with_permission mais accepte si l'utilisateur a AU MOINS UN des bits.
+
+    Usage :
+        DescriptorAuth = Annotated[AuthContext, Depends(
+            require_any_auth_with_any_of_permissions(PERM_READ | PERM_INIT)
+        )]
+    """
+    from app.core.security import CurrentUser, _validate_jwt
+    from app.db.repositories import users as users_repo
+    from app.db.repositories import wallets as wallets_repo
+
+    async def _check(
+        wallet_id: UUID,
+        authorization: Annotated[str | None, Header()] = None,
+        pool: asyncpg.Pool = Depends(get_pool),
+    ) -> AuthContext:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "error": "missing_bearer_token",
+                    "message": "Authorization header required",
+                },
+            )
+
+        token = authorization[7:]
+
+        if token.startswith("hrpv_"):
+            api_key_caller = await validate_api_key_token(token, pool=pool)
+            if api_key_caller.wallet_id != wallet_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"error": "not_found", "message": "Wallet not found"},
+                )
+            if not (api_key_caller.permissions & required_any):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "insufficient_permissions",
+                        "message": f"API key needs at least one of permission bits: {required_any:#04x}",
+                    },
+                )
+            return AuthContext(
+                user_db_id=None,
+                api_key=api_key_caller,
+                my_permissions=api_key_caller.permissions,
+            )
+        else:
+            payload = await _validate_jwt(token)
+            user = CurrentUser(
+                keycloak_sub=payload["sub"],
+                email=payload.get("email", ""),
+                display_name=payload.get("name"),
+            )
+
+            async with pool.acquire() as conn:
+                user_row = await users_repo.get_by_keycloak_sub(conn, user.keycloak_sub)
+                if user_row is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail={"error": "first_login", "message": "User must bootstrap first"},
+                    )
+
+                wallet = await wallets_repo.get_wallet_for_user(
+                    conn, wallet_id=wallet_id, user_id=user_row.id
+                )
+
+            if wallet is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"error": "wallet_not_found", "message": "Wallet not found"},
+                )
+
+            if not (wallet.my_permissions & required_any):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "insufficient_permissions",
+                        "message": f"Missing required permission bits (any of): {required_any:#04x}",
+                    },
+                )
+
+            return AuthContext(
                 user_db_id=user_row.id,
                 api_key=None,
                 my_permissions=wallet.my_permissions,

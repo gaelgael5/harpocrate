@@ -9,7 +9,6 @@ import asyncpg
 from fastapi import HTTPException, status
 
 from app.db.repositories import secrets as secrets_repo
-from app.db.repositories import wallets as wallets_repo
 from app.models.api.generators import GenerationDescriptor
 from app.models.api.secrets import (
     DescriptorResponse,
@@ -28,55 +27,10 @@ from app.models.api.secrets import (
 )
 from app.models.db.secret import SecretRow
 from app.services.audit import audit_log_insert
-from app.services.permissions import (
-    PERM_ADD,
-    PERM_INIT,
-    PERM_READ,
-    PERM_REMOVE,
-    PERM_WRITE,
-    has,
-)
 
 # ─── Helpers privés ───────────────────────────────────────────────────────────
 
 _DEFAULT_LIMIT = 50
-
-
-def _assert_permission(my_permissions: int, required: int, error_code: str) -> None:
-    """Lève 403 si la permission requise n'est pas présente."""
-    if not has(my_permissions, required):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": error_code,
-                "message": f"Missing required permission bit: {required:#04x}",
-            },
-        )
-
-
-async def _load_wallet_and_check(
-    conn: asyncpg.Connection[asyncpg.Record],
-    *,
-    wallet_id: UUID,
-    caller_user_id: UUID,
-    required_perm: int,
-    perm_error_code: str,
-) -> int:
-    """Charge le wallet + vérifie que le caller a le grant requis.
-
-    Retourne my_permissions.
-    Lève 404 si wallet absent/inaccessible, 403 si permission manquante.
-    """
-    wallet = await wallets_repo.get_wallet_for_user(
-        conn, wallet_id=wallet_id, user_id=caller_user_id
-    )
-    if wallet is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "wallet_not_found", "message": "Wallet not found"},
-        )
-    _assert_permission(wallet.my_permissions, required_perm, perm_error_code)
-    return wallet.my_permissions
 
 
 def _secret_list_item(row: SecretRow) -> SecretListItem:
@@ -120,16 +74,7 @@ async def list_secrets(
     tag_filter: str | None,
     name_contains: str | None,
 ) -> SecretListResponse:
-    """Liste les secrets du wallet (sans valeur). Requiert d'avoir un grant (any perm)."""
-    wallet = await wallets_repo.get_wallet_for_user(
-        conn, wallet_id=wallet_id, user_id=caller_user_id
-    )
-    if wallet is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "wallet_not_found", "message": "Wallet not found"},
-        )
-
+    """Liste les secrets du wallet (sans valeur). Accès vérifié par la couche auth."""
     cursor_updated_at = None
     cursor_id = None
     if cursor:
@@ -174,14 +119,6 @@ async def get_secret(
     actor_ip: str | None,
 ) -> SecretDetailResponse:
     """Retourne le secret avec encrypted_value + encrypted_wallet_key du caller."""
-    await _load_wallet_and_check(
-        conn,
-        wallet_id=wallet_id,
-        caller_user_id=caller_user_id,
-        required_perm=PERM_READ,
-        perm_error_code="missing_read_permission",
-    )
-
     secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
     if secret is None:
         raise HTTPException(
@@ -249,15 +186,7 @@ async def create_secret(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> SecretCreateResponse:
-    """Crée un secret. Requiert [add]."""
-    await _load_wallet_and_check(
-        conn,
-        wallet_id=wallet_id,
-        caller_user_id=caller_user_id,
-        required_perm=PERM_ADD,
-        perm_error_code="missing_add_permission",
-    )
-
+    """Crée un secret. Accès vérifié par la couche auth."""
     try:
         enc_value = base64.b64decode(req.encrypted_value)
     except Exception as exc:  # pragma: no cover — validé par Pydantic
@@ -310,15 +239,7 @@ async def put_secret(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> SecretPutResponse:
-    """Remplace encrypted_value, incrémente generation_version. Requiert [write]."""
-    await _load_wallet_and_check(
-        conn,
-        wallet_id=wallet_id,
-        caller_user_id=caller_user_id,
-        required_perm=PERM_WRITE,
-        perm_error_code="missing_write_permission",
-    )
-
+    """Remplace encrypted_value, incrémente generation_version. Accès vérifié par la couche auth."""
     secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
     if secret is None:
         raise HTTPException(
@@ -379,15 +300,7 @@ async def patch_secret(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> None:
-    """Met à jour description/tags sans toucher à la valeur. Requiert [write]."""
-    await _load_wallet_and_check(
-        conn,
-        wallet_id=wallet_id,
-        caller_user_id=caller_user_id,
-        required_perm=PERM_WRITE,
-        perm_error_code="missing_write_permission",
-    )
-
+    """Met à jour description/tags sans toucher à la valeur. Accès vérifié par la couche auth."""
     secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
     if secret is None:
         raise HTTPException(
@@ -425,15 +338,7 @@ async def delete_secret(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> None:
-    """Supprime le secret. Requiert [remove]."""
-    await _load_wallet_and_check(
-        conn,
-        wallet_id=wallet_id,
-        caller_user_id=caller_user_id,
-        required_perm=PERM_REMOVE,
-        perm_error_code="missing_remove_permission",
-    )
-
+    """Supprime le secret. Accès vérifié par la couche auth."""
     secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
     if secret is None:
         raise HTTPException(
@@ -465,15 +370,7 @@ async def create_placeholder(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> SecretCreateResponse:
-    """Crée un secret placeholder avec descripteur de génération. Requiert [add]."""
-    await _load_wallet_and_check(
-        conn,
-        wallet_id=wallet_id,
-        caller_user_id=caller_user_id,
-        required_perm=PERM_ADD,
-        perm_error_code="missing_add_permission",
-    )
-
+    """Crée un secret placeholder avec descripteur de génération. Accès vérifié par la couche auth."""
     # Validation linked_secret_id : doit appartenir au même wallet
     if req.linked_secret_id is not None:
         linked_wallet_id: UUID | None = await conn.fetchval(
@@ -547,15 +444,7 @@ async def populate_secret(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> PopulateResponse:
-    """Peuple un placeholder avec sa valeur chiffrée. Requiert [init]."""
-    await _load_wallet_and_check(
-        conn,
-        wallet_id=wallet_id,
-        caller_user_id=caller_user_id,
-        required_perm=PERM_INIT,
-        perm_error_code="missing_init_permission",
-    )
-
+    """Peuple un placeholder avec sa valeur chiffrée. Accès vérifié par la couche auth."""
     secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
     if secret is None:
         raise HTTPException(
@@ -616,29 +505,7 @@ async def get_descriptor(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> DescriptorResponse:
-    """Retourne le descripteur de génération. Requiert [read] ou [init].
-
-    Retourne 404 si le secret n'est pas (ou plus) un placeholder.
-    """
-    # Accepte [read] OU [init] : on vérifie qu'au moins l'un des deux est présent
-    wallet = await wallets_repo.get_wallet_for_user(
-        conn, wallet_id=wallet_id, user_id=caller_user_id
-    )
-    if wallet is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "wallet_not_found", "message": "Wallet not found"},
-        )
-
-    if not (has(wallet.my_permissions, PERM_READ) or has(wallet.my_permissions, PERM_INIT)):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "missing_read_or_init_permission",
-                "message": "Missing required permission: [read] or [init]",
-            },
-        )
-
+    """Retourne le descripteur de génération. Accès vérifié par la couche auth ([read] ou [init])."""
     secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
     if secret is None:
         raise HTTPException(

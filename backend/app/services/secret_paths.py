@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 
+_ROOT_NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
 _SEGMENT_RE = re.compile(r"^[a-zA-Z0-9@._-]+$")
 _MAX_DEPTH = 10
 
@@ -10,12 +11,16 @@ _MAX_DEPTH = 10
 def validate_secret_name(name: str) -> str:
     """Valide et normalise un nom de secret (peut contenir des '/').
 
-    - Sans '/' → retourné tel quel (secret racine)
+    - Sans '/' → doit matcher [A-Za-z0-9_.-] (env-var safe)
     - Avec '/' → '/' initial ajouté si absent, pas de '/' final
 
     Lève ValueError si invalide.
     """
     if "/" not in name:
+        if not _ROOT_NAME_RE.match(name):
+            raise ValueError(
+                f"Invalid secret name '{name}': only [A-Za-z0-9_.-] allowed for root secrets"
+            )
         return name
 
     normalized = name if name.startswith("/") else "/" + name

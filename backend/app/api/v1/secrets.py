@@ -3,18 +3,20 @@
 NOTE SÉCURITÉ — Body jamais loggé :
   Le middleware log_requests dans app/main.py détecte les chemins /secrets et
   positionne body_logged=False. Aucun handler ne lit ni ne logue request.body().
+
+Auth mixte (JWT ou API key hrpv_*) sur tous les endpoints selon permission requise.
 """
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 
-from app.core.security import JwtUser
+from app.core.api_key_auth import AuthContext, require_any_auth_with_any_of_permissions, require_any_auth_with_permission
 from app.db.pool import get_pool
 from app.db.repositories import secrets as secrets_repo
-from app.db.repositories import users as users_repo
 from app.models.api.secrets import (
     PlaceholderCreateRequest,
     PopulateRequest,
@@ -24,12 +26,22 @@ from app.models.api.secrets import (
 )
 from app.models.db.secret import SecretRow
 from app.services import secrets as secrets_svc
+from app.services.permissions import PERM_ADD, PERM_INIT, PERM_READ, PERM_REMOVE, PERM_WRITE
 from app.services.secret_paths import normalize_path
 
 router = APIRouter(
     prefix="/wallets/{wallet_id}/secrets",
     tags=["secrets"],
 )
+
+# ─── Auth shorthands ──────────────────────────────────────────────────────────
+
+ReadAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_READ))]
+AddAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_ADD))]
+WriteAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_WRITE))]
+InitAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_INIT))]
+RemoveAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_REMOVE))]
+DescriptorAuth = Annotated[AuthContext, Depends(require_any_auth_with_any_of_permissions(PERM_READ | PERM_INIT))]
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -62,7 +74,7 @@ def _client_ip(request: Request) -> str | None:
 @router.get("")
 async def list_secrets(
     wallet_id: UUID,
-    current_user: JwtUser,
+    auth: ReadAuth,
     request: Request,
     path: str | None = Query(default=None, description="Filtrer par répertoire"),
     tag: str | None = Query(default=None),
@@ -70,19 +82,9 @@ async def list_secrets(
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
 ) -> JSONResponse:
-    """Liste les secrets du wallet (sans encrypted_value). Requiert un grant.
-
-    Avec ?path=, retourne uniquement les secrets directs du répertoire donné.
-    """
+    """Liste les secrets du wallet (sans encrypted_value). Requiert [read]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         if path is not None:
             cursor_updated_at, cursor_id = None, None
             if cursor:
@@ -116,17 +118,14 @@ async def list_secrets(
         result = await secrets_svc.list_secrets(
             conn,
             wallet_id=wallet_id,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             limit=limit,
             cursor=cursor,
             tag_filter=tag,
             name_contains=name_contains,
         )
 
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=result.model_dump(mode="json"),
-    )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
 # ─── GET /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────────
@@ -136,31 +135,21 @@ async def list_secrets(
 async def get_secret(
     wallet_id: UUID,
     name: str,
-    current_user: JwtUser,
+    auth: ReadAuth,
     request: Request,
 ) -> JSONResponse:
     """Retourne le secret (encrypted_value + encrypted_wallet_key du caller). Requiert [read]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         result = await secrets_svc.get_secret(
             conn,
             wallet_id=wallet_id,
             name=name,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=result.model_dump(mode="json"),
-    )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
 # ─── POST /v1/wallets/{wallet_id}/secrets ─────────────────────────────────────
@@ -170,31 +159,21 @@ async def get_secret(
 async def create_secret(
     wallet_id: UUID,
     req: SecretCreateRequest,
-    current_user: JwtUser,
+    auth: AddAuth,
     request: Request,
 ) -> JSONResponse:
     """Crée un secret. Body JAMAIS loggé (voir middleware log_requests). Requiert [add]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         result = await secrets_svc.create_secret(
             conn,
             wallet_id=wallet_id,
             req=req,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED,
-        content=result.model_dump(mode="json"),
-    )
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=result.model_dump(mode="json"))
 
 
 # ─── PUT /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────────
@@ -205,35 +184,22 @@ async def put_secret(
     wallet_id: UUID,
     name: str,
     req: SecretPutRequest,
-    current_user: JwtUser,
+    auth: WriteAuth,
     request: Request,
 ) -> JSONResponse:
-    """Remplace encrypted_value, incrémente generation_version.
-
-    Body JAMAIS loggé (voir middleware log_requests). Requiert [write].
-    """
+    """Remplace encrypted_value, incrémente generation_version. Requiert [write]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         result = await secrets_svc.put_secret(
             conn,
             wallet_id=wallet_id,
             name=name,
             req=req,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=result.model_dump(mode="json"),
-    )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
 # ─── PATCH /v1/wallets/{wallet_id}/secrets/{name} ────────────────────────────
@@ -244,25 +210,18 @@ async def patch_secret(
     wallet_id: UUID,
     name: str,
     req: SecretPatchRequest,
-    current_user: JwtUser,
+    auth: WriteAuth,
     request: Request,
 ) -> JSONResponse:
     """Met à jour description/tags uniquement (pas la valeur). Requiert [write]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         await secrets_svc.patch_secret(
             conn,
             wallet_id=wallet_id,
             name=name,
             req=req,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
 
@@ -279,31 +238,21 @@ async def patch_secret(
 async def create_placeholder(
     wallet_id: UUID,
     req: PlaceholderCreateRequest,
-    current_user: JwtUser,
+    auth: AddAuth,
     request: Request,
 ) -> JSONResponse:
     """Crée un secret placeholder avec descripteur de génération. Requiert [add]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         result = await secrets_svc.create_placeholder(
             conn,
             wallet_id=wallet_id,
             req=req,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED,
-        content=result.model_dump(mode="json"),
-    )
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=result.model_dump(mode="json"))
 
 
 # ─── POST /v1/wallets/{wallet_id}/secrets/{name}/populate ────────────────────
@@ -314,32 +263,22 @@ async def populate_secret(
     wallet_id: UUID,
     name: str,
     req: PopulateRequest,
-    current_user: JwtUser,
+    auth: InitAuth,
     request: Request,
 ) -> JSONResponse:
     """Peuple un placeholder avec sa valeur chiffrée. Requiert [init]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         result = await secrets_svc.populate_secret(
             conn,
             wallet_id=wallet_id,
             name=name,
             req=req,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=result.model_dump(mode="json"),
-    )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
 # ─── GET /v1/wallets/{wallet_id}/secrets/{name}/descriptor ───────────────────
@@ -349,31 +288,21 @@ async def populate_secret(
 async def get_descriptor(
     wallet_id: UUID,
     name: str,
-    current_user: JwtUser,
+    auth: DescriptorAuth,
     request: Request,
 ) -> JSONResponse:
-    """Retourne le descripteur de génération du placeholder. Requiert [read] ou [init]."""
+    """Retourne le descripteur de génération du placeholder. Requiert [read]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         result = await secrets_svc.get_descriptor(
             conn,
             wallet_id=wallet_id,
             name=name,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=result.model_dump(mode="json"),
-    )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
 # ─── DELETE /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────
@@ -383,25 +312,16 @@ async def get_descriptor(
 async def delete_secret(
     wallet_id: UUID,
     name: str,
-    current_user: JwtUser,
+    auth: RemoveAuth,
     request: Request,
-) -> JSONResponse:
+) -> None:
     """Supprime le secret (cascade sur secret_tags). Requiert [remove]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
-        if user is None:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "first_login", "message": "User must bootstrap first"},
-            )
-
         await secrets_svc.delete_secret(
             conn,
             wallet_id=wallet_id,
             name=name,
-            caller_user_id=user.id,
+            caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
-
-    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)

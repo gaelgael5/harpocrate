@@ -20,6 +20,7 @@ eggs/
 lib/
 lib64/
 !cli-bash/lib/
+!frontend/src/lib/
 parts/
 sdist/
 var/

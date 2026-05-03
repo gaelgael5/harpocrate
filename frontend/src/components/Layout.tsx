@@ -20,6 +20,7 @@ import { useSessionStore } from '@/stores/session'
 import { logout } from '@/lib/oidc'
 import { AppsMenu } from '@/components/AppsMenu'
 import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
+import { useAdminRole } from '@/hooks/useAdminRole'
 
 export function Layout() {
   const { t } = useTranslation()
@@ -39,6 +40,8 @@ export function Layout() {
     await logout()
     navigate('/login')
   }
+
+  const isAdmin = useAdminRole()
 
   // Quand le bandeau dev est actif, on decale le header AppShell + on retire la
   // hauteur du bandeau de la viewport disponible. Le bandeau lui-meme est rendu
@@ -121,6 +124,13 @@ export function Layout() {
           rel="noopener noreferrer"
           label={t('nav.api_docs')}
         />
+        {isAdmin && (
+          <NavLink
+            component={RouterNavLink}
+            to="/admin/backups"
+            label={t('nav.admin')}
+          />
+        )}
       </AppShell.Navbar>
 
       <AppShell.Main>

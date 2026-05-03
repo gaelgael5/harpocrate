@@ -35,6 +35,8 @@ import { WalletImportPage } from '@/pages/WalletImportPage'
 import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { IntegrationPage } from '@/pages/IntegrationPage'
+import { AdminBackupsPage } from '@/pages/AdminBackupsPage'
+import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 
 /** Wrapper qui pousse tout le contenu sous le bandeau dev (s'il est actif). */
 function ContentWithBannerOffset({ children }: { children: ReactNode }) {
@@ -77,6 +79,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <DevModeBanner />
+      <MaintenanceBanner />
       <ContentWithBannerOffset>
       <InsecureContextGuard>
       <InactivityGuard
@@ -125,6 +128,7 @@ export default function App() {
             <Route path="/audit" element={<AuditLogPage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/integration" element={<IntegrationPage />} />
+            <Route path="/admin/backups" element={<AdminBackupsPage />} />
           </Route>
 
           {/* Fallback */}

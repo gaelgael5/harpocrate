@@ -1,6 +1,7 @@
-"""Endpoints /v1/admin/system/* — LOT_12C.
+"""Endpoints /v1/admin/system/* — LOT_12C/12E.
 
 GET /v1/admin/system/info     — stats système (users, wallets, secrets, backups)
+GET /v1/admin/system/env      — config env (sensibles redactés)
 GET /v1/admin/users           — liste tous les utilisateurs
 GET /v1/admin/audit-log       — journal d'audit global (sans filtrage par user)
 """
@@ -13,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from app.core.admin_auth import AdminJwt
+from app.core.config import settings
 from app.db.pool import get_pool
 from app.db.repositories import audit_log as audit_log_repo
 
@@ -48,6 +50,31 @@ async def get_system_info(admin: AdminJwt) -> JSONResponse:
             "active_api_keys_count": api_keys_count,
             "backups_count": backups_count,
             "audit_events_count": audit_events_count,
+        }
+    )
+
+
+# ─── GET /v1/admin/system/env ────────────────────────────────────────────────
+
+
+@router.get("/system/env")
+async def get_env_config(admin: AdminJwt) -> JSONResponse:
+    """Retourne la configuration env (champs sensibles redactés). Requiert rôle admin."""
+    non_sensitive = settings.get_non_sensitive_fields()
+    sensitive_names = [
+        f"HARPOCRATE_{name.upper()}" for name in settings.get_sensitive_fields()
+    ]
+
+    env_vars: dict[str, str] = {}
+    for key, value in non_sensitive.items():
+        env_vars[key] = str(value)
+    for key in sensitive_names:
+        env_vars[key] = "[REDACTED]"
+
+    return JSONResponse(
+        {
+            "env": dict(sorted(env_vars.items())),
+            "sensitive_keys": sorted(sensitive_names),
         }
     )
 

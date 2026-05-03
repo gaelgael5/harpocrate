@@ -303,6 +303,7 @@
     "nav_backups": "Backups",
     "nav_users": "Users",
     "nav_system": "System",
+    "nav_env": "Configuration",
     "system": {
       "title": "System information",
       "users": "Users",
@@ -312,6 +313,14 @@
       "apiKeys": "Active API keys",
       "backups": "Backups",
       "auditEvents": "Audit events"
+    },
+    "env": {
+      "title": "Server configuration",
+      "subtitle": "Active environment variables (sensitive fields hidden)",
+      "variable": "Variable",
+      "value": "Value",
+      "redacted": "[HIDDEN]",
+      "sensitiveNote": "The following variables are hidden: {{keys}}"
     },
     "users": {
       "title": "Users",

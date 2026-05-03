@@ -30,6 +30,13 @@ export const BackupListResponseSchema = z.object({
 
 export type BackupListResponse = z.infer<typeof BackupListResponseSchema>
 
+export const EnvConfigSchema = z.object({
+  env: z.record(z.string()),
+  sensitive_keys: z.array(z.string()),
+})
+
+export type EnvConfig = z.infer<typeof EnvConfigSchema>
+
 export const SystemInfoSchema = z.object({
   users_count: z.number(),
   bootstrapped_users_count: z.number(),

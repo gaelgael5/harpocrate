@@ -146,6 +146,11 @@ export function Layout() {
               to="/admin/system"
               label={t('admin.nav_system')}
             />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/env"
+              label={t('admin.nav_env')}
+            />
           </NavLink>
         )}
       </AppShell.Navbar>

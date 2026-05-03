@@ -137,6 +137,32 @@ async def test_admin_audit_log_requires_admin() -> None:
 
 
 @pytest.mark.asyncio
+async def test_env_config_requires_admin() -> None:
+    """GET /v1/admin/system/env → 403 si pas admin."""
+    conn = _make_conn()
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.get("/v1/admin/system/env", headers=_user_header())
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_env_config_returns_redacted() -> None:
+    """GET /v1/admin/system/env → sensitive fields redactés."""
+    conn = _make_conn()
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.get("/v1/admin/system/env", headers=_admin_header())
+    assert r.status_code == 200
+    body = r.json()
+    assert "env" in body
+    assert "sensitive_keys" in body
+    # Les champs sensibles sont redactés
+    for key in body["sensitive_keys"]:
+        assert body["env"][key] == "[REDACTED]"
+    # Un champ non-sensible est présent
+    assert "HARPOCRATE_PUBLIC_URL" in body["env"]
+
+
+@pytest.mark.asyncio
 async def test_admin_audit_log_empty() -> None:
     """GET /v1/admin/audit-log → 200 liste vide."""
     conn = _make_conn()

@@ -303,6 +303,7 @@
     "nav_backups": "Sauvegardes",
     "nav_users": "Utilisateurs",
     "nav_system": "Système",
+    "nav_env": "Configuration",
     "system": {
       "title": "Informations système",
       "users": "Utilisateurs",
@@ -312,6 +313,14 @@
       "apiKeys": "Clés API actives",
       "backups": "Sauvegardes",
       "auditEvents": "Événements d'audit"
+    },
+    "env": {
+      "title": "Configuration serveur",
+      "subtitle": "Variables d'environnement actives (champs sensibles masqués)",
+      "variable": "Variable",
+      "value": "Valeur",
+      "redacted": "[MASQUÉ]",
+      "sensitiveNote": "Les variables suivantes sont masquées : {{keys}}"
     },
     "users": {
       "title": "Utilisateurs",

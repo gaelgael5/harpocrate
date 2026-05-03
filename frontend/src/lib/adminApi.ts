@@ -6,12 +6,14 @@ import {
   RestoreResultSchema,
   SystemInfoSchema,
   AdminUsersResponseSchema,
+  EnvConfigSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
   type RestoreResult,
   type SystemInfo,
   type AdminUsersResponse,
+  type EnvConfig,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -78,4 +80,9 @@ export async function fetchAdminUsers(params?: {
   if (params?.offset) q.set('offset', String(params.offset))
   const raw = await api.get<unknown>(`/admin/users?${q.toString()}`)
   return AdminUsersResponseSchema.parse(raw)
+}
+
+export async function fetchEnvConfig(): Promise<EnvConfig> {
+  const raw = await api.get<unknown>('/admin/system/env')
+  return EnvConfigSchema.parse(raw)
 }

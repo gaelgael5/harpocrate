@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     def get_sensitive_fields(self) -> list[str]:
         """Retourne les noms des champs Settings marqués is_secret=True."""
         result = []
-        for name, field in self.model_fields.items():
+        for name, field in Settings.model_fields.items():
             extra = field.json_schema_extra or {}
             if isinstance(extra, dict) and extra.get("is_secret", False):
                 result.append(name)
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
         """Retourne les champs non-sensibles sous forme {HARPOCRATE_NAME: value}."""
         result: dict[str, object] = {}
         sensitive = set(self.get_sensitive_fields())
-        for name in self.model_fields:
+        for name in Settings.model_fields:
             if name not in sensitive:
                 value = getattr(self, name)
                 result[f"HARPOCRATE_{name.upper()}"] = value

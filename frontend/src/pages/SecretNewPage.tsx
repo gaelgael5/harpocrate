@@ -11,11 +11,14 @@ import {
   Button,
   Alert,
   Group,
+  Select,
+  Text,
+  Divider,
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, useQuery } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api-client'
 import { aesGcmEncrypt } from '@/crypto/aes-gcm'
@@ -24,6 +27,8 @@ import { fromBase64, toBase64, textToBytes } from '@/crypto/helpers'
 import { useCryptoStore } from '@/stores/crypto'
 import { SecretCreateResponseSchema } from '@/schemas/secrets'
 import { MyGrantResponseSchema } from '@/schemas/grants'
+import { TypedSecretForm } from '@/components/TypedSecretForm'
+import { fetchSecretTypes, fetchSecretType } from '@/lib/adminApi'
 
 interface FormValues {
   name: string
@@ -45,6 +50,20 @@ export function SecretNewPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [selectedTypeUuid, setSelectedTypeUuid] = useState<string | null>(null)
+  const [selectedVersionUuid, setSelectedVersionUuid] = useState<string | null>(null)
+  const [typedFormData, setTypedFormData] = useState<object>({})
+
+  const { data: typesData } = useQuery({
+    queryKey: ['secret-types-public'],
+    queryFn: () => fetchSecretTypes(),
+  })
+
+  const { data: selectedTypeDetail } = useQuery({
+    queryKey: ['secret-type-public', selectedTypeUuid],
+    queryFn: () => fetchSecretType(selectedTypeUuid!),
+    enabled: !!selectedTypeUuid,
+  })
 
   const form = useForm<FormValues>({
     initialValues: { name: '', description: '', tags: '', value: '' },
@@ -56,7 +75,8 @@ export function SecretNewPage() {
         if (!NAME_RE.test(stripped)) return t('secrets.nameHint')
         return null
       },
-      value: (v) => (!v.trim() ? t('common.required') : null),
+      value: (v) =>
+        !selectedTypeUuid && !v.trim() ? t('common.required') : null,
     },
   })
 
@@ -86,8 +106,12 @@ export function SecretNewPage() {
     try {
       const walletKey = await getWalletKey()
 
-      // Encrypt the value
-      const plainBytes = textToBytes(values.value)
+      // Encrypt the value — typed form uses JSON, plain textarea uses raw text
+      const rawValue =
+        selectedTypeUuid && selectedVersionUuid
+          ? JSON.stringify(typedFormData)
+          : values.value
+      const plainBytes = textToBytes(rawValue)
       const encValue = await aesGcmEncrypt(plainBytes, walletKey)
 
       const tags = values.tags
@@ -95,11 +119,16 @@ export function SecretNewPage() {
         .map((t) => t.trim().toLowerCase())
         .filter((t) => t.length > 0)
 
-      const body = {
+      const body: Record<string, unknown> = {
         name: values.name.trim(),
         description: values.description.trim() || null,
         tags,
         encrypted_value: toBase64(encValue),
+      }
+
+      if (selectedTypeUuid && selectedVersionUuid) {
+        body.type_uuid = selectedTypeUuid
+        body.schema_version_uuid = selectedVersionUuid
       }
 
       const resp = await api.post<unknown>(
@@ -126,6 +155,24 @@ export function SecretNewPage() {
       setIsSubmitting(false)
     }
   }
+
+  const typeOptions =
+    typesData?.types
+      .filter((tp) => !tp.deprecated_at)
+      .map((tp) => ({
+        value: tp.type_uuid,
+        label: tp.label ?? `${tp.type}/${tp.sous_type}`,
+      })) ?? []
+
+  const versionOptions =
+    selectedTypeDetail?.all_versions.map((v) => ({
+      value: v.version_uuid,
+      label: `v${v.version}${v.notes ? ` — ${v.notes}` : ''}`,
+    })) ?? []
+
+  const activeSchema = selectedTypeDetail?.all_versions.find(
+    (v) => v.version_uuid === selectedVersionUuid,
+  )
 
   return (
     <Stack maw={600}>
@@ -156,13 +203,54 @@ export function SecretNewPage() {
             description="Comma-separated"
             {...form.getInputProps('tags')}
           />
-          <Textarea
-            label={t('secrets.value')}
-            placeholder="Secret value..."
-            required
-            minRows={4}
-            {...form.getInputProps('value')}
+
+          <Divider label={t('secrets.typeSection')} labelPosition="left" />
+          <Text size="sm" c="dimmed">
+            {t('secrets.typeOptional')}
+          </Text>
+          <Select
+            label={t('secrets.type')}
+            placeholder={t('secrets.typeSelectPlaceholder')}
+            data={typeOptions}
+            value={selectedTypeUuid}
+            clearable
+            onChange={(v) => {
+              setSelectedTypeUuid(v)
+              setSelectedVersionUuid(null)
+              setTypedFormData({})
+            }}
           />
+          {selectedTypeUuid && (
+            <Select
+              label={t('secrets.schemaVersion')}
+              data={versionOptions}
+              value={selectedVersionUuid}
+              onChange={(v) => {
+                setSelectedVersionUuid(v)
+                setTypedFormData({})
+              }}
+            />
+          )}
+
+          <Divider />
+
+          {activeSchema ? (
+            <TypedSecretForm
+              schemaData={activeSchema.schema_data}
+              schemaUi={activeSchema.schema_ui}
+              initialValue={typedFormData}
+              onChange={setTypedFormData}
+            />
+          ) : (
+            <Textarea
+              label={t('secrets.value')}
+              placeholder="Secret value..."
+              required={!selectedTypeUuid}
+              minRows={4}
+              {...form.getInputProps('value')}
+            />
+          )}
+
           <Group justify="flex-end">
             <Button variant="subtle" onClick={() => navigate(-1)}>
               {t('common.cancel')}

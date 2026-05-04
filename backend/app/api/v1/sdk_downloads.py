@@ -1,7 +1,7 @@
 """Endpoints de telechargement des artefacts SDK + CLI.
 
-GET /v1/sdk/python-wheel    -> harpocrate-0.1.0-py3-none-any.whl
-GET /v1/sdk/python-sdist    -> harpocrate-sdk-0.1.0.tar.gz
+GET /v1/sdk/python-wheel    -> harpocrate-0.3.0-py3-none-any.whl
+GET /v1/sdk/python-sdist    -> harpocrate-sdk-0.3.0.tar.gz
 GET /v1/sdk/cli-bash        -> harpocrate-cli-0.1.0.tar.gz
 
 Les fichiers sont servis depuis /app/releases/ (bind-mount cote compose).
@@ -22,14 +22,14 @@ _RELEASES_DIR = Path("/app/releases")
 # Mapping endpoint key → (filename sur disque, media-type, suggested filename)
 _ARTIFACTS: dict[str, tuple[str, str, str]] = {
     "python-wheel": (
-        "harpocrate-0.1.0-py3-none-any.whl",
+        "harpocrate-0.3.0-py3-none-any.whl",
         "application/octet-stream",
-        "harpocrate-0.1.0-py3-none-any.whl",
+        "harpocrate-0.3.0-py3-none-any.whl",
     ),
     "python-sdist": (
-        "harpocrate-sdk-0.1.0.tar.gz",
+        "harpocrate-sdk-0.3.0.tar.gz",
         "application/gzip",
-        "harpocrate-sdk-0.1.0.tar.gz",
+        "harpocrate-sdk-0.3.0.tar.gz",
     ),
     "cli-bash": (
         "harpocrate-cli-0.1.0.tar.gz",

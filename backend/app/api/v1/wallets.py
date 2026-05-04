@@ -1,4 +1,4 @@
-"""Endpoints /v1/wallets/* — CRUD wallets, transfer ownership, export/import (LOT_03/07)."""
+"""Endpoints /v1/wallets/* — CRUD wallets, transfer ownership, export/import, tree."""
 from __future__ import annotations
 
 import re
@@ -9,7 +9,9 @@ from fastapi.responses import JSONResponse
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
+from app.db.repositories import secrets as secrets_repo
 from app.db.repositories import users as users_repo
+from app.db.repositories import wallets as wallets_repo
 from app.models.api.exports import WalletImportRequest
 from app.models.api.wallets import (
     TransferOwnershipRequest,
@@ -22,6 +24,8 @@ from app.models.api.wallets import (
 )
 from app.models.db.wallet import WalletWithGrant
 from app.services import wallets as wallets_svc
+from app.services.permissions import PERM_READ, has
+from app.services.secret_paths import normalize_path
 
 _UNSAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9_\-]")
 
@@ -254,6 +258,45 @@ async def transfer_ownership(
         status_code=status.HTTP_200_OK,
         content=_wallet_item(updated, user.id).model_dump(mode="json"),
     )
+
+
+# ─── GET /v1/wallets/{id}/tree ───────────────────────────────────────────────
+
+
+@router.get("/{wallet_id}/tree")
+async def get_wallet_tree(
+    wallet_id: UUID,
+    current_user: JwtUser,
+    path: str = Query(default="/", description="Répertoire à explorer"),
+) -> JSONResponse:
+    """Retourne les sous-répertoires directs d'un path + compte de secrets. Requiert [read]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        wallet = await wallets_repo.get_wallet_for_user(
+            conn, wallet_id=wallet_id, user_id=user.id
+        )
+        if wallet is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "wallet_not_found", "message": "Wallet not found"},
+            )
+        if not has(wallet.my_permissions, PERM_READ):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"error": "forbidden", "message": "Permission [read] required"},
+            )
+
+        normalized = normalize_path(path)
+        result = await secrets_repo.get_tree_data(conn, wallet_id=wallet_id, path=normalized)
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result)
 
 
 # ─── GET /v1/wallets/{id}/export ─────────────────────────────────────────────

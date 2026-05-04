@@ -26,20 +26,19 @@ class SecretCreateRequest(BaseModel):
     description: str | None = None
     tags: list[str] = []
     encrypted_value: str  # base64
+    type_uuid: UUID | None = None
+    schema_version_uuid: UUID | None = None
 
     @field_validator("name")
     @classmethod
     def _name_valid(cls, v: str) -> str:
+        from app.services.secret_paths import validate_secret_name
         stripped = v.strip()
         if not stripped:
             raise ValueError("name must not be empty")
         if len(stripped) > 256:
             raise ValueError("name must not exceed 256 characters")
-        if not _NAME_RE.match(stripped):
-            raise ValueError(
-                "name must match ^[A-Za-z0-9_.-]+ (env-var-safe characters only)"
-            )
-        return stripped
+        return validate_secret_name(stripped)
 
     @field_validator("description")
     @classmethod
@@ -157,6 +156,8 @@ class SecretDetailResponse(BaseModel):
     tags: list[str]
     is_placeholder: bool
     generation_version: int
+    type_uuid: UUID | None = None
+    schema_version_uuid: UUID | None = None
 
 
 class SecretCreateResponse(BaseModel):
@@ -186,16 +187,13 @@ class PlaceholderCreateRequest(BaseModel):
     @field_validator("name")
     @classmethod
     def _name_valid(cls, v: str) -> str:
+        from app.services.secret_paths import validate_secret_name
         stripped = v.strip()
         if not stripped:
             raise ValueError("name must not be empty")
         if len(stripped) > 256:
             raise ValueError("name must not exceed 256 characters")
-        if not _NAME_RE.match(stripped):
-            raise ValueError(
-                "name must match ^[A-Za-z0-9_.-]+ (env-var-safe characters only)"
-            )
-        return stripped
+        return validate_secret_name(stripped)
 
     @field_validator("description")
     @classmethod

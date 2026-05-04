@@ -1,4 +1,4 @@
-"""Client haut niveau VaultClient — LOT_09 SDK.
+"""Client haut niveau VaultClient — LOT_09/18 SDK.
 
 Interface principale du SDK :
     from harpocrate import VaultClient
@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import re
 from typing import Any
+from urllib.parse import quote
 from uuid import UUID
 
 from harpocrate.cache import WalletKeyCache
@@ -65,27 +66,41 @@ class SecretsClient:
         self._cache.set(cache_key, wallet_key)
         return wallet_key
 
+    @staticmethod
+    def _normalize_name(name: str) -> str:
+        """Normalise un nom de secret avec path : ajoute '/' initial si absent."""
+        if "/" in name and not name.startswith("/"):
+            return "/" + name
+        return name
+
     def _path(self, name: str | None = None) -> str:
         base = f"/v1/wallets/{self._wallet_id}/secrets"
         if name:
-            return f"{base}/{name}"
+            normalized = self._normalize_name(name)
+            # URL-encode les '/' du nom pour qu'ils ne soient pas interprétés comme séparateurs
+            encoded = quote(normalized, safe="")
+            return f"{base}/{encoded}"
         return base
 
     def list_secrets(
         self,
         tag: str | None = None,
         name_contains: str | None = None,
+        path: str | None = None,
         limit: int = 50,
     ) -> SecretListResponse:
         """Liste les secrets du wallet (sans valeurs).
 
         Retourne un SecretListResponse avec .secrets (list[SecretInfo]) et .next_cursor.
+        Avec path=, retourne uniquement les secrets directs du répertoire donné.
         """
         params: dict[str, Any] = {"limit": limit}
         if tag:
             params["tag"] = tag
         if name_contains:
             params["name_contains"] = name_contains
+        if path is not None:
+            params["path"] = path
 
         data = self._http.get(self._path(), **params)
         items = [SecretInfo.from_dict(s) for s in data.get("secrets", [])]
@@ -93,6 +108,89 @@ class SecretsClient:
             secrets=items,
             next_cursor=data.get("next_cursor"),
         )
+
+    def get_tree(self, path: str = "/") -> dict[str, Any]:
+        """Retourne l'arborescence du wallet à un path donné.
+
+        Retourne un dict avec : path, secrets_at_this_level_count, folders.
+        """
+        tree_path = f"/v1/wallets/{self._wallet_id}/tree"
+        return self._http.get(tree_path, path=path)  # type: ignore[return-value]
+
+    def create(
+        self,
+        name: str,
+        value: str,
+        description: str | None = None,
+        tags: list[str] | None = None,
+    ) -> str:
+        """Crée un secret avec une valeur chiffrée côté client.
+
+        Retourne le secret_id (UUID string). Requiert [add].
+        """
+        wallet_key = self._wallet_key()
+        enc_value = aes_gcm_encrypt(value.encode("utf-8"), wallet_key)
+        enc_value_b64 = base64.b64encode(enc_value).decode()
+        body: dict[str, Any] = {"name": name, "encrypted_value": enc_value_b64}
+        if description is not None:
+            body["description"] = description
+        if tags is not None:
+            body["tags"] = tags
+        result = self._http.post(self._path(), json=body)
+        return str(result["secret_id"])
+
+    def put(self, name: str, value: str) -> int:
+        """Remplace la valeur d'un secret existant (incrémente generation_version).
+
+        Retourne la nouvelle generation_version. Requiert [write].
+        """
+        wallet_key = self._wallet_key()
+        enc_value = aes_gcm_encrypt(value.encode("utf-8"), wallet_key)
+        enc_value_b64 = base64.b64encode(enc_value).decode()
+        result = self._http.put(self._path(name), json={"encrypted_value": enc_value_b64})
+        return int(result["generation_version"])
+
+    def patch(
+        self,
+        name: str,
+        description: str | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        """Met à jour les métadonnées d'un secret (description et/ou tags).
+
+        Ne modifie pas la valeur chiffrée. Requiert [write].
+        """
+        body: dict[str, Any] = {}
+        if description is not None:
+            body["description"] = description
+        if tags is not None:
+            body["tags"] = tags
+        self._http.patch(self._path(name), json=body)
+
+    def delete(self, name: str) -> None:
+        """Supprime un secret. Requiert [remove]."""
+        self._http.delete(self._path(name))
+
+    def create_placeholder(
+        self,
+        name: str,
+        descriptor: dict[str, Any],
+        description: str | None = None,
+        tags: list[str] | None = None,
+    ) -> str:
+        """Crée un placeholder avec son descripteur de génération.
+
+        Retourne le secret_id. Requiert [add].
+        """
+        body: dict[str, Any] = {"name": name, "generation_descriptor": descriptor}
+        if description is not None:
+            body["description"] = description
+        if tags is not None:
+            body["tags"] = tags
+        result = self._http.post(
+            f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body
+        )
+        return str(result["secret_id"])
 
     def get(self, name: str) -> str:
         """Lit et déchiffre la valeur d'un secret.

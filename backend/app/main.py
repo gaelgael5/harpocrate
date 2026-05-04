@@ -8,6 +8,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
 from app.api.v1 import (
+    admin_backups,
+    admin_maintenance,
+    admin_secret_types,
+    admin_snapshots,
+    admin_system,
     api_key_openapi,
     api_keys,
     api_keys_self,
@@ -28,7 +33,9 @@ from app.api.v1 import (
 from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
-from app.db.pool import close_pool, init_pool
+from app.core.maintenance import maintenance_state
+from app.db.pool import close_pool, get_pool, init_pool
+from app.services import snapshot_scheduler as sched_svc
 
 configure_logging()
 
@@ -43,9 +50,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_pool()
     # Pré-charge le cache JWKS — best-effort (Keycloak peut être absent en dev)
     await prefetch_jwks()
+
+    pool = await get_pool()
+    scheduler = sched_svc.init_scheduler(pool)
+    try:
+        await scheduler.start()
+    except Exception as exc:
+        logger.warning("snapshot_scheduler_start_failed", error=str(exc))
+
     try:
         yield
     finally:
+        await scheduler.stop()
         await close_pool()
         logger.info("stopped")
 
@@ -63,6 +79,33 @@ app = FastAPI(
 # Ce middleware ne lit pas du tout le body ; il se contente de noter body_logged=False
 # pour les chemins secrets afin de documenter explicitement l'intention.
 # Les handlers eux-mêmes ne loguent jamais les champs encrypted_value.
+
+
+@app.middleware("http")
+async def maintenance_middleware(request: Request, call_next: object) -> Response:
+    """Bloque toutes les requêtes non-admin avec 503 en mode maintenance."""
+    import typing
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
+    if maintenance_state.active:
+        path = request.url.path
+        if (
+            path.startswith("/v1/admin/")
+            or path == "/v1/health"
+        ):
+            return await _call_next(request)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "maintenance_in_progress",
+                "estimated_end_at": (
+                    maintenance_state.estimated_end_at.isoformat()
+                    if maintenance_state.estimated_end_at else None
+                ),
+            },
+            headers={"Retry-After": "60"},
+        )
+    return await _call_next(request)
 
 
 @app.middleware("http")
@@ -90,6 +133,12 @@ async def log_requests(request: Request, call_next: object) -> Response:
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 
+app.include_router(admin_maintenance.router, prefix="/v1")
+app.include_router(admin_backups.router, prefix="/v1")
+app.include_router(admin_snapshots.router, prefix="/v1")
+app.include_router(admin_secret_types.router, prefix="/v1")
+app.include_router(admin_secret_types.public_router, prefix="/v1")
+app.include_router(admin_system.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")

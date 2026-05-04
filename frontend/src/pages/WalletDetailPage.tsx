@@ -1,6 +1,7 @@
 /**
- * Wallet detail page — lists secrets, shows tabs for grants and settings.
+ * Wallet detail page — lists secrets with virtual directory navigation.
  */
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -15,24 +16,114 @@ import {
   Loader,
   Center,
   Alert,
+  Breadcrumbs,
+  Anchor,
+  SimpleGrid,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
+import { z } from 'zod'
 
 import { api, ApiError } from '@/lib/api-client'
 import { exportWallet } from '@/lib/exportImportApi'
 import { WalletItemSchema } from '@/schemas/wallets'
-import { SecretListResponseSchema, type SecretListItem } from '@/schemas/secrets'
+import { type SecretListItem } from '@/schemas/secrets'
 
-function SecretRow({ secret, walletId }: { secret: SecretListItem; walletId: string }) {
+// ─── Schemas ─────────────────────────────────────────────────────────────────
+
+const FolderSchema = z.object({
+  name: z.string(),
+  full_path: z.string(),
+  secrets_count: z.number(),
+  subfolders_count: z.number(),
+})
+
+const TreeDataSchema = z.object({
+  path: z.string(),
+  secrets_at_this_level_count: z.number(),
+  folders: z.array(FolderSchema),
+})
+
+const PathSecretSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  is_placeholder: z.boolean(),
+  generation_version: z.number(),
+  tags: z.array(z.string()),
+  created_at: z.string().nullable(),
+  updated_at: z.string().nullable(),
+})
+
+const PathSecretsResponseSchema = z.object({
+  secrets: z.array(PathSecretSchema),
+  next_cursor: z.string().nullable(),
+})
+
+type Folder = z.infer<typeof FolderSchema>
+type PathSecret = z.infer<typeof PathSecretSchema>
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function PathBreadcrumb({
+  path,
+  onNavigate,
+}: {
+  path: string
+  onNavigate: (p: string) => void
+}) {
+  const { t } = useTranslation()
+  const segments = path === '/' ? [] : path.split('/').filter(Boolean)
+
+  return (
+    <Breadcrumbs>
+      <Anchor onClick={() => onNavigate('/')} style={{ cursor: 'pointer' }}>
+        {t('secrets.paths.root')}
+      </Anchor>
+      {segments.map((seg, i) => {
+        const fullPath = '/' + segments.slice(0, i + 1).join('/') + '/'
+        const isLast = i === segments.length - 1
+        return isLast ? (
+          <Text key={fullPath}>{seg}</Text>
+        ) : (
+          <Anchor key={fullPath} onClick={() => onNavigate(fullPath)} style={{ cursor: 'pointer' }}>
+            {seg}
+          </Anchor>
+        )
+      })}
+    </Breadcrumbs>
+  )
+}
+
+function FolderCard({ folder, onClick }: { folder: Folder; onClick: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <Card withBorder padding="sm" style={{ cursor: 'pointer' }} onClick={onClick}>
+      <Group gap="xs">
+        <Text>📁</Text>
+        <Stack gap={0}>
+          <Text size="sm" fw={500}>
+            {folder.name}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {t('secrets.paths.secretsCount', { count: folder.secrets_count })}
+          </Text>
+        </Stack>
+      </Group>
+    </Card>
+  )
+}
+
+function SecretCard({ secret, walletId }: { secret: SecretListItem | PathSecret; walletId: string }) {
   const navigate = useNavigate()
+  const encodedName = encodeURIComponent(secret.name)
 
   return (
     <Card
       withBorder
       padding="sm"
       style={{ cursor: 'pointer' }}
-      onClick={() => navigate(`/wallets/${walletId}/secrets/${secret.name}`)}
+      onClick={() => navigate(`/wallets/${walletId}/secrets/${encodedName}`)}
     >
       <Group justify="space-between">
         <Group gap="sm">
@@ -62,10 +153,13 @@ function SecretRow({ secret, walletId }: { secret: SecretListItem; walletId: str
   )
 }
 
+// ─── Page ────────────────────────────────────────────────────────────────────
+
 export function WalletDetailPage() {
   const { t } = useTranslation()
   const { walletId } = useParams<{ walletId: string }>()
   const navigate = useNavigate()
+  const [currentPath, setCurrentPath] = useState('/')
 
   async function handleExport() {
     if (!walletId) return
@@ -97,14 +191,29 @@ export function WalletDetailPage() {
     enabled: !!walletId,
   })
 
-  const { data: secrets, isLoading: secretsLoading } = useQuery({
-    queryKey: ['secrets', walletId],
+  const { data: treeData, isLoading: treeLoading } = useQuery({
+    queryKey: ['wallet-tree', walletId, currentPath],
     queryFn: async () => {
-      const raw = await api.get<unknown>(`/wallets/${walletId ?? ''}/secrets`)
-      return SecretListResponseSchema.parse(raw)
+      const raw = await api.get<unknown>(
+        `/wallets/${walletId ?? ''}/tree?path=${encodeURIComponent(currentPath)}`
+      )
+      return TreeDataSchema.parse(raw)
     },
     enabled: !!walletId,
   })
+
+  const { data: pathSecrets, isLoading: pathSecretsLoading } = useQuery({
+    queryKey: ['wallet-secrets-path', walletId, currentPath],
+    queryFn: async () => {
+      const raw = await api.get<unknown>(
+        `/wallets/${walletId ?? ''}/secrets?path=${encodeURIComponent(currentPath)}`
+      )
+      return PathSecretsResponseSchema.parse(raw)
+    },
+    enabled: !!walletId,
+  })
+
+  const secretsLoading = treeLoading || pathSecretsLoading
 
   if (walletLoading) {
     return (
@@ -120,6 +229,8 @@ export function WalletDetailPage() {
   }
 
   if (!wallet) return null
+
+  const prefixPath = currentPath === '/' ? '' : currentPath
 
   return (
     <Stack>
@@ -148,7 +259,13 @@ export function WalletDetailPage() {
           >
             {t('apiKeys.apiKeysButton')}
           </Button>
-          <Button onClick={() => navigate(`/wallets/${walletId ?? ''}/secrets/new`)}>
+          <Button
+            onClick={() =>
+              navigate(`/wallets/${walletId ?? ''}/secrets/new`, {
+                state: { prefixPath },
+              })
+            }
+          >
             {t('secrets.create')}
           </Button>
         </Group>
@@ -168,19 +285,53 @@ export function WalletDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="secrets" pt="md">
-          {secretsLoading ? (
-            <Center py="xl">
-              <Loader size="sm" />
-            </Center>
-          ) : secrets?.secrets.length === 0 ? (
-            <Text c="dimmed">{t('secrets.noSecrets')}</Text>
-          ) : (
-            <Stack gap="xs">
-              {secrets?.secrets.map((s) => (
-                <SecretRow key={s.id} secret={s} walletId={walletId ?? ''} />
-              ))}
-            </Stack>
-          )}
+          <Stack gap="md">
+            {/* Breadcrumb navigation */}
+            <PathBreadcrumb path={currentPath} onNavigate={setCurrentPath} />
+
+            {secretsLoading ? (
+              <Center py="xl">
+                <Loader size="sm" />
+              </Center>
+            ) : (
+              <>
+                {/* Folder grid */}
+                {(treeData?.folders.length ?? 0) > 0 && (
+                  <Stack gap="xs">
+                    <Text fw={600} size="sm">
+                      {t('secrets.paths.folders')}
+                    </Text>
+                    <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
+                      {treeData?.folders.map((folder) => (
+                        <FolderCard
+                          key={folder.full_path}
+                          folder={folder}
+                          onClick={() => setCurrentPath(folder.full_path)}
+                        />
+                      ))}
+                    </SimpleGrid>
+                  </Stack>
+                )}
+
+                {/* Secrets at current level */}
+                {(pathSecrets?.secrets.length ?? 0) === 0 &&
+                (treeData?.folders.length ?? 0) === 0 ? (
+                  <Text c="dimmed">{t('secrets.noSecrets')}</Text>
+                ) : (
+                  (pathSecrets?.secrets.length ?? 0) > 0 && (
+                    <Stack gap="xs">
+                      <Text fw={600} size="sm">
+                        {t('secrets.paths.secretsHere')}
+                      </Text>
+                      {pathSecrets?.secrets.map((s) => (
+                        <SecretCard key={s.id} secret={s} walletId={walletId ?? ''} />
+                      ))}
+                    </Stack>
+                  )
+                )}
+              </>
+            )}
+          </Stack>
         </Tabs.Panel>
       </Tabs>
     </Stack>

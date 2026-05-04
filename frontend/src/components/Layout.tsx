@@ -19,7 +19,9 @@ import { useCryptoStore } from '@/stores/crypto'
 import { useSessionStore } from '@/stores/session'
 import { logout } from '@/lib/oidc'
 import { AppsMenu } from '@/components/AppsMenu'
+import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
+import { useAdminRole } from '@/hooks/useAdminRole'
 
 export function Layout() {
   const { t } = useTranslation()
@@ -39,6 +41,8 @@ export function Layout() {
     await logout()
     navigate('/login')
   }
+
+  const isAdmin = useAdminRole()
 
   // Quand le bandeau dev est actif, on decale le header AppShell + on retire la
   // hauteur du bandeau de la viewport disponible. Le bandeau lui-meme est rendu
@@ -67,6 +71,7 @@ export function Layout() {
           </Group>
           <Group>
             <AppsMenu />
+            <LocaleSwitcher />
             <ActionIcon
               variant="subtle"
               onClick={() => setColorScheme(isDark ? 'light' : 'dark')}
@@ -121,6 +126,45 @@ export function Layout() {
           rel="noopener noreferrer"
           label={t('nav.api_docs')}
         />
+        <NavLink
+          component={RouterNavLink}
+          to="/export-all"
+          label={t('nav.export_all')}
+        />
+        {isAdmin && (
+          <NavLink label={t('nav.admin')} childrenOffset={12} defaultOpened>
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/backups"
+              label={t('admin.nav_backups')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/snapshots"
+              label={t('admin.nav_snapshots')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/secret-types"
+              label={t('admin.nav_secret_types')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/users"
+              label={t('admin.nav_users')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/system"
+              label={t('admin.nav_system')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/env"
+              label={t('admin.nav_env')}
+            />
+          </NavLink>
+        )}
       </AppShell.Navbar>
 
       <AppShell.Main>

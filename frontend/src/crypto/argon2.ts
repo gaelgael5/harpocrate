@@ -60,3 +60,28 @@ export async function deriveKeyFromSeed(
   })
   return result as Uint8Array
 }
+
+/**
+ * Computes an Argon2id PHC-format hash of a base64url secret string.
+ *
+ * The backend stores auth_hash as a PHC string and verifies with
+ * argon2-cffi's PasswordHasher.verify(phc_string, secret_b64url.encode()).
+ * The password must be the base64url string (not the raw bytes) so that
+ * the server can re-verify using auth_secret_b64 from the token.
+ */
+export async function hashAuthSecret(
+  secretB64Url: string,
+  salt: Uint8Array,
+  params: KdfParams = DEFAULT_KDF_PARAMS,
+): Promise<string> {
+  const result = await argon2id({
+    password: secretB64Url,
+    salt,
+    parallelism: params.parallelism,
+    iterations: params.iterations,
+    memorySize: params.memory_kb,
+    hashLength: 32,
+    outputType: 'encoded',
+  })
+  return result as string
+}

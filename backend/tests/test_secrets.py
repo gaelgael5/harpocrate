@@ -273,7 +273,7 @@ async def test_secret_create_requires_add_permission() -> None:
         )
 
     assert r.status_code == 403
-    assert r.json()["detail"]["error"] == "missing_add_permission"
+    assert r.json()["detail"]["error"] == "insufficient_permissions"
 
 
 # ─── test_secret_create_invalid_name_regex ────────────────────────────────────
@@ -283,7 +283,16 @@ async def test_secret_create_requires_add_permission() -> None:
 async def test_secret_create_invalid_name_regex() -> None:
     """POST /v1/wallets/{id}/secrets → 422 si nom contient des caractères invalides."""
     conn = _make_conn()
-    conn.fetchrow = AsyncMock(return_value=None)
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        return _fake_wallet_row(permissions=_PERM_ALL)
+
+    conn.fetchrow = fetchrow_side
     conn.fetch = AsyncMock(return_value=[])
 
     async with _make_client(_make_pool(conn)) as client:
@@ -307,7 +316,16 @@ async def test_secret_create_invalid_name_regex() -> None:
 async def test_secret_create_value_too_large() -> None:
     """POST /v1/wallets/{id}/secrets → 422 si encrypted_value dépasse 5 MB décodé."""
     conn = _make_conn()
-    conn.fetchrow = AsyncMock(return_value=None)
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        return _fake_wallet_row(permissions=_PERM_ALL)
+
+    conn.fetchrow = fetchrow_side
     conn.fetch = AsyncMock(return_value=[])
 
     # 5 MB + 1 octet de données brutes → dépasse la limite
@@ -441,7 +459,7 @@ async def test_secret_get_requires_read_permission() -> None:
         )
 
     assert r.status_code == 403
-    assert r.json()["detail"]["error"] == "missing_read_permission"
+    assert r.json()["detail"]["error"] == "insufficient_permissions"
 
 
 # ─── test_secret_list_pagination ──────────────────────────────────────────────
@@ -677,7 +695,7 @@ async def test_secret_delete_requires_remove_permission() -> None:
         )
 
     assert r.status_code == 403
-    assert r.json()["detail"]["error"] == "missing_remove_permission"
+    assert r.json()["detail"]["error"] == "insufficient_permissions"
 
 
 # ─── test_audit_log_no_value_in_metadata ──────────────────────────────────────

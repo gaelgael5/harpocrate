@@ -41,7 +41,7 @@ import { PermissionsCheckboxes } from '@/components/PermissionsCheckboxes'
 import { permissionsToBadges } from '@/schemas/apiKeys'
 import { MyGrantResponseSchema } from '@/schemas/grants'
 import { randomBytes, toBase64 } from '@/crypto/helpers'
-import { deriveKeyFromSeed, DEFAULT_KDF_PARAMS } from '@/crypto/argon2'
+import { hashAuthSecret, DEFAULT_KDF_PARAMS } from '@/crypto/argon2'
 import { aesGcmEncrypt } from '@/crypto/aes-gcm'
 import { rsaOaepEncrypt } from '@/crypto/rsa-oaep'
 import { rsaOaepDecrypt } from '@/crypto/rsa-oaep'
@@ -92,7 +92,7 @@ export function ApiKeysPage() {
     if (!rsaPrivateKey) throw new Error(t('errors.cryptoRequired'))
 
     // Récupère le grant de l'utilisateur courant pour ce wallet
-    const raw = await api.get<unknown>(`/wallets/${wid}/grants/me`)
+    const raw = await api.get<unknown>(`/wallets/${wid}/my-grant`)
     const grant = MyGrantResponseSchema.parse(raw)
 
     const encKeyBytes = Uint8Array.from(atob(grant.encrypted_wallet_key), (c) => c.charCodeAt(0))
@@ -122,8 +122,10 @@ export function ApiKeysPage() {
       const decryptionKeyBytes = randomBytes(32)
       const authSaltBytes = randomBytes(16)
 
-      // 2. auth_hash = Argon2id(auth_secret, auth_salt, kdf_params)
-      const authHashBytes = await deriveKeyFromSeed(authSecretBytes, authSaltBytes, DEFAULT_KDF_PARAMS)
+      // 2. auth_hash = Argon2id PHC string of base64url(auth_secret)
+      // Le backend vérifie avec _ph.verify(phc_string, auth_secret_b64.encode())
+      const authSecretB64Url = toBase64Url(authSecretBytes)
+      const authHashPhc = await hashAuthSecret(authSecretB64Url, authSaltBytes, DEFAULT_KDF_PARAMS)
 
       // 3. Récupérer wallet_key
       const walletKey = await getWalletKey()
@@ -148,8 +150,8 @@ export function ApiKeysPage() {
         description: description.trim() || null,
         permissions,
         expires_at: expiresAt,
-        auth_secret: toBase64Url(authSecretBytes),
-        auth_hash: toBase64(authHashBytes),
+        auth_secret: authSecretB64Url,
+        auth_hash: btoa(authHashPhc),
         auth_salt: toBase64(authSaltBytes),
         auth_kdf_memory_kb: DEFAULT_KDF_PARAMS.memory_kb,
         auth_kdf_iterations: DEFAULT_KDF_PARAMS.iterations,

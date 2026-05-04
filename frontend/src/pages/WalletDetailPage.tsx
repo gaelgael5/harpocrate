@@ -3,7 +3,7 @@
  */
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Stack,
   Title,
@@ -20,6 +20,7 @@ import {
   Anchor,
   SimpleGrid,
 } from '@mantine/core'
+import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
@@ -28,6 +29,7 @@ import { api, ApiError } from '@/lib/api-client'
 import { exportWallet } from '@/lib/exportImportApi'
 import { WalletItemSchema } from '@/schemas/wallets'
 import { type SecretListItem } from '@/schemas/secrets'
+import { useSessionStore } from '@/stores/session'
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -159,7 +161,40 @@ export function WalletDetailPage() {
   const { t } = useTranslation()
   const { walletId } = useParams<{ walletId: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const currentUser = useSessionStore((s) => s.user)
   const [currentPath, setCurrentPath] = useState('/')
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/wallets/${walletId ?? ''}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
+      void queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
+      notifications.show({ color: 'green', message: t('wallets.deleteSuccess') })
+      navigate('/wallets')
+    },
+    onError: () => notifications.show({ color: 'red', message: t('wallets.deleteError') }),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: () => api.post(`/wallets/${walletId ?? ''}/restore`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
+      void queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
+      notifications.show({ color: 'green', message: t('wallets.restoreSuccess') })
+    },
+    onError: () => notifications.show({ color: 'red', message: t('wallets.restoreError') }),
+  })
+
+  function handleDelete() {
+    modals.openConfirmModal({
+      title: t('wallets.deleteConfirmTitle'),
+      children: <Text size="sm">{t('wallets.deleteConfirmDesc')}</Text>,
+      labels: { confirm: t('wallets.delete'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => deleteMutation.mutate(),
+    })
+  }
 
   async function handleExport() {
     if (!walletId) return
@@ -231,9 +266,37 @@ export function WalletDetailPage() {
   if (!wallet) return null
 
   const prefixPath = currentPath === '/' ? '' : currentPath
+  const isOwner = wallet.owner_user_id === currentUser?.id
+  const isDeleted = !!wallet.deleted_at
+  const purgeAt = wallet.deleted_at
+    ? new Date(new Date(wallet.deleted_at).getTime() + 24 * 60 * 60 * 1000)
+    : null
 
   return (
     <Stack>
+      {/* Bannière corbeille */}
+      {isDeleted && (
+        <Alert color="red" variant="light" title={t('wallets.pendingDeletion')}>
+          <Group justify="space-between" align="center">
+            <Text size="sm">
+              {purgeAt
+                ? t('wallets.purgeAt', { date: purgeAt.toLocaleString() })
+                : t('wallets.deletedAt', { date: wallet.deleted_at ? new Date(wallet.deleted_at).toLocaleString() : '' })}
+            </Text>
+            {isOwner && (
+              <Button
+                size="xs"
+                color="brand"
+                loading={restoreMutation.isPending}
+                onClick={() => restoreMutation.mutate()}
+              >
+                {t('wallets.restore')}
+              </Button>
+            )}
+          </Group>
+        </Alert>
+      )}
+
       <Group justify="space-between">
         <Stack gap={2}>
           <Title order={2}>{wallet.name}</Title>
@@ -247,27 +310,41 @@ export function WalletDetailPage() {
           <Button variant="outline" onClick={() => void handleExport()}>
             {t('wallets.export.button')}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate(`/wallets/${walletId ?? ''}/grants`)}
-          >
-            {t('grants.title')}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate(`/wallets/${walletId ?? ''}/api-keys`)}
-          >
-            {t('apiKeys.apiKeysButton')}
-          </Button>
-          <Button
-            onClick={() =>
-              navigate(`/wallets/${walletId ?? ''}/secrets/new`, {
-                state: { prefixPath },
-              })
-            }
-          >
-            {t('secrets.create')}
-          </Button>
+          {!isDeleted && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/wallets/${walletId ?? ''}/grants`)}
+              >
+                {t('grants.title')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/wallets/${walletId ?? ''}/api-keys`)}
+              >
+                {t('apiKeys.apiKeysButton')}
+              </Button>
+              <Button
+                onClick={() =>
+                  navigate(`/wallets/${walletId ?? ''}/secrets/new`, {
+                    state: { prefixPath },
+                  })
+                }
+              >
+                {t('secrets.create')}
+              </Button>
+              {isOwner && (
+                <Button
+                  color="red"
+                  variant="light"
+                  loading={deleteMutation.isPending}
+                  onClick={handleDelete}
+                >
+                  {t('wallets.delete')}
+                </Button>
+              )}
+            </>
+          )}
         </Group>
       </Group>
 

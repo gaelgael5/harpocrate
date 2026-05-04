@@ -51,3 +51,6 @@ class WalletWithGrant:
     # Compteurs (0 jusqu'au LOT_05)
     valued_secrets_count: int = 0
     placeholder_secrets_count: int = 0
+
+    # Suppression logique — None = actif
+    deleted_at: datetime.datetime | None = None

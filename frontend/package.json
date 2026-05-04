@@ -17,6 +17,7 @@
     "@mantine/dates": "^7.17.4",
     "@mantine/form": "^7.17.4",
     "@mantine/hooks": "^7.17.4",
+    "@mantine/modals": "^9.1.1",
     "@mantine/notifications": "^7.17.4",
     "@monaco-editor/react": "^4.7.0",
     "@rjsf/core": "^6.5.2",

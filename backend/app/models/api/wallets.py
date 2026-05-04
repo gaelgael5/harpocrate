@@ -85,12 +85,6 @@ class WalletPatchRequest(BaseModel):
         return [str(t).strip().lower() for t in v if str(t).strip()]
 
 
-class WalletDeleteRequest(BaseModel):
-    """Corps de DELETE /v1/wallets/{id}."""
-
-    confirmation: str
-
-
 class TransferOwnershipRequest(BaseModel):
     """Corps de POST /v1/wallets/{id}/transfer-ownership."""
 
@@ -114,6 +108,7 @@ class WalletItem(BaseModel):
     placeholder_secrets_count: int
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    deleted_at: datetime.datetime | None = None
 
 
 class WalletListResponse(BaseModel):
@@ -121,6 +116,7 @@ class WalletListResponse(BaseModel):
 
     wallets: list[WalletItem]
     next_cursor: str | None
+    deleted_wallets: list[WalletItem] = []
 
 
 class WalletCreateResponse(BaseModel):

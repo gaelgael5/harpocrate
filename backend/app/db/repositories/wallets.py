@@ -43,6 +43,7 @@ def _row_to_wallet_with_grant(row: Any, tags: list[str]) -> WalletWithGrant:
         tags=tags,
         valued_secrets_count=row["valued_secrets_count"] or 0,
         placeholder_secrets_count=row["placeholder_secrets_count"] or 0,
+        deleted_at=row["deleted_at"],
     )
 
 
@@ -107,11 +108,12 @@ async def list_wallets_for_user(
     tag_filter: str | None,
     name_contains: str | None,
 ) -> list[WalletWithGrant]:
-    """Retourne les wallets accessibles par user_id, avec pagination cursor-based."""
+    """Retourne les wallets actifs (non supprimés) accessibles par user_id."""
     rows = await conn.fetch(
         """
         SELECT
             w.id, w.name, w.description, w.owner_user_id, w.created_at, w.updated_at,
+            w.deleted_at,
             wg.permissions AS my_permissions,
             COALESCE(s.valued, 0)       AS valued_secrets_count,
             COALESCE(s.placeholder, 0)  AS placeholder_secrets_count
@@ -124,7 +126,8 @@ async def list_wallets_for_user(
             FROM secrets WHERE wallet_id = w.id
         ) s ON true
         WHERE
-            ($2::timestamptz IS NULL
+            w.deleted_at IS NULL
+            AND ($2::timestamptz IS NULL
              OR (w.updated_at, w.id) < ($2::timestamptz, $3::uuid))
             AND ($4::text IS NULL OR EXISTS (
                 SELECT 1 FROM wallet_tags wt
@@ -170,11 +173,12 @@ async def get_wallet_for_user(
     wallet_id: UUID,
     user_id: UUID,
 ) -> WalletWithGrant | None:
-    """Retourne le wallet si user_id a un grant, None sinon (pas de 403, cf spec)."""
+    """Retourne le wallet si user_id a un grant, None sinon. Inclut les supprimés."""
     row = await conn.fetchrow(
         """
         SELECT
             w.id, w.name, w.description, w.owner_user_id, w.created_at, w.updated_at,
+            w.deleted_at,
             wg.permissions AS my_permissions,
             COALESCE(s.valued, 0)       AS valued_secrets_count,
             COALESCE(s.placeholder, 0)  AS placeholder_secrets_count
@@ -249,15 +253,95 @@ async def update_wallet(
             )
 
 
-# ─── DELETE wallet ────────────────────────────────────────────────────────────
+# ─── DELETE wallet (soft + hard) ─────────────────────────────────────────────
 
 
-async def delete_wallet(
+async def soft_delete_wallet(
     conn: asyncpg.Connection[asyncpg.Record],
     wallet_id: UUID,
 ) -> None:
-    """Hard-delete du wallet (cascade sur grants, secrets, api_keys, tags)."""
+    """Suppression logique : pose deleted_at = NOW(). Réversible sous 24h."""
+    await conn.execute(
+        "UPDATE wallets SET deleted_at = NOW() WHERE id = $1",
+        wallet_id,
+    )
+
+
+async def restore_wallet(
+    conn: asyncpg.Connection[asyncpg.Record],
+    wallet_id: UUID,
+) -> None:
+    """Annule la suppression logique : efface deleted_at."""
+    await conn.execute(
+        "UPDATE wallets SET deleted_at = NULL WHERE id = $1",
+        wallet_id,
+    )
+
+
+async def hard_delete_wallet(
+    conn: asyncpg.Connection[asyncpg.Record],
+    wallet_id: UUID,
+) -> None:
+    """Suppression physique (cascade sur grants, secrets, api_keys, tags)."""
     await conn.execute("DELETE FROM wallets WHERE id = $1", wallet_id)
+
+
+async def list_deleted_wallets_for_user(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    user_id: UUID,
+) -> list[WalletWithGrant]:
+    """Retourne les wallets en corbeille dont l'utilisateur est propriétaire."""
+    rows = await conn.fetch(
+        """
+        SELECT
+            w.id, w.name, w.description, w.owner_user_id, w.created_at, w.updated_at,
+            w.deleted_at,
+            wg.permissions AS my_permissions,
+            0 AS valued_secrets_count,
+            0 AS placeholder_secrets_count
+        FROM wallets w
+        JOIN wallet_grants wg ON wg.wallet_id = w.id AND wg.grantee_user_id = $1
+        WHERE w.deleted_at IS NOT NULL AND w.owner_user_id = $1
+        ORDER BY w.deleted_at DESC
+        """,
+        user_id,
+    )
+
+    if not rows:
+        return []
+
+    wallet_ids = [r["id"] for r in rows]
+    tag_rows = await conn.fetch(
+        "SELECT wallet_id, tag FROM wallet_tags WHERE wallet_id = ANY($1::uuid[])",
+        wallet_ids,
+    )
+    tags_by_wallet: dict[UUID, list[str]] = {}
+    for tr in tag_rows:
+        tags_by_wallet.setdefault(tr["wallet_id"], []).append(tr["tag"])
+
+    return [
+        _row_to_wallet_with_grant(row, tags_by_wallet.get(row["id"], []))
+        for row in rows
+    ]
+
+
+async def purge_expired_wallets(
+    conn: asyncpg.Connection[asyncpg.Record],
+) -> list[UUID]:
+    """Supprime physiquement les wallets dont deleted_at + 24h <= NOW().
+
+    Retourne la liste des ids supprimés.
+    """
+    rows = await conn.fetch(
+        """
+        DELETE FROM wallets
+        WHERE deleted_at IS NOT NULL
+          AND deleted_at + INTERVAL '24 hours' <= NOW()
+        RETURNING id
+        """,
+    )
+    return [r["id"] for r in rows]
 
 
 # ─── Transfer ownership ───────────────────────────────────────────────────────

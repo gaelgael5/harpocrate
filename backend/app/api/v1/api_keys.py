@@ -10,7 +10,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
@@ -140,13 +140,13 @@ async def patch_api_key(
 # ─── DELETE /v1/wallets/{wallet_id}/api-keys/{api_key_id} ────────────────────
 
 
-@router.delete("/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def revoke_api_key(
     wallet_id: UUID,
     api_key_id: UUID,
     current_user: JwtUser,
     request: Request,
-) -> JSONResponse:
+) -> Response:
     """Révoque une API key (soft delete, revoked_at = NOW()). Requiert JWT + [share]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -165,4 +165,4 @@ async def revoke_api_key(
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

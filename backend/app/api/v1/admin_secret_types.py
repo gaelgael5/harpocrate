@@ -8,7 +8,7 @@ import json
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.admin_auth import AdminJwt
@@ -217,8 +217,8 @@ async def update_type(type_uuid: UUID, body: SecretTypeUpdate, admin: AdminJwt) 
     return JSONResponse({"updated": True})
 
 
-@router.delete("/{type_uuid}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_type(type_uuid: UUID, admin: AdminJwt) -> None:
+@router.delete("/{type_uuid}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+async def delete_type(type_uuid: UUID, admin: AdminJwt) -> Response:
     pool = await get_pool()
     async with pool.acquire() as conn:
         try:
@@ -236,6 +236,7 @@ async def delete_type(type_uuid: UUID, admin: AdminJwt) -> None:
                     detail={"error": "secret_type_in_use", "count": int(count)},
                 ) from e
             raise HTTPException(status_code=400, detail={"error": msg}) from e
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ─── Schema version endpoints ─────────────────────────────────────────────────
@@ -301,10 +302,10 @@ async def update_schema_version_notes(
     return JSONResponse({"updated": True})
 
 
-@router.delete("/{type_uuid}/schemas/{version_uuid}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{type_uuid}/schemas/{version_uuid}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_schema_version(
     type_uuid: UUID, version_uuid: UUID, admin: AdminJwt
-) -> None:
+) -> Response:
     pool = await get_pool()
     async with pool.acquire() as conn:
         try:
@@ -315,6 +316,7 @@ async def delete_schema_version(
             raise HTTPException(status_code=403, detail={"error": str(e)}) from e
         except ValueError as e:
             raise HTTPException(status_code=409, detail={"error": str(e)}) from e
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ─── Public endpoint ──────────────────────────────────────────────────────────

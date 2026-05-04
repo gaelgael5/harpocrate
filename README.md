@@ -81,6 +81,11 @@ pct exec 202 -- bash -c "cd /opt/harpocrate && ./refresh.sh"
 
 La stack démarre, les images sont pullées depuis GHCR, les migrations DB sont appliquées au premier boot.
 
+```bash
+https://your ip :8443/
+```
+
+
 ---
 
 ## Mise à jour
@@ -108,4 +113,14 @@ cd backend && uv run uvicorn app.main:app --reload
 
 # Frontend (proxy Vite -> :8000)
 cd frontend && npm run dev
+```
+
+```bash
+
+# voir les logs du frontend
+docker compose -f /opt/harpocrate/docker-compose.yml logs -f frontend
+
+# voir les logs du backend
+docker compose -f /opt/harpocrate/docker-compose.yml logs -f backend
+
 ```

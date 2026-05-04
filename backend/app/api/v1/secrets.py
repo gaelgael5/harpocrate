@@ -12,7 +12,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from app.core.api_key_auth import (
@@ -316,13 +316,13 @@ async def get_descriptor(
 # ─── DELETE /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────
 
 
-@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_secret(
     wallet_id: UUID,
     name: str,
     auth: RemoveAuth,
     request: Request,
-) -> None:
+) -> Response:
     """Supprime le secret (cascade sur secret_tags). Requiert [remove]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -333,6 +333,7 @@ async def delete_secret(
             caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ─── LOT_17 — Typed secrets ───────────────────────────────────────────────────

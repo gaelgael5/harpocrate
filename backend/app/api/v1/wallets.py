@@ -5,7 +5,7 @@ import re
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
@@ -200,12 +200,12 @@ async def patch_wallet(
 # ─── DELETE /v1/wallets/{id} ──────────────────────────────────────────────────
 
 
-@router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_wallet(
     wallet_id: UUID,
     current_user: JwtUser,
     request: Request,
-) -> JSONResponse:
+) -> Response:
     """Suppression logique du wallet. Purge physique automatique 24h après."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -223,15 +223,15 @@ async def delete_wallet(
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{wallet_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{wallet_id}/restore", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def restore_wallet(
     wallet_id: UUID,
     current_user: JwtUser,
     request: Request,
-) -> JSONResponse:
+) -> Response:
     """Annule la suppression logique (dans la fenêtre de 24h)."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -249,7 +249,7 @@ async def restore_wallet(
             actor_ip=_client_ip(request),
         )
 
-    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ─── POST /v1/wallets/{id}/transfer-ownership ─────────────────────────────────

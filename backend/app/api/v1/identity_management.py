@@ -8,7 +8,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
@@ -69,12 +69,12 @@ async def list_identities(current_user: JwtUser) -> JSONResponse:
     )
 
 
-@router.delete("/identities/{identity_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/identities/{identity_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def unlink_identity(
     identity_id: UUID,
     current_user: JwtUser,
     x_reverify_token: Annotated[str | None, Header()] = None,
-) -> None:
+) -> Response:
     """Délie une identité externe. Refuse si c'est la dernière ou la primary."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -127,6 +127,7 @@ async def unlink_identity(
             target_user_id=user_id,
             metadata={"identity_id": str(identity_id), "provider": target.provider},
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/identities/{identity_id}/set-primary")

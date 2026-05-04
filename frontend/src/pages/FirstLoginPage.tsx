@@ -24,6 +24,7 @@ import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
 
 import { api, ApiError } from '@/lib/api-client'
+import { getUserManager } from '@/lib/oidc'
 import { deriveKey, DEFAULT_KDF_PARAMS } from '@/crypto/argon2'
 import { aesGcmEncrypt } from '@/crypto/aes-gcm'
 import { generateRsaKeypair } from '@/crypto/rsa-oaep'
@@ -45,16 +46,13 @@ export function FirstLoginPage() {
   useEffect(() => {
     void (async () => {
       const hasLocalToken = !!useSessionStore.getState().localAdminToken
-      // OIDC : on ne ré-importe pas userManager ici, on se contente de lire le store local.
-      // Si pas de localAdminToken et pas d'utilisateur OIDC déjà set, on n'a pas de session.
       const hasUser = !!useSessionStore.getState().user
-      console.info(
-        '[Harpocrate] FirstLogin mount — localAdminToken:',
-        hasLocalToken ? 'present' : 'absent',
-        '| user:',
-        hasUser ? 'present' : 'absent',
-      )
-      if (!hasLocalToken && !hasUser) {
+      let hasOidcSession = false
+      try {
+        const oidcUser = await getUserManager().getUser()
+        hasOidcSession = !!oidcUser?.access_token && !oidcUser.expired
+      } catch { /* OIDC pas initialisé */ }
+      if (!hasLocalToken && !hasUser && !hasOidcSession) {
         notifications.show({
           color: 'orange',
           title: t('firstLogin.error'),

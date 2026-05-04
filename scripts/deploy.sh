@@ -4,11 +4,10 @@
 #
 # A executer DEPUIS le poste de developpement.
 # Pousse vers le LXC :
-#   - deploy/docker-compose.yml -> /opt/harpocrate/docker-compose.yml
-#   - deploy/.env.example       -> /opt/harpocrate/.env.example
-#   - .env (si present)         -> /opt/harpocrate/.env
-#   - db/init/*.sql             -> /opt/harpocrate/db/init/
-#   - scripts/refresh.sh        -> /opt/harpocrate/refresh.sh
+#   - docker-compose-prod.yml  -> /opt/harpocrate/docker-compose.yml
+#   - deploy/.env.example      -> /opt/harpocrate/.env.example
+#   - db/init/*.sql            -> /opt/harpocrate/db/init/
+#   - scripts/refresh.sh       -> /opt/harpocrate/refresh.sh
 # Puis execute refresh.sh dans le LXC (pull + up).
 #
 # Usage :
@@ -39,10 +38,10 @@ ssh "${PVE_HOST}" "pct exec ${CTID} -- mkdir -p ${REMOTE_DIR}/db/init"
 TMPDIR_PVE="/tmp/harpocrate-deploy-$$"
 echo "[2/4] Stage des fichiers sur ${PVE_HOST}:${TMPDIR_PVE}..."
 ssh "${PVE_HOST}" "mkdir -p ${TMPDIR_PVE}/db/init"
-scp "${REPO_ROOT}/deploy/docker-compose.yml" "${PVE_HOST}:${TMPDIR_PVE}/docker-compose.yml"
-scp "${REPO_ROOT}/deploy/.env.example"        "${PVE_HOST}:${TMPDIR_PVE}/.env.example"
-scp "${REPO_ROOT}/db/init/01-extensions.sql"  "${PVE_HOST}:${TMPDIR_PVE}/db/init/01-extensions.sql"
-scp "${REPO_ROOT}/scripts/refresh.sh"         "${PVE_HOST}:${TMPDIR_PVE}/refresh.sh"
+scp "${REPO_ROOT}/docker-compose-prod.yml"        "${PVE_HOST}:${TMPDIR_PVE}/docker-compose.yml"
+scp "${REPO_ROOT}/deploy/.env.example"            "${PVE_HOST}:${TMPDIR_PVE}/.env.example"
+scp "${REPO_ROOT}/db/init/01-extensions.sql"      "${PVE_HOST}:${TMPDIR_PVE}/db/init/01-extensions.sql"
+scp "${REPO_ROOT}/scripts/refresh.sh"             "${PVE_HOST}:${TMPDIR_PVE}/refresh.sh"
 if [ -f "${REPO_ROOT}/.env" ]; then
     scp "${REPO_ROOT}/.env" "${PVE_HOST}:${TMPDIR_PVE}/.env"
     HAS_ENV=1
@@ -52,10 +51,10 @@ fi
 
 # ── 3. Push dans le LXC ──────────────────────────────────────────────────────
 echo "[3/4] Push dans CT ${CTID}..."
-ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/docker-compose.yml ${REMOTE_DIR}/docker-compose.yml"
-ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/.env.example       ${REMOTE_DIR}/.env.example"
+ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/docker-compose.yml    ${REMOTE_DIR}/docker-compose.yml"
+ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/.env.example          ${REMOTE_DIR}/.env.example"
 ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/db/init/01-extensions.sql ${REMOTE_DIR}/db/init/01-extensions.sql"
-ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/refresh.sh         ${REMOTE_DIR}/refresh.sh"
+ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/refresh.sh            ${REMOTE_DIR}/refresh.sh"
 ssh "${PVE_HOST}" "pct exec ${CTID} -- chmod +x ${REMOTE_DIR}/refresh.sh"
 if [ "${HAS_ENV}" = "1" ]; then
     ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/.env ${REMOTE_DIR}/.env"

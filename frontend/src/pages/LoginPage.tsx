@@ -71,7 +71,12 @@ export function LoginPage() {
         if (cancelled) return
         if (err instanceof ApiError) {
           if (err.isFirstLogin) { setState('redirecting'); navigate('/first-login', { replace: true }); return }
-          if (err.isUnauthorized) { setState('show-login'); setLoginError(t('auth.sessionExpired')); return }
+          if (err.isUnauthorized) {
+            try { await getUserManager().removeUser() } catch { /* ignore */ }
+            setState('show-login')
+            setLoginError(t('auth.sessionExpired'))
+            return
+          }
         }
         setState('show-login')
         setLoginError(String(err))

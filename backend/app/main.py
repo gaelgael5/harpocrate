@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from app.api.v1 import (
     admin_backups,
     admin_maintenance,
+    admin_secret_types,
     admin_snapshots,
     admin_system,
     api_key_openapi,
@@ -135,6 +136,8 @@ async def log_requests(request: Request, call_next: object) -> Response:
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
 app.include_router(admin_snapshots.router, prefix="/v1")
+app.include_router(admin_secret_types.router, prefix="/v1")
+app.include_router(admin_secret_types.public_router, prefix="/v1")
 app.include_router(admin_system.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")

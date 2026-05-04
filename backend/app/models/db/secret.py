@@ -28,3 +28,6 @@ class SecretRow:
     tags: list[str] = field(default_factory=list)
     # JSONB brut décodé par asyncpg en dict Python (None si secret valorisé)
     generation_descriptor: dict[str, Any] | None = None
+    # LOT 15/17 — type et version de schéma (nullable)
+    type_uuid: UUID | None = None
+    schema_version_uuid: UUID | None = None

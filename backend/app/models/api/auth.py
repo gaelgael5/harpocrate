@@ -82,6 +82,7 @@ class MeResponse(BaseModel):
     rsa_key_size: int
     created_at: datetime.datetime
     last_unlock_at: datetime.datetime | None
+    preferred_locale: str = 'en'
 
 
 class CryptoResponse(BaseModel):

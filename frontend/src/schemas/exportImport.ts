@@ -4,7 +4,7 @@
  */
 import { z } from 'zod'
 
-const SECRET_NAME_RE = /^[A-Za-z0-9_.\-]+$/
+const SECRET_NAME_RE = /^[A-Za-z0-9_.-]+$/
 
 // ─── Sous-modèles ─────────────────────────────────────────────────────────────
 

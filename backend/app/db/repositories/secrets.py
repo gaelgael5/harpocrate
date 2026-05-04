@@ -62,6 +62,8 @@ def _row_to_secret(row: Any, tags: list[str]) -> SecretRow:
         updated_by_api_key_id=row["updated_by_api_key_id"],
         tags=tags,
         generation_descriptor=descriptor,
+        type_uuid=row.get("type_uuid"),
+        schema_version_uuid=row.get("schema_version_uuid"),
     )
 
 
@@ -196,15 +198,17 @@ async def insert_secret(
     encrypted_value: bytes,
     tags: list[str],
     created_by_user_id: UUID,
+    type_uuid: UUID | None = None,
+    schema_version_uuid: UUID | None = None,
 ) -> UUID:
     """Insère un secret non-placeholder. Lève UniqueViolationError si (wallet, name) existe."""
     secret_id: UUID = await conn.fetchval(
         """
         INSERT INTO secrets (
             wallet_id, name, description, encrypted_value,
-            is_placeholder, created_by_user_id
+            is_placeholder, created_by_user_id, type_uuid, schema_version_uuid
         )
-        VALUES ($1, $2, $3, $4, FALSE, $5)
+        VALUES ($1, $2, $3, $4, FALSE, $5, $6, $7)
         RETURNING id
         """,
         wallet_id,
@@ -212,6 +216,8 @@ async def insert_secret(
         description,
         encrypted_value,
         created_by_user_id,
+        type_uuid,
+        schema_version_uuid,
     )
 
     if tags:

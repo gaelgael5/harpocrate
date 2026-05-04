@@ -17,6 +17,7 @@ export interface UserInfo {
   display_name: string | null
   has_bootstrap: boolean
   rsa_key_size: number
+  preferred_locale?: string
   kdf_params: {
     memory_kb: number
     iterations: number

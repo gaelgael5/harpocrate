@@ -33,3 +33,5 @@ class UserRow:
     force_reverify_next_login: bool = field(default=False)
     disabled_at: datetime.datetime | None = field(default=None)
     disabled_reason: str | None = field(default=None)
+    # LOT 16 — préférence de locale
+    preferred_locale: str = field(default='en')

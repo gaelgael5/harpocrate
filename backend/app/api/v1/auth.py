@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import base64
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, field_validator
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
@@ -46,6 +47,7 @@ def _me_response(user: UserRow) -> MeResponse:
         rsa_key_size=user.rsa_key_size,
         created_at=user.created_at,
         last_unlock_at=user.last_unlock_at,
+        preferred_locale=getattr(user, 'preferred_locale', 'en'),
     )
 
 
@@ -231,3 +233,37 @@ async def renew_recovery(
         status_code=status.HTTP_200_OK,
         content=UpdatedAtResponse(updated_at=updated_at).model_dump(mode="json"),
     )
+
+
+class PreferencesUpdate(BaseModel):
+    preferred_locale: str
+
+    @field_validator("preferred_locale")
+    @classmethod
+    def validate_locale(cls, v: str) -> str:
+        if v not in ("en", "fr"):
+            raise ValueError("preferred_locale must be 'en' or 'fr'")
+        return v
+
+
+@router.patch("/preferences")
+async def update_preferences(
+    body: PreferencesUpdate,
+    current_user: JwtUser,
+) -> JSONResponse:
+    """Met à jour les préférences de l'utilisateur (locale)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "user_not_found"},
+            )
+        await conn.execute(
+            "UPDATE users SET preferred_locale = $1 WHERE id = $2",
+            body.preferred_locale,
+            user.id,
+        )
+
+    return JSONResponse({"preferred_locale": body.preferred_locale})

@@ -26,6 +26,8 @@ class SecretCreateRequest(BaseModel):
     description: str | None = None
     tags: list[str] = []
     encrypted_value: str  # base64
+    type_uuid: UUID | None = None
+    schema_version_uuid: UUID | None = None
 
     @field_validator("name")
     @classmethod
@@ -154,6 +156,8 @@ class SecretDetailResponse(BaseModel):
     tags: list[str]
     is_placeholder: bool
     generation_version: int
+    type_uuid: UUID | None = None
+    schema_version_uuid: UUID | None = None
 
 
 class SecretCreateResponse(BaseModel):

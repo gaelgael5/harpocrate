@@ -144,3 +144,54 @@ export const TriggerResultSchema = z.union([
 ])
 
 export type TriggerResult = z.infer<typeof TriggerResultSchema>
+
+// ─── Secret Types ──────────────────────────────────────────────────────────
+
+export const SchemaVersionSummarySchema = z.object({
+  version_uuid: z.string().uuid(),
+  version: z.number(),
+  created_at: z.string(),
+})
+
+export const SchemaVersionFullSchema = z.object({
+  version_uuid: z.string().uuid(),
+  version: z.number(),
+  schema_data: z.record(z.unknown()),
+  schema_ui: z.record(z.unknown()),
+  notes: z.string().nullable(),
+  created_at: z.string(),
+})
+
+export const SecretTypeListItemSchema = z.object({
+  type_uuid: z.string().uuid(),
+  type: z.string(),
+  sous_type: z.string(),
+  label: z.string().nullable(),
+  description: z.string().nullable(),
+  is_system: z.boolean(),
+  deprecated_at: z.string().nullable(),
+  current_version: SchemaVersionSummarySchema.nullable(),
+  used_by_secrets_count: z.number(),
+})
+
+export type SecretTypeListItem = z.infer<typeof SecretTypeListItemSchema>
+
+export const SecretTypeDetailSchema = SecretTypeListItemSchema.extend({
+  current_version_full: SchemaVersionFullSchema.nullable(),
+  all_versions: z.array(SchemaVersionFullSchema),
+})
+
+export type SecretTypeDetail = z.infer<typeof SecretTypeDetailSchema>
+
+export const SecretTypeListResponseSchema = z.object({
+  types: z.array(SecretTypeListItemSchema),
+})
+
+export type SecretTypeListResponse = z.infer<typeof SecretTypeListResponseSchema>
+
+export const ValidateSchemaResponseSchema = z.union([
+  z.object({ valid: z.literal(true) }),
+  z.object({ valid: z.literal(false), error: z.string() }),
+])
+
+export type ValidateSchemaResponse = z.infer<typeof ValidateSchemaResponseSchema>

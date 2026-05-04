@@ -11,10 +11,15 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
-from app.core.api_key_auth import AuthContext, require_any_auth_with_any_of_permissions, require_any_auth_with_permission
+from app.core.api_key_auth import (
+    AuthContext,
+    require_any_auth_with_any_of_permissions,
+    require_any_auth_with_permission,
+)
 from app.db.pool import get_pool
 from app.db.repositories import secrets as secrets_repo
 from app.models.api.secrets import (
@@ -41,7 +46,10 @@ AddAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_A
 WriteAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_WRITE))]
 InitAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_INIT))]
 RemoveAuth = Annotated[AuthContext, Depends(require_any_auth_with_permission(PERM_REMOVE))]
-DescriptorAuth = Annotated[AuthContext, Depends(require_any_auth_with_any_of_permissions(PERM_READ | PERM_INIT))]
+DescriptorAuth = Annotated[
+    AuthContext,
+    Depends(require_any_auth_with_any_of_permissions(PERM_READ | PERM_INIT)),
+]
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -325,3 +333,166 @@ async def delete_secret(
             caller_user_id=auth.caller_user_id,
             actor_ip=_client_ip(request),
         )
+
+
+# ─── LOT_17 — Typed secrets ───────────────────────────────────────────────────
+
+
+class MigrateSchemaRequest(BaseModel):
+    encrypted_value: str  # base64
+    target_schema_version_uuid: UUID
+
+
+class AssignTypeRequest(BaseModel):
+    type_uuid: UUID
+    schema_version_uuid: UUID
+    encrypted_value: str  # base64
+
+
+@router.patch("/{name}/migrate-schema")
+async def migrate_schema(
+    wallet_id: UUID,
+    name: str,
+    req: MigrateSchemaRequest,
+    auth: WriteAuth,
+    request: Request,
+) -> JSONResponse:
+    """Migre un secret vers une nouvelle version de son schéma. JWT uniquement (pas API key)."""
+    if auth.is_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "jwt_only", "message": "Schema migration requires a JWT token"},
+        )
+
+    import base64 as _b64
+    try:
+        enc_value = _b64.b64decode(req.encrypted_value)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_base64"},
+        ) from exc
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
+        if secret is None:
+            raise HTTPException(status_code=404, detail={"error": "secret_not_found"})
+        if secret.type_uuid is None:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "secret_has_no_type_cannot_migrate"},
+            )
+
+        # Vérifier que target_schema_version_uuid appartient au même type
+        target_row = await conn.fetchrow(
+            "SELECT parent_uuid FROM secret_schemas WHERE version_uuid = $1",
+            req.target_schema_version_uuid,
+        )
+        if target_row is None or target_row["parent_uuid"] != secret.type_uuid:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "schema_version_does_not_belong_to_type"},
+            )
+
+        await conn.execute(
+            """UPDATE secrets
+               SET encrypted_value = $1,
+                   schema_version_uuid = $2,
+                   generation_version = generation_version + 1,
+                   updated_at = NOW(),
+                   updated_by_user_id = $3
+               WHERE id = $4""",
+            enc_value,
+            req.target_schema_version_uuid,
+            auth.caller_user_id,
+            secret.id,
+        )
+        from app.services.audit import audit_log_insert
+        await audit_log_insert(
+            conn,
+            "secret.schema_migrated",
+            actor_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+            target_wallet_id=wallet_id,
+            target_secret_id=secret.id,
+            metadata={
+                "from_version_uuid": str(secret.schema_version_uuid),
+                "to_version_uuid": str(req.target_schema_version_uuid),
+            },
+        )
+
+    return JSONResponse({"migrated": True})
+
+
+@router.patch("/{name}/assign-type")
+async def assign_type(
+    wallet_id: UUID,
+    name: str,
+    req: AssignTypeRequest,
+    auth: WriteAuth,
+    request: Request,
+) -> JSONResponse:
+    """Assigne un type à un secret legacy. JWT uniquement (pas API key)."""
+    if auth.is_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "jwt_only", "message": "Type assignment requires a JWT token"},
+        )
+
+    import base64 as _b64
+    try:
+        enc_value = _b64.b64decode(req.encrypted_value)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_base64"},
+        ) from exc
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
+        if secret is None:
+            raise HTTPException(status_code=404, detail={"error": "secret_not_found"})
+
+        # Vérifier cohérence type/schema
+        schema_row = await conn.fetchrow(
+            "SELECT parent_uuid FROM secret_schemas WHERE version_uuid = $1",
+            req.schema_version_uuid,
+        )
+        if schema_row is None or schema_row["parent_uuid"] != req.type_uuid:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "schema_version_does_not_belong_to_type"},
+            )
+
+        await conn.execute(
+            """UPDATE secrets
+               SET encrypted_value = $1,
+                   type_uuid = $2,
+                   schema_version_uuid = $3,
+                   generation_version = generation_version + 1,
+                   updated_at = NOW(),
+                   updated_by_user_id = $4
+               WHERE id = $5""",
+            enc_value,
+            req.type_uuid,
+            req.schema_version_uuid,
+            auth.caller_user_id,
+            secret.id,
+        )
+        from app.services.audit import audit_log_insert
+        await audit_log_insert(
+            conn,
+            "secret.type_assigned",
+            actor_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+            target_wallet_id=wallet_id,
+            target_secret_id=secret.id,
+            metadata={
+                "type_uuid": str(req.type_uuid),
+                "schema_version_uuid": str(req.schema_version_uuid),
+            },
+        )
+
+    return JSONResponse({"assigned": True})

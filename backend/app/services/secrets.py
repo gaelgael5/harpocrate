@@ -172,6 +172,8 @@ async def get_secret(
         tags=sorted(secret.tags),
         is_placeholder=secret.is_placeholder,
         generation_version=secret.generation_version,
+        type_uuid=secret.type_uuid,
+        schema_version_uuid=secret.schema_version_uuid,
     )
 
 
@@ -205,6 +207,8 @@ async def create_secret(
                 encrypted_value=enc_value,
                 tags=req.tags,
                 created_by_user_id=caller_user_id,
+                type_uuid=req.type_uuid,
+                schema_version_uuid=req.schema_version_uuid,
             )
             await audit_log_insert(
                 conn,

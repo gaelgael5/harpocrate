@@ -12,6 +12,9 @@ import {
   SnapshotPolicySchema,
   SnapshotHistorySchema,
   TriggerResultSchema,
+  SecretTypeListResponseSchema,
+  SecretTypeDetailSchema,
+  ValidateSchemaResponseSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
@@ -24,6 +27,9 @@ import {
   type SnapshotPolicy,
   type SnapshotHistory,
   type TriggerResult,
+  type SecretTypeListResponse,
+  type SecretTypeDetail,
+  type ValidateSchemaResponse,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -140,4 +146,69 @@ export async function fetchSnapshotHistory(params?: {
   if (params?.limit) q.set('limit', String(params.limit))
   const raw = await api.get<unknown>(`/admin/snapshots/history?${q.toString()}`)
   return SnapshotHistorySchema.parse(raw)
+}
+
+// ─── Secret Types API ─────────────────────────────────────────────────────
+
+export async function fetchSecretTypes(params?: {
+  q?: string
+  include_deprecated?: boolean
+}): Promise<SecretTypeListResponse> {
+  const q = new URLSearchParams()
+  if (params?.q) q.set('q', params.q)
+  if (params?.include_deprecated) q.set('include_deprecated', 'true')
+  const raw = await api.get<unknown>(`/admin/secret-types?${q.toString()}`)
+  return SecretTypeListResponseSchema.parse(raw)
+}
+
+export async function fetchSecretType(typeUuid: string): Promise<SecretTypeDetail> {
+  const raw = await api.get<unknown>(`/admin/secret-types/${typeUuid}`)
+  return SecretTypeDetailSchema.parse(raw)
+}
+
+export async function createSecretType(body: {
+  type: string
+  sous_type: string
+  label?: string
+  description?: string
+  schema_data: Record<string, unknown>
+  schema_ui?: Record<string, unknown>
+  notes?: string
+}): Promise<{ type_uuid: string; version_uuid: string }> {
+  return api.post<{ type_uuid: string; version_uuid: string }>('/admin/secret-types', body)
+}
+
+export async function addSecretTypeVersion(
+  typeUuid: string,
+  body: {
+    schema_data: Record<string, unknown>
+    schema_ui?: Record<string, unknown>
+    notes?: string
+    set_as_current?: boolean
+  }
+): Promise<{ version_uuid: string; version: number }> {
+  return api.post<{ version_uuid: string; version: number }>(
+    `/admin/secret-types/${typeUuid}/schemas`,
+    body
+  )
+}
+
+export async function deleteSecretType(typeUuid: string): Promise<void> {
+  return api.delete<void>(`/admin/secret-types/${typeUuid}`)
+}
+
+export async function deleteSecretTypeVersion(
+  typeUuid: string,
+  versionUuid: string
+): Promise<void> {
+  return api.delete<void>(`/admin/secret-types/${typeUuid}/schemas/${versionUuid}`)
+}
+
+export async function validateJsonSchema(
+  schemaData: Record<string, unknown>
+): Promise<ValidateSchemaResponse> {
+  const raw = await api.post<unknown>('/admin/secret-types/validate-schema', {
+    schema_data: schemaData,
+  })
+  return ValidateSchemaResponseSchema.parse(raw)
 }

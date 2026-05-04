@@ -19,6 +19,7 @@ import { useCryptoStore } from '@/stores/crypto'
 import { useSessionStore } from '@/stores/session'
 import { logout } from '@/lib/oidc'
 import { AppsMenu } from '@/components/AppsMenu'
+import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
 import { useAdminRole } from '@/hooks/useAdminRole'
 
@@ -70,6 +71,7 @@ export function Layout() {
           </Group>
           <Group>
             <AppsMenu />
+            <LocaleSwitcher />
             <ActionIcon
               variant="subtle"
               onClick={() => setColorScheme(isDark ? 'light' : 'dark')}
@@ -140,6 +142,11 @@ export function Layout() {
               component={RouterNavLink}
               to="/admin/snapshots"
               label={t('admin.nav_snapshots')}
+            />
+            <NavLink
+              component={RouterNavLink}
+              to="/admin/secret-types"
+              label={t('admin.nav_secret_types')}
             />
             <NavLink
               component={RouterNavLink}

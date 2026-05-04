@@ -7,19 +7,19 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir \
-    "fastapi>=0.110" \
+    "fastapi>=0.110,<0.116" \
     "uvicorn[standard]>=0.27" \
-    "pydantic>=2.6" \
-    "pydantic-settings>=2.2" \
+    "pydantic>=2.6,<3" \
+    "pydantic-settings>=2.2,<3" \
     "asyncpg>=0.29" \
     "structlog>=24.1" \
     "python-json-logger>=2.0" \
     "httpx>=0.27" \
-    "pyjwt[crypto]>=2.8" \
-    "cryptography>=42.0" \
-    "argon2-cffi>=23.1" \
+    "pyjwt[crypto]>=2.9,<3" \
+    "cryptography>=43,<45" \
+    "argon2-cffi>=23,<25" \
     "boto3>=1.34" \
-    "jsonschema>=4.20"
+    "jsonschema>=4.26,<5"
 
 # Stage dev : bind-mount du code, reload activé
 FROM base AS dev

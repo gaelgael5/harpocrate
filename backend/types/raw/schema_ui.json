@@ -1,0 +1,11 @@
+{
+  "value": {
+    "ui:widget": "password",
+    "ui:options": {
+      "reveal": true,
+      "copyable": true,
+      "rows": 4
+    }
+  },
+  "ui:order": ["value"]
+}

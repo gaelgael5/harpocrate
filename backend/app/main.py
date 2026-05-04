@@ -36,6 +36,7 @@ from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
 from app.core.maintenance import maintenance_state
 from app.db.pool import close_pool, get_pool, init_pool
+from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import wallets as wallets_svc
 
@@ -50,10 +51,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         public_url=settings.public_url,
     )
     await init_pool()
-    # Pré-charge le cache JWKS — best-effort (Keycloak peut être absent en dev)
     await prefetch_jwks()
 
     pool = await get_pool()
+    async with pool.acquire() as conn:
+        await seed_svc.seed_system_types(conn)
     scheduler = sched_svc.init_scheduler(pool)
     try:
         await scheduler.start()

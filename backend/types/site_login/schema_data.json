@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Web Login",
+  "description": "Identifiants de connexion à un site web ou service en ligne.",
+  "properties": {
+    "email": {
+      "type": "string",
+      "title": "Email",
+      "format": "email"
+    },
+    "username": {
+      "type": "string",
+      "title": "Nom d'utilisateur"
+    },
+    "password": {
+      "type": "string",
+      "title": "Mot de passe",
+      "minLength": 1
+    },
+    "website": {
+      "type": "string",
+      "title": "Site web",
+      "format": "uri"
+    },
+    "note": {
+      "type": "string",
+      "title": "Note"
+    }
+  },
+  "required": ["password"],
+  "additionalProperties": false
+}

@@ -42,6 +42,9 @@ scp "${REPO_ROOT}/deploy/docker-compose.yml"       "${PVE_HOST}:${TMPDIR_PVE}/do
 scp "${REPO_ROOT}/deploy/.env.example"            "${PVE_HOST}:${TMPDIR_PVE}/.env.example"
 scp "${REPO_ROOT}/db/init/01-extensions.sql"      "${PVE_HOST}:${TMPDIR_PVE}/db/init/01-extensions.sql"
 scp "${REPO_ROOT}/scripts/refresh.sh"             "${PVE_HOST}:${TMPDIR_PVE}/refresh.sh"
+if [ -d "${REPO_ROOT}/types" ]; then
+    scp -r "${REPO_ROOT}/types" "${PVE_HOST}:${TMPDIR_PVE}/types"
+fi
 if [ -f "${REPO_ROOT}/.env" ]; then
     scp "${REPO_ROOT}/.env" "${PVE_HOST}:${TMPDIR_PVE}/.env"
     HAS_ENV=1
@@ -56,6 +59,20 @@ ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/.env.example          ${REMOTE
 ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/db/init/01-extensions.sql ${REMOTE_DIR}/db/init/01-extensions.sql"
 ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/refresh.sh            ${REMOTE_DIR}/refresh.sh"
 ssh "${PVE_HOST}" "pct exec ${CTID} -- chmod +x ${REMOTE_DIR}/refresh.sh"
+if [ -d "${TMPDIR_PVE}/types" ] 2>/dev/null || ssh "${PVE_HOST}" "[ -d '${TMPDIR_PVE}/types' ]" 2>/dev/null; then
+    echo "  -> Deploiement des types de secrets..."
+    for TYPE_DIR in raw site_login; do
+        ssh "${PVE_HOST}" "pct exec ${CTID} -- mkdir -p ${REMOTE_DIR}/types/${TYPE_DIR}"
+        for FNAME in meta.json schema_data.json schema_ui.json; do
+            SRC="${TMPDIR_PVE}/types/${TYPE_DIR}/${FNAME}"
+            DEST="${REMOTE_DIR}/types/${TYPE_DIR}/${FNAME}"
+            if ssh "${PVE_HOST}" "[ -f '${SRC}' ]" 2>/dev/null; then
+                ssh "${PVE_HOST}" "pct push ${CTID} ${SRC} ${DEST}"
+                echo "    -> types/${TYPE_DIR}/${FNAME}"
+            fi
+        done
+    done
+fi
 if [ "${HAS_ENV}" = "1" ]; then
     ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/.env ${REMOTE_DIR}/.env"
     echo "  -> .env local pousse"

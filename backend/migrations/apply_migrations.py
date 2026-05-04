@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 from pathlib import Path
 
 import asyncpg
 
 from app.core.config import settings
+
+_log = logging.getLogger(__name__)
 
 
 def _migrations_dir() -> Path:
@@ -48,7 +51,7 @@ async def apply_migrations() -> None:
                     )
                 continue
 
-            print(f"Applying {migration.name}...")
+            _log.info("migration_applying", extra={"migration": migration.name})
             async with conn.transaction():
                 await conn.execute(content)
                 await conn.execute(
@@ -57,8 +60,9 @@ async def apply_migrations() -> None:
                     migration.name,
                     checksum,
                 )
+            _log.info("migration_applied", extra={"migration": migration.name})
 
-        print("Migrations up to date.")
+        _log.info("migrations_up_to_date")
     finally:
         await conn.close()
 

@@ -46,6 +46,7 @@ services:
     volumes:
       - ./apps.json:/app/apps.json:ro
       - ./releases:/app/releases:ro
+      - ./types:/app/types:ro
 
   frontend:
     image: ghcr.io/gaelgael5/harpocrate-frontend:${TAG:-latest}

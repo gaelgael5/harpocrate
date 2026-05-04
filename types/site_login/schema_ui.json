@@ -1,0 +1,31 @@
+{
+  "ui:order": ["email", "username", "password", "website", "note"],
+  "email": {
+    "ui:options": {
+      "copyable": true
+    }
+  },
+  "username": {
+    "ui:options": {
+      "copyable": true
+    }
+  },
+  "password": {
+    "ui:widget": "password",
+    "ui:options": {
+      "reveal": true,
+      "copyable": true
+    }
+  },
+  "website": {
+    "ui:options": {
+      "linkable": true
+    }
+  },
+  "note": {
+    "ui:widget": "textarea",
+    "ui:options": {
+      "rows": 4
+    }
+  }
+}

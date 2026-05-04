@@ -1,0 +1,16 @@
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Raw",
+  "description": "Valeur libre — clé API, token, mot de passe, chaîne de connexion, ou tout texte sensible.",
+  "properties": {
+    "value": {
+      "type": "string",
+      "title": "Valeur",
+      "minLength": 1
+    }
+  },
+  "required": ["value"],
+  "additionalProperties": false
+}

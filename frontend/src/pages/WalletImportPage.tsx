@@ -197,7 +197,7 @@ export function WalletImportPage() {
                           {t('wallets.import.placeholder')}
                         </Badge>
                       ) : (
-                        <Badge color="blue" size="xs">
+                        <Badge color="brand" size="xs">
                           {t('wallets.import.hasValue')}
                         </Badge>
                       )}

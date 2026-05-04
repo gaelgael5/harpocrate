@@ -424,7 +424,7 @@ export function AdminBackupsPage() {
                     <Button
                       size="xs"
                       variant="outline"
-                      color="blue"
+                      color="brand"
                       loading={pushS3Mut.isPending}
                       onClick={() => pushS3Mut.mutate(b.id)}
                     >

@@ -133,7 +133,7 @@ export function AdminSecretTypeDetailPage() {
               >
                 <Table.Td>
                   <Group gap="xs">
-                    <Badge color="blue">{t('secret_types.versionN', { n: v.version })}</Badge>
+                    <Badge color="brand">{t('secret_types.versionN', { n: v.version })}</Badge>
                     {isCurrentVersion(v as SchemaVersionFullLocal) && (
                       <Badge color="green" size="xs">{t('secret_types.currentBadge')}</Badge>
                     )}

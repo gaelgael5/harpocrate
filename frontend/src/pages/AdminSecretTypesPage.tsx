@@ -108,7 +108,7 @@ export function AdminSecretTypesPage() {
                 </Table.Td>
                 <Table.Td>
                   {st.current_version ? (
-                    <Badge color="blue" size="sm">
+                    <Badge color="brand" size="sm">
                       {t('secret_types.currentVersion', { version: st.current_version.version })}
                     </Badge>
                   ) : (

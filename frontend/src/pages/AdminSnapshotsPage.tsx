@@ -268,7 +268,7 @@ export function AdminSnapshotsPage() {
                   <Table.Td>
                     <Badge color={
                       s.tier === 'yearly' ? 'violet'
-                      : s.tier === 'monthly' ? 'blue'
+                      : s.tier === 'monthly' ? 'brand'
                       : s.tier === 'weekly' ? 'teal'
                       : s.tier === 'daily' ? 'green'
                       : 'gray'

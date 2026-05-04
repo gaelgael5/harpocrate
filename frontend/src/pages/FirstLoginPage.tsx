@@ -13,12 +13,12 @@ import { useNavigate } from 'react-router-dom'
 import {
   Center,
   Stack,
-  Title,
   Text,
   Button,
   Stepper,
   Alert,
   PasswordInput,
+  Box,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
@@ -254,11 +254,28 @@ export function FirstLoginPage() {
   }
 
   return (
-    <Center mih="100vh" py="xl">
+    <Center mih="100vh" py="xl" style={{ background: 'var(--mantine-color-body)' }}>
       <Stack w={600} gap="xl">
         <Stack align="center" gap="xs">
-          <Title order={2}>{t('firstLogin.title')}</Title>
-          <Text c="dimmed">{t('firstLogin.subtitle')}</Text>
+          <Box
+            style={{
+              width: 40, height: 40, background: '#1e40af', borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem',
+              color: '#fff', letterSpacing: '-0.04em',
+            }}
+          >
+            Hp
+          </Box>
+          <Text
+            style={{
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontSize: '1.6rem', fontWeight: 400, color: '#0a0a0a',
+            }}
+          >
+            {t('firstLogin.title')}
+          </Text>
+          <Text c="dimmed" size="sm">{t('firstLogin.subtitle')}</Text>
         </Stack>
 
         <Stepper active={step} allowNextStepsSelect={false}>
@@ -314,7 +331,7 @@ export function FirstLoginPage() {
         </Stepper>
 
         {isWorking && statusMsg && (
-          <Alert color="blue">{statusMsg}</Alert>
+          <Alert color="brand" variant="light">{statusMsg}</Alert>
         )}
       </Stack>
     </Center>

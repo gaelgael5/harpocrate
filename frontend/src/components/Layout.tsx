@@ -1,6 +1,3 @@
-/**
- * Main application layout with navbar and outlet.
- */
 import {
   AppShell,
   Burger,
@@ -22,6 +19,7 @@ import { AppsMenu } from '@/components/AppsMenu'
 import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
 import { useAdminRole } from '@/hooks/useAdminRole'
+import styles from './Layout.module.css'
 
 export function Layout() {
   const { t } = useTranslation()
@@ -43,10 +41,6 @@ export function Layout() {
   }
 
   const isAdmin = useAdminRole()
-
-  // Quand le bandeau dev est actif, on decale le header AppShell + on retire la
-  // hauteur du bandeau de la viewport disponible. Le bandeau lui-meme est rendu
-  // au niveau App.tsx en position fixed top:0.
   const devMode = useDevMode()
   const offset = devMode.enabled ? DEV_BANNER_HEIGHT : 0
 
@@ -56,33 +50,38 @@ export function Layout() {
 
   return (
     <AppShell
-      header={{ height: 60 }}
+      header={{ height: 56 }}
       navbar={{ width: 220, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
       style={{ paddingTop: offset }}
     >
-      <AppShell.Header style={{ top: offset, height: 60 }}>
+      <AppShell.Header className={styles.header} style={{ top: offset, height: 56 }}>
         <Group h="100%" px="md" justify="space-between">
-          <Group>
+          <Group gap="sm">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <Text fw={700} size="lg">
+            <RouterNavLink to="/wallets" className={styles.logo}>
+              <span className={styles.logoMark}>Hp</span>
               Harpocrate
-            </Text>
+            </RouterNavLink>
           </Group>
-          <Group>
+          <Group gap={4}>
             <AppsMenu />
             <LocaleSwitcher />
             <ActionIcon
               variant="subtle"
+              color="gray"
               onClick={() => setColorScheme(isDark ? 'light' : 'dark')}
               title={isDark ? t('nav.theme_light') : t('nav.theme_dark')}
+              size="sm"
             >
               {isDark ? '☀️' : '🌙'}
             </ActionIcon>
             <ActionIcon
               variant="subtle"
+              color="gray"
               onClick={() => void handleLock()}
               title={t('nav.lock')}
+              size="sm"
             >
               🔒
             </ActionIcon>
@@ -91,6 +90,7 @@ export function Layout() {
               color="red"
               onClick={() => void handleLogout()}
               title={t('common.logout')}
+              size="sm"
             >
               ⏻
             </ActionIcon>
@@ -98,27 +98,11 @@ export function Layout() {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="xs" style={{ top: offset + 60 }}>
-        <NavLink
-          component={RouterNavLink}
-          to="/wallets"
-          label={t('nav.wallets')}
-        />
-        <NavLink
-          component={RouterNavLink}
-          to="/audit"
-          label={t('nav.audit')}
-        />
-        <NavLink
-          component={RouterNavLink}
-          to="/account"
-          label={t('nav.account')}
-        />
-        <NavLink
-          component={RouterNavLink}
-          to="/integration"
-          label={t('nav.integration')}
-        />
+      <AppShell.Navbar className={styles.navbar} style={{ top: offset + 56 }}>
+        <NavLink component={RouterNavLink} to="/wallets"     label={t('nav.wallets')} />
+        <NavLink component={RouterNavLink} to="/audit"       label={t('nav.audit')} />
+        <NavLink component={RouterNavLink} to="/account"     label={t('nav.account')} />
+        <NavLink component={RouterNavLink} to="/integration" label={t('nav.integration')} />
         <NavLink
           component="a"
           href="/v1/api-docs"
@@ -126,44 +110,19 @@ export function Layout() {
           rel="noopener noreferrer"
           label={t('nav.api_docs')}
         />
-        <NavLink
-          component={RouterNavLink}
-          to="/export-all"
-          label={t('nav.export_all')}
-        />
+        <NavLink component={RouterNavLink} to="/export-all"  label={t('nav.export_all')} />
+
         {isAdmin && (
-          <NavLink label={t('nav.admin')} childrenOffset={12} defaultOpened>
-            <NavLink
-              component={RouterNavLink}
-              to="/admin/backups"
-              label={t('admin.nav_backups')}
-            />
-            <NavLink
-              component={RouterNavLink}
-              to="/admin/snapshots"
-              label={t('admin.nav_snapshots')}
-            />
-            <NavLink
-              component={RouterNavLink}
-              to="/admin/secret-types"
-              label={t('admin.nav_secret_types')}
-            />
-            <NavLink
-              component={RouterNavLink}
-              to="/admin/users"
-              label={t('admin.nav_users')}
-            />
-            <NavLink
-              component={RouterNavLink}
-              to="/admin/system"
-              label={t('admin.nav_system')}
-            />
-            <NavLink
-              component={RouterNavLink}
-              to="/admin/env"
-              label={t('admin.nav_env')}
-            />
-          </NavLink>
+          <>
+            <div className={styles.divider} />
+            <Text className={styles.sectionLabel}>Administration</Text>
+            <NavLink component={RouterNavLink} to="/admin/backups"      label={t('admin.nav_backups')} />
+            <NavLink component={RouterNavLink} to="/admin/snapshots"    label={t('admin.nav_snapshots')} />
+            <NavLink component={RouterNavLink} to="/admin/secret-types" label={t('admin.nav_secret_types')} />
+            <NavLink component={RouterNavLink} to="/admin/users"        label={t('admin.nav_users')} />
+            <NavLink component={RouterNavLink} to="/admin/system"       label={t('admin.nav_system')} />
+            <NavLink component={RouterNavLink} to="/admin/env"          label={t('admin.nav_env')} />
+          </>
         )}
       </AppShell.Navbar>
 

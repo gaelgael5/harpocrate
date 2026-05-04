@@ -1,24 +1,16 @@
-/**
- * Login page — checks /v1/me and routes appropriately:
- * - 401 (no session): show login tabs (Keycloak + Local admin if enabled)
- * - 404 first_login: redirect to /first-login
- * - 200: redirect to /unlock (or / if already unlocked)
- *
- * The "Local admin" tab is shown only when GET /v1/config/auth-modes
- * returns local_login=true.
- */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Center,
   Stack,
-  Title,
   Text,
   Button,
   Loader,
   Tabs,
   TextInput,
   PasswordInput,
+  Alert,
+  Box,
 } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 
@@ -42,7 +34,6 @@ export function LoginPage() {
   const [state, setState] = useState<State>('loading')
   const [loginError, setLoginError] = useState<string | null>(null)
 
-  // Local admin form state
   const [localUsername, setLocalUsername] = useState('')
   const [localPassword, setLocalPassword] = useState('')
   const [localSubmitting, setLocalSubmitting] = useState(false)
@@ -50,27 +41,17 @@ export function LoginPage() {
 
   const { localLoginAvailable } = useLocalLoginAvailable()
 
-  // ─── Probe existing session ────────────────────────────────────────────────
-
   useEffect(() => {
     let cancelled = false
-
     async function probe() {
       try {
-        // Check if we have a valid OIDC session first
         const mgr = getUserManager()
         const user = await mgr.getUser()
-
-        if (!user || user.expired) {
-          // Check for local admin token
-          const localToken = useSessionStore.getState().localAdminToken
-          if (!localToken) {
-            if (!cancelled) setState('show-login')
-            return
-          }
+        const localToken = useSessionStore.getState().localAdminToken
+        if ((!user || user.expired) && !localToken) {
+          if (!cancelled) setState('show-login')
+          return
         }
-
-        // We have a session — check if bootstrapped
         const me = await api.get<unknown>('/me')
         const parsed = MeResponseSchema.parse(me)
         setUser({
@@ -82,53 +63,31 @@ export function LoginPage() {
           rsa_key_size: parsed.rsa_key_size,
           kdf_params: parsed.kdf_params,
         })
-
         if (!cancelled) {
           setState('redirecting')
           navigate(isUnlocked ? '/' : '/unlock', { replace: true })
         }
       } catch (err) {
         if (cancelled) return
-
         if (err instanceof ApiError) {
-          if (err.isFirstLogin) {
-            setState('redirecting')
-            navigate('/first-login', { replace: true })
-            return
-          }
-          if (err.isUnauthorized) {
-            setState('show-login')
-            return
-          }
+          if (err.isFirstLogin) { setState('redirecting'); navigate('/first-login', { replace: true }); return }
+          if (err.isUnauthorized) { setState('show-login'); return }
         }
         setState('show-login')
         setLoginError(String(err))
       }
     }
-
     void probe()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [navigate, setUser, isUnlocked])
-
-  // ─── Local admin submit ────────────────────────────────────────────────────
 
   async function handleLocalSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLocalError(null)
     setLocalSubmitting(true)
-
     try {
       const resp = await localLogin(localUsername, localPassword)
-
-      // Stocke le token dans le store (persist sessionStorage). Le tokenProvider
-      // configure par initOidc lit deja useSessionStore.getState().localAdminToken
-      // en fallback — l'override permanent ici creait un trou si initOidc etait
-      // rappele lors d'un re-render (la closure capturant resp etait perdue).
       setLocalAdminToken(resp.access_token)
-
-      // Check /me to determine next route
       const me = await api.get<unknown>('/me')
       const parsed = MeResponseSchema.parse(me)
       setUser({
@@ -154,86 +113,103 @@ export function LoginPage() {
     }
   }
 
-  // ─── Render ────────────────────────────────────────────────────────────────
-
   if (state === 'loading' || state === 'redirecting') {
     return (
-      <Center h="100vh">
-        <Loader size="xl" />
+      <Center h="100vh" style={{ background: 'var(--mantine-color-body)' }}>
+        <Loader size="lg" color="brand" />
       </Center>
     )
   }
 
   return (
-    <Center h="100vh">
-      <Stack align="center" gap="xl" w={360}>
-        <Stack align="center" gap="xs">
-          <Title order={1}>Harpocrate</Title>
-          <Text c="dimmed" size="lg">
-            {t('unlock.subtitle')}
+    <Center h="100vh" style={{ background: 'var(--mantine-color-body)' }}>
+      <Stack w={380} gap={0}>
+        {/* Header */}
+        <Box style={{ borderBottom: '1px solid #dedad2', paddingBottom: '1.75rem', marginBottom: '1.75rem', textAlign: 'center' }}>
+          <Box
+            style={{
+              width: 40, height: 40, background: '#1e40af', borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 1.2rem',
+              fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem',
+              color: '#fff', letterSpacing: '-0.04em',
+            }}
+          >
+            Hp
+          </Box>
+          <Text
+            style={{
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontSize: '1.75rem', fontWeight: 400, lineHeight: 1.2,
+              color: '#0a0a0a', marginBottom: '0.4rem',
+            }}
+          >
+            Harpocrate
           </Text>
-        </Stack>
+          <Text size="sm" c="dimmed">{t('unlock.subtitle')}</Text>
+        </Box>
 
-        {loginError && (
-          <Text c="red" size="sm">
-            {loginError}
-          </Text>
-        )}
+        {/* Form */}
+        <Stack gap="md">
+          {loginError && (
+            <Alert color="red" variant="light">{loginError}</Alert>
+          )}
 
-        {localLoginAvailable ? (
-          <Tabs defaultValue="keycloak" w="100%">
-            <Tabs.List>
-              <Tabs.Tab value="keycloak">Keycloak</Tabs.Tab>
-              <Tabs.Tab value="local">{t('auth.local_login.tab')}</Tabs.Tab>
-            </Tabs.List>
+          {localLoginAvailable ? (
+            <Tabs defaultValue="keycloak" color="brand">
+              <Tabs.List>
+                <Tabs.Tab value="keycloak">Keycloak</Tabs.Tab>
+                <Tabs.Tab value="local">{t('auth.local_login.tab')}</Tabs.Tab>
+              </Tabs.List>
 
-            <Tabs.Panel value="keycloak" pt="md">
-              <Stack align="center">
-                <Button size="lg" fullWidth onClick={() => void startLogin()}>
+              <Tabs.Panel value="keycloak" pt="md">
+                <Button fullWidth color="brand" onClick={() => void startLogin()}>
                   {t('auth.loginWithKeycloak')}
                 </Button>
-              </Stack>
-            </Tabs.Panel>
+              </Tabs.Panel>
 
-            <Tabs.Panel value="local" pt="md">
-              <form onSubmit={(e) => void handleLocalSubmit(e)}>
-                <Stack gap="sm">
-                  <TextInput
-                    label={t('auth.local_login.username')}
-                    value={localUsername}
-                    onChange={(e) => setLocalUsername(e.currentTarget.value)}
-                    required
-                    data-testid="local-username"
-                  />
-                  <PasswordInput
-                    label={t('auth.local_login.password')}
-                    value={localPassword}
-                    onChange={(e) => setLocalPassword(e.currentTarget.value)}
-                    required
-                    data-testid="local-password"
-                  />
-                  {localError && (
-                    <Text c="red" size="sm" data-testid="local-error">
-                      {localError}
-                    </Text>
-                  )}
-                  <Button
-                    type="submit"
-                    fullWidth
-                    loading={localSubmitting}
-                    data-testid="local-submit"
-                  >
-                    {t('auth.local_login.submit')}
-                  </Button>
-                </Stack>
-              </form>
-            </Tabs.Panel>
-          </Tabs>
-        ) : (
-          <Button size="lg" onClick={() => void startLogin()}>
-            {t('auth.loginWithKeycloak')}
-          </Button>
-        )}
+              <Tabs.Panel value="local" pt="md">
+                <form onSubmit={(e) => void handleLocalSubmit(e)}>
+                  <Stack gap="sm">
+                    <TextInput
+                      label={t('auth.local_login.username')}
+                      value={localUsername}
+                      onChange={(e) => setLocalUsername(e.currentTarget.value)}
+                      required
+                      data-testid="local-username"
+                    />
+                    <PasswordInput
+                      label={t('auth.local_login.password')}
+                      value={localPassword}
+                      onChange={(e) => setLocalPassword(e.currentTarget.value)}
+                      required
+                      data-testid="local-password"
+                    />
+                    {localError && (
+                      <Alert color="red" variant="light" data-testid="local-error">
+                        {localError}
+                      </Alert>
+                    )}
+                    <Button type="submit" fullWidth color="brand" loading={localSubmitting} data-testid="local-submit">
+                      {t('auth.local_login.submit')}
+                    </Button>
+                  </Stack>
+                </form>
+              </Tabs.Panel>
+            </Tabs>
+          ) : (
+            <Button fullWidth color="brand" onClick={() => void startLogin()}>
+              {t('auth.loginWithKeycloak')}
+            </Button>
+          )}
+        </Stack>
+
+        <Text
+          mt="xl" ta="center"
+          style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem', letterSpacing: '0.06em', color: 'rgba(10,10,10,0.3)' }}
+        >
+          AES-256-GCM · Argon2id · RSA-4096
+        </Text>
       </Stack>
     </Center>
   )

@@ -17,7 +17,9 @@ RUN pip install --no-cache-dir --upgrade pip \
     "httpx>=0.27" \
     "pyjwt[crypto]>=2.8" \
     "cryptography>=42.0" \
-    "argon2-cffi>=23.1"
+    "argon2-cffi>=23.1" \
+    "boto3>=1.34" \
+    "jsonschema>=4.20"
 
 # Stage dev : bind-mount du code, reload activé
 FROM base AS dev

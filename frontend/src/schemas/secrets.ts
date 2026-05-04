@@ -84,3 +84,4 @@ export const PlaceholderCreateRequestSchema = z.object({
 
 export type SecretListItem = z.infer<typeof SecretListItemSchema>
 export type SecretDetailResponse = z.infer<typeof SecretDetailResponseSchema>
+

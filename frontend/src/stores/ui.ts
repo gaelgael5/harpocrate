@@ -13,3 +13,4 @@ export const useUiStore = create<UiState>()((set) => ({
   isGlobalLoading: false,
   setGlobalLoading: (v) => set({ isGlobalLoading: v }),
 }))
+

@@ -3,6 +3,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Center, Loader } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
 
@@ -59,7 +60,8 @@ function ContentWithBannerOffset({ children }: { children: ReactNode }) {
 
 export default function App() {
   const { t } = useTranslation()
-  const [oidcReady, setOidcReady] = useState(false)
+  // null = config fetch en cours, true = prêt, false = échec ou Keycloak indispo
+  const [oidcReady, setOidcReady] = useState<boolean | null>(null)
   const lock = useCryptoStore((s) => s.lock)
   const clearUser = useSessionStore((s) => s.clearUser)
 
@@ -73,6 +75,7 @@ export default function App() {
         setOidcReady(true)
       })
       .catch((err: unknown) => {
+        setOidcReady(false)
         notifications.show({
           color: 'red',
           title: t('common.error'),
@@ -81,6 +84,20 @@ export default function App() {
       })
   }, [t])
 
+  // Pendant le fetch de /config/keycloak : loader sans catch-all pour ne pas
+  // écraser l'URL /oauth-callback que Keycloak vient de nous envoyer.
+  if (oidcReady === null) {
+    return (
+      <BrowserRouter>
+        <DevModeBanner />
+        <Center h="100vh">
+          <Loader size="lg" />
+        </Center>
+      </BrowserRouter>
+    )
+  }
+
+  // Keycloak indispo ou non configuré : landing + redirect catch-all.
   if (!oidcReady) {
     return (
       <BrowserRouter>

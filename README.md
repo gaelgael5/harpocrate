@@ -88,6 +88,66 @@ https://your ip :8443/
 
 ---
 
+## Configuration Keycloak (OIDC)
+
+L'application utilise un **client public PKCE** — pas de client secret (le code tourne dans le navigateur).
+
+### 1. Créer le client
+
+Dans **Clients → Create client** :
+
+| Champ | Valeur |
+|---|---|
+| Client type | OpenID Connect |
+| Client ID | `harpocrate-vault` |
+| Client authentication | **OFF** (client public) |
+| Standard flow | ON |
+| Direct access grants | OFF |
+
+Onglet **Settings** du client :
+
+| Champ | Valeur |
+|---|---|
+| Valid redirect URIs | `https://vault.yoops.org/oauth-callback` |
+| Valid post logout redirect URIs | `https://vault.yoops.org/` |
+| Web origins | `https://vault.yoops.org` |
+
+### 2. Créer le rôle realm admin
+
+**Realm roles → Create role** : `harpocrate-admin`
+
+Assigner ce rôle aux utilisateurs qui doivent avoir accès aux écrans d'administration (**User → Role mapping → Assign role → Filter by realm roles → `harpocrate-admin`**).
+
+### 3. Vérifier les client scopes
+
+Dans le client, onglet **Client scopes** : s'assurer que `email` et `profile` sont présents dans les scopes assignés (c'est le cas par défaut).
+
+### 4. Configurer `.env`
+
+```env
+HARPOCRATE_KEYCLOAK_URL=https://security.yoops.org
+HARPOCRATE_KEYCLOAK_REALM=yoops
+HARPOCRATE_KEYCLOAK_CLIENT_ID=harpocrate-vault
+HARPOCRATE_PUBLIC_URL=https://vault.yoops.org
+```
+
+### 5. Vérifier l'intégration
+
+```bash
+curl https://vault-api.yoops.org/v1/config/keycloak
+```
+
+Réponse attendue :
+```json
+{
+  "realm": "yoops",
+  "client_id": "harpocrate-vault",
+  "issuer": "https://security.yoops.org/realms/yoops"
+}
+```
+
+---
+
 ## Mise à jour
 
 ```bash

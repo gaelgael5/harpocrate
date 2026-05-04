@@ -45,6 +45,7 @@ import { ExportAllPage } from '@/pages/ExportAllPage'
 import { AdminEnvPage } from '@/pages/AdminEnvPage'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import { LandingPage } from '@/pages/LandingPage'
+import { ApiDocsPage } from '@/pages/ApiDocsPage'
 
 /** Wrapper qui pousse tout le contenu sous le bandeau dev (s'il est actif). */
 function ContentWithBannerOffset({ children }: { children: ReactNode }) {
@@ -114,6 +115,8 @@ export default function App() {
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
           <Route path="/first-login" element={<FirstLoginPage />} />
           <Route path="/unlock" element={<UnlockPage />} />
+          <Route path="/integration" element={<IntegrationPage />} />
+          <Route path="/integration/api-docs" element={<ApiDocsPage />} />
 
           {/* Protected routes — require OIDC + vault unlocked */}
           <Route
@@ -145,7 +148,6 @@ export default function App() {
             />
             <Route path="/audit" element={<AuditLogPage />} />
             <Route path="/account" element={<AccountPage />} />
-            <Route path="/integration" element={<IntegrationPage />} />
             <Route path="/admin/backups" element={<AdminBackupsPage />} />
             <Route path="/admin/snapshots" element={<AdminSnapshotsPage />} />
             <Route path="/admin/secret-types" element={<AdminSecretTypesPage />} />

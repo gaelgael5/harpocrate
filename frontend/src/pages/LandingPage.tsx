@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useSessionStore } from '@/stores/session'
+import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
 import styles from './LandingPage.module.css'
 
 function CipherRing() {
@@ -80,6 +81,7 @@ const FEATURES = [
     name: 'Zero Knowledge',
     desc: 'Encryption happens in your browser via WebCrypto API and Argon2id. The server stores only ciphertext — your secrets are mathematically inaccessible to us.',
     tag: 'AES-256-GCM · RSA-OAEP · Argon2id',
+    href: undefined as string | undefined,
   },
   {
     n: '02',
@@ -92,6 +94,7 @@ const FEATURES = [
     name: 'Developer First',
     desc: 'Native CLI, Python SDK, and REST API with bearer tokens. Pull secrets directly into CI pipelines without storing credentials in environment files.',
     tag: 'hrpv_* tokens · Python · bash',
+    href: '/integration',
   },
   {
     n: '03',
@@ -107,6 +110,7 @@ const FEATURES = [
     name: 'Audit Everything',
     desc: 'Immutable audit log streams every read, write, grant, and revocation to Loki. Know exactly who accessed what, from which IP, at what time.',
     tag: 'Loki · Grafana · structured logs',
+    href: undefined as string | undefined,
   },
 ]
 
@@ -134,6 +138,8 @@ const STEPS = [
 export function LandingPage() {
   const navigate = useNavigate()
   const user = useSessionStore((s) => s.user)
+  const { enabled: devMode } = useDevMode()
+  const bannerOffset = devMode ? DEV_BANNER_HEIGHT : 0
 
   useEffect(() => {
     if (user) navigate('/wallets', { replace: true })
@@ -142,7 +148,7 @@ export function LandingPage() {
   return (
     <div className={styles.root}>
       {/* Nav */}
-      <nav className={styles.nav}>
+      <nav className={styles.nav} style={{ top: bannerOffset }}>
         <Link to="/" className={styles.navLogo}>
           <span className={styles.navLogoMark}>Hp</span>
           Harpocrate
@@ -156,7 +162,7 @@ export function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className={styles.hero}>
+      <section className={styles.hero} style={{ paddingTop: 80 + bannerOffset }}>
         <div className={styles.heroContent}>
           <div className={styles.heroBadge}>
             <span className={styles.heroBadgeDot} />
@@ -216,6 +222,11 @@ export function LandingPage() {
               <h3 className={styles.featureName}>{f.name}</h3>
               <p className={styles.featureDesc}>{f.desc}</p>
               <span className={styles.featureTag}>{f.tag}</span>
+              {f.href && (
+                <Link to={f.href} className={styles.featureLink}>
+                  SDK &amp; API docs →
+                </Link>
+              )}
             </div>
           ))}
         </div>

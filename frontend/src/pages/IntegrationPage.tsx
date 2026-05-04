@@ -10,15 +10,17 @@ import {
   Divider,
   Code,
   Alert,
-  Anchor,
   SimpleGrid,
   ThemeIcon,
   Box,
+  Container,
 } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { z } from 'zod'
 
 import { api } from '@/lib/api-client'
+import { useSessionStore } from '@/stores/session'
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -101,10 +103,57 @@ function CodeBlock({ children }: { children: string }) {
   )
 }
 
+// ─── Public nav ──────────────────────────────────────────────────────────────
+
+function PublicNav({ isAuthenticated }: { isAuthenticated: boolean }) {
+  return (
+    <Box
+      component="nav"
+      style={{
+        position: 'sticky', top: 0, zIndex: 100,
+        background: 'rgba(248,247,244,0.95)', backdropFilter: 'blur(8px)',
+        borderBottom: '1px solid rgba(30,64,175,0.1)',
+        padding: '0 5vw', height: 52,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}
+    >
+      <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Box style={{
+          width: 28, height: 28, background: '#1e40af', borderRadius: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: "'JetBrains Mono', monospace", fontSize: '0.6rem',
+          color: '#fff', letterSpacing: '-0.04em', flexShrink: 0,
+        }}>
+          Hp
+        </Box>
+        <Text style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: '1rem', color: '#0a0a0a' }}>
+          Harpocrate
+        </Text>
+      </Link>
+
+      <Group gap="md">
+        <Link to="/integration/api-docs" style={{
+          textDecoration: 'none', fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '0.68rem', color: 'rgba(10,10,10,0.55)', letterSpacing: '0.04em',
+        }}>
+          API Docs
+        </Link>
+        <Link to={isAuthenticated ? '/wallets' : '/login'} style={{
+          textDecoration: 'none', fontFamily: "'JetBrains Mono', monospace",
+          fontSize: '0.68rem', color: '#1e40af', letterSpacing: '0.04em',
+        }}>
+          {isAuthenticated ? '← Dashboard' : 'Open vault →'}
+        </Link>
+      </Group>
+    </Box>
+  )
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export function IntegrationPage() {
   const { t } = useTranslation()
+  const user = useSessionStore((s) => s.user)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['sdk-manifest'],
@@ -117,6 +166,9 @@ export function IntegrationPage() {
   const artifacts = data?.artifacts ?? []
 
   return (
+    <Box style={{ background: 'var(--mantine-color-body)', minHeight: '100vh' }}>
+      <PublicNav isAuthenticated={!!user} />
+    <Container size="lg" py="xl">
     <Stack gap="xl" maw={860}>
       <div>
         <Title order={2} mb="xs">
@@ -258,10 +310,12 @@ echo "Secret prêt : \${SECRET:0:4}..."`}
       {/* API reference link */}
       <Group>
         <Text c="dimmed">{t('integration.apiDocsHint')}</Text>
-        <Anchor href="/v1/api-docs" target="_blank" rel="noopener noreferrer">
-          {t('integration.apiDocsLink')}
-        </Anchor>
+        <Link to="/integration/api-docs" style={{ color: '#1e40af', textDecoration: 'none', fontWeight: 500 }}>
+          {t('integration.apiDocsLink')} →
+        </Link>
       </Group>
     </Stack>
+    </Container>
+    </Box>
   )
 }

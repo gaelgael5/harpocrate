@@ -17,7 +17,6 @@ from app.models.api.wallets import (
     TransferOwnershipRequest,
     WalletCreateRequest,
     WalletCreateResponse,
-    WalletDeleteRequest,
     WalletItem,
     WalletListResponse,
     WalletPatchRequest,
@@ -48,6 +47,7 @@ def _wallet_item(w: WalletWithGrant, caller_user_id: UUID) -> WalletItem:
         placeholder_secrets_count=w.placeholder_secrets_count,
         created_at=w.created_at,
         updated_at=w.updated_at,
+        deleted_at=w.deleted_at,
     )
 
 
@@ -80,7 +80,7 @@ async def list_wallets(
                 content={"error": "first_login", "message": "User must bootstrap first"},
             )
 
-        wallets, next_cursor = await wallets_svc.list_wallets(
+        wallets, next_cursor, deleted_wallets = await wallets_svc.list_wallets(
             conn,
             caller_user_id=user.id,
             limit=limit,
@@ -90,11 +90,13 @@ async def list_wallets(
         )
 
     items = [_wallet_item(w, user.id) for w in wallets]
+    deleted_items = [_wallet_item(w, user.id) for w in deleted_wallets]
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content=WalletListResponse(
             wallets=items,
             next_cursor=next_cursor,
+            deleted_wallets=deleted_items,
         ).model_dump(mode="json"),
     )
 
@@ -201,11 +203,10 @@ async def patch_wallet(
 @router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_wallet(
     wallet_id: UUID,
-    req: WalletDeleteRequest,
     current_user: JwtUser,
     request: Request,
 ) -> JSONResponse:
-    """Hard-delete avec confirmation par nom exact."""
+    """Suppression logique du wallet. Purge physique automatique 24h après."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
@@ -218,7 +219,32 @@ async def delete_wallet(
         await wallets_svc.delete_wallet(
             conn,
             wallet_id=wallet_id,
-            confirmation=req.confirmation,
+            caller_user_id=user.id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+
+
+@router.post("/{wallet_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+async def restore_wallet(
+    wallet_id: UUID,
+    current_user: JwtUser,
+    request: Request,
+) -> JSONResponse:
+    """Annule la suppression logique (dans la fenêtre de 24h)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
+        if user is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "first_login", "message": "User must bootstrap first"},
+            )
+
+        await wallets_svc.restore_wallet(
+            conn,
+            wallet_id=wallet_id,
             caller_user_id=user.id,
             actor_ip=_client_ip(request),
         )

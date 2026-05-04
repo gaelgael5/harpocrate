@@ -25,6 +25,7 @@ from app.models.api.wallets import (
     WalletCreateRequest,
     WalletPatchRequest,
 )
+from app.core.logging import logger
 from app.models.db.wallet import WalletWithGrant
 from app.services.audit import audit_log_insert
 
@@ -109,8 +110,8 @@ async def list_wallets(
     cursor: str | None,
     tag_filter: str | None,
     name_contains: str | None,
-) -> tuple[list[WalletWithGrant], str | None]:
-    """Retourne (wallets, next_cursor). next_cursor vaut None si page finale."""
+) -> tuple[list[WalletWithGrant], str | None, list[WalletWithGrant]]:
+    """Retourne (wallets_actifs, next_cursor, wallets_supprimés)."""
     cursor_updated_at = None
     cursor_id = None
 
@@ -140,7 +141,11 @@ async def list_wallets(
         last = wallets[-1]
         next_cursor = wallets_repo.encode_cursor(last.updated_at, last.id)
 
-    return wallets, next_cursor
+    deleted_wallets = await wallets_repo.list_deleted_wallets_for_user(
+        conn, user_id=caller_user_id
+    )
+
+    return wallets, next_cursor, deleted_wallets
 
 
 # ─── Get ──────────────────────────────────────────────────────────────────────
@@ -226,11 +231,10 @@ async def delete_wallet(
     conn: asyncpg.Connection[asyncpg.Record],
     *,
     wallet_id: UUID,
-    confirmation: str,
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> None:
-    """Hard-delete du wallet. Requiert owner + confirmation par nom exact."""
+    """Suppression logique. Requiert owner. Purge physique 24h après."""
     wallet = await get_wallet(conn, wallet_id=wallet_id, caller_user_id=caller_user_id)
 
     if wallet.owner_user_id != caller_user_id:
@@ -239,25 +243,65 @@ async def delete_wallet(
             detail={"error": "not_owner", "message": "Only the wallet owner can delete it"},
         )
 
-    if confirmation != wallet.name:
+    if wallet.deleted_at is not None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "confirmation_mismatch",
-                "message": "Confirmation does not match the wallet name exactly",
-            },
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "already_deleted", "message": "Wallet is already pending deletion"},
         )
 
     async with conn.transaction():
-        await wallets_repo.delete_wallet(conn, wallet_id)
+        await wallets_repo.soft_delete_wallet(conn, wallet_id)
         await audit_log_insert(
             conn,
-            "wallet.deleted",
+            "wallet.soft_deleted",
             actor_user_id=caller_user_id,
             actor_ip=actor_ip,
             target_wallet_id=wallet_id,
             metadata={"wallet_name": wallet.name},
         )
+
+
+async def restore_wallet(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> None:
+    """Annule la suppression logique. Requiert owner."""
+    wallet = await get_wallet(conn, wallet_id=wallet_id, caller_user_id=caller_user_id)
+
+    if wallet.owner_user_id != caller_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "not_owner", "message": "Only the wallet owner can restore it"},
+        )
+
+    if wallet.deleted_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "not_deleted", "message": "Wallet is not pending deletion"},
+        )
+
+    async with conn.transaction():
+        await wallets_repo.restore_wallet(conn, wallet_id)
+        await audit_log_insert(
+            conn,
+            "wallet.restored",
+            actor_user_id=caller_user_id,
+            actor_ip=actor_ip,
+            target_wallet_id=wallet_id,
+            metadata={"wallet_name": wallet.name},
+        )
+
+
+async def purge_expired_wallets(
+    conn: asyncpg.Connection[asyncpg.Record],
+) -> None:
+    """Purge physique des wallets dont la fenêtre de 24h est expirée."""
+    deleted_ids = await wallets_repo.purge_expired_wallets(conn)
+    for wallet_id in deleted_ids:
+        logger.info("wallet.purged", wallet_id=str(wallet_id))
 
 
 # ─── Transfer ownership ───────────────────────────────────────────────────────

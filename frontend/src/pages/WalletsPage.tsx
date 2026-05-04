@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Stack,
   Title,
@@ -12,7 +13,10 @@ import {
   Alert,
   SimpleGrid,
   Box,
+  Divider,
+  Collapse,
 } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
@@ -111,9 +115,54 @@ function WalletCard({ wallet }: { wallet: WalletItem }) {
   )
 }
 
+function DeletedWalletCard({ wallet }: { wallet: WalletItem }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+
+  const purgeAt = wallet.deleted_at
+    ? new Date(new Date(wallet.deleted_at).getTime() + 24 * 60 * 60 * 1000)
+    : null
+
+  const restoreMutation = useMutation({
+    mutationFn: () => api.post(`/wallets/${wallet.id}/restore`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
+      notifications.show({ color: 'green', message: t('wallets.restoreSuccess') })
+    },
+    onError: () => notifications.show({ color: 'red', message: t('wallets.restoreError') }),
+  })
+
+  return (
+    <Card withBorder padding="md" style={{ borderColor: '#e57373', opacity: 0.85 }}>
+      <Box style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: '#e57373', borderRadius: '4px 4px 0 0' }} />
+      <Group justify="space-between" align="flex-start">
+        <Stack gap={2}>
+          <Text fw={600} size="sm" style={{ color: '#0a0a0a' }}>{wallet.name}</Text>
+          {purgeAt && (
+            <Text size="xs" c="red">
+              {t('wallets.purgeAt', { date: purgeAt.toLocaleString() })}
+            </Text>
+          )}
+        </Stack>
+        <Button
+          size="xs"
+          variant="light"
+          color="brand"
+          loading={restoreMutation.isPending}
+          onClick={() => restoreMutation.mutate()}
+        >
+          {t('wallets.restore')}
+        </Button>
+      </Group>
+    </Card>
+  )
+}
+
 export function WalletsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [trashOpen, setTrashOpen] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['wallets'],
@@ -122,6 +171,17 @@ export function WalletsPage() {
       return WalletListResponseSchema.parse(raw)
     },
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: (walletId: string) =>
+      api.delete(`/wallets/${walletId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
+      notifications.show({ color: 'green', message: t('wallets.deleteSuccess') })
+    },
+    onError: () => notifications.show({ color: 'red', message: t('wallets.deleteError') }),
+  })
+  void deleteMutation
 
   if (isLoading) {
     return <Center py="xl"><Loader color="brand" /></Center>
@@ -133,6 +193,7 @@ export function WalletsPage() {
   }
 
   const wallets = data?.wallets ?? []
+  const deletedWallets = data?.deleted_wallets ?? []
 
   return (
     <Stack gap="lg">
@@ -155,6 +216,31 @@ export function WalletsPage() {
           {wallets.map((w) => <WalletCard key={w.id} wallet={w} />)}
         </SimpleGrid>
       )}
+
+      {/* Corbeille */}
+      <Divider />
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer' }}
+        onClick={() => setTrashOpen((o) => !o)}
+      >
+        <Group gap="xs">
+          <Text fw={500} size="sm">{t('wallets.trash')}</Text>
+          {deletedWallets.length > 0 && (
+            <Badge color="red" variant="light" size="xs">{deletedWallets.length}</Badge>
+          )}
+        </Group>
+        <Text size="xs" c="dimmed">{trashOpen ? '▲' : '▼'}</Text>
+      </Group>
+      <Collapse in={trashOpen}>
+        {deletedWallets.length === 0 ? (
+          <Text c="dimmed" size="sm">{t('wallets.trashEmpty')}</Text>
+        ) : (
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            {deletedWallets.map((w) => <DeletedWalletCard key={w.id} wallet={w} />)}
+          </SimpleGrid>
+        )}
+      </Collapse>
     </Stack>
   )
 }

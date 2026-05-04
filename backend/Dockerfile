@@ -32,6 +32,7 @@ FROM base AS prod
 RUN useradd -r -u 1001 -m harpocrate
 COPY app ./app
 COPY migrations ./migrations
+COPY types ./types
 USER harpocrate
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

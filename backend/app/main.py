@@ -1,6 +1,7 @@
 """FastAPI app — lifespan gère le pool asyncpg et le cache JWKS."""
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -35,7 +36,9 @@ from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
 from app.core.maintenance import maintenance_state
 from app.db.pool import close_pool, get_pool, init_pool
+from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
+from app.services import wallets as wallets_svc
 
 configure_logging()
 
@@ -48,19 +51,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         public_url=settings.public_url,
     )
     await init_pool()
-    # Pré-charge le cache JWKS — best-effort (Keycloak peut être absent en dev)
     await prefetch_jwks()
 
     pool = await get_pool()
+    async with pool.acquire() as conn:
+        await seed_svc.seed_system_types(conn)
     scheduler = sched_svc.init_scheduler(pool)
     try:
         await scheduler.start()
     except Exception as exc:
         logger.warning("snapshot_scheduler_start_failed", error=str(exc))
 
+    async def _wallet_purge_loop() -> None:
+        while True:
+            await asyncio.sleep(3600)  # toutes les heures
+            try:
+                async with pool.acquire() as conn:
+                    await wallets_svc.purge_expired_wallets(conn)
+            except Exception as exc:
+                logger.warning("wallet_purge_failed", error=str(exc))
+
+    purge_task = asyncio.create_task(_wallet_purge_loop())
+
     try:
         yield
     finally:
+        purge_task.cancel()
         await scheduler.stop()
         await close_pool()
         logger.info("stopped")

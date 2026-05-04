@@ -92,13 +92,14 @@ async def insert_type_with_v1(
     schema_data: dict,
     schema_ui: dict,
     notes: str | None,
-    creator_id: UUID,
+    creator_id: UUID | None,
+    is_system: bool = False,
 ) -> dict:
     async with conn.transaction():
         type_row = await conn.fetchrow(
-            """INSERT INTO secret_types (type, sous_type, label, description, created_by_user_id)
-               VALUES ($1, $2, $3, $4, $5) RETURNING type_uuid""",
-            type_, sous_type, label, description, creator_id,
+            """INSERT INTO secret_types (type, sous_type, label, description, created_by_user_id, is_system)
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING type_uuid""",
+            type_, sous_type, label, description, creator_id, is_system,
         )
         type_uuid: UUID = type_row["type_uuid"]
 

@@ -38,10 +38,6 @@ export const WalletPatchRequestSchema = z.object({
   tags: z.array(z.string()).nullable().optional(),
 })
 
-export const WalletDeleteRequestSchema = z.object({
-  confirmation: z.string().min(1),
-})
-
 export const WalletItemSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -54,11 +50,13 @@ export const WalletItemSchema = z.object({
   placeholder_secrets_count: z.number().int(),
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
+  deleted_at: z.string().datetime({ offset: true }).nullable().optional(),
 })
 
 export const WalletListResponseSchema = z.object({
   wallets: z.array(WalletItemSchema),
   next_cursor: z.string().nullable(),
+  deleted_wallets: z.array(WalletItemSchema).default([]),
 })
 
 export const WalletCreateResponseSchema = z.object({

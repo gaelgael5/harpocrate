@@ -4,7 +4,7 @@
 #
 # A executer DEPUIS le poste de developpement.
 # Pousse vers le LXC :
-#   - docker-compose-prod.yml  -> /opt/harpocrate/docker-compose.yml
+#   - deploy/docker-compose.yml -> /opt/harpocrate/docker-compose.yml
 #   - deploy/.env.example      -> /opt/harpocrate/.env.example
 #   - db/init/*.sql            -> /opt/harpocrate/db/init/
 #   - scripts/refresh.sh       -> /opt/harpocrate/refresh.sh
@@ -38,7 +38,7 @@ ssh "${PVE_HOST}" "pct exec ${CTID} -- mkdir -p ${REMOTE_DIR}/db/init"
 TMPDIR_PVE="/tmp/harpocrate-deploy-$$"
 echo "[2/4] Stage des fichiers sur ${PVE_HOST}:${TMPDIR_PVE}..."
 ssh "${PVE_HOST}" "mkdir -p ${TMPDIR_PVE}/db/init"
-scp "${REPO_ROOT}/docker-compose-prod.yml"        "${PVE_HOST}:${TMPDIR_PVE}/docker-compose.yml"
+scp "${REPO_ROOT}/deploy/docker-compose.yml"       "${PVE_HOST}:${TMPDIR_PVE}/docker-compose.yml"
 scp "${REPO_ROOT}/deploy/.env.example"            "${PVE_HOST}:${TMPDIR_PVE}/.env.example"
 scp "${REPO_ROOT}/db/init/01-extensions.sql"      "${PVE_HOST}:${TMPDIR_PVE}/db/init/01-extensions.sql"
 scp "${REPO_ROOT}/scripts/refresh.sh"             "${PVE_HOST}:${TMPDIR_PVE}/refresh.sh"

@@ -30,7 +30,7 @@ echo "  -> OK"
 echo "[2/4] Telechargement des fichiers..."
 
 wget -qO "${DEPLOY_DIR}/docker-compose.yml" \
-    "${RAW_BASE}/docker-compose-prod.yml"
+    "${RAW_BASE}/deploy/docker-compose.yml"
 echo "  -> docker-compose.yml"
 
 wget -qO "${DEPLOY_DIR}/.env.example" \

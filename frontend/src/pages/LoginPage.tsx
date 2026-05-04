@@ -88,6 +88,7 @@ export function LoginPage() {
     try {
       const resp = await localLogin(localUsername, localPassword)
       setLocalAdminToken(resp.access_token)
+      await getUserManager().removeUser()
       const me = await api.get<unknown>('/me')
       const parsed = MeResponseSchema.parse(me)
       setUser({
@@ -152,7 +153,7 @@ export function LoginPage() {
         {/* Form */}
         <Stack gap="md">
           {loginError && (
-            <Alert color="red" variant="light">{loginError}</Alert>
+            <Alert color="red" variant="light" withCloseButton onClose={() => setLoginError(null)}>{loginError}</Alert>
           )}
 
           {localLoginAvailable ? (

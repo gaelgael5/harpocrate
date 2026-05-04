@@ -34,6 +34,7 @@
     "unlockSuccess": "Coffre déverrouillé",
     "sessionExpired": "Session expirée, veuillez vous reconnecter",
     "callbackProcessing": "Traitement de l'authentification...",
+    "sessionExpired": "Session invalide ou expirée. Reconnectez-vous.",
     "local_login": {
       "tab": "Admin local",
       "username": "Nom d'utilisateur",

@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from app.core.admin_auth import AdminJwt
@@ -250,8 +250,8 @@ async def push_backup_to_s3(backup_id: UUID, admin: AdminJwt) -> JSONResponse:
     )
 
 
-@router.delete("/{backup_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_backup(backup_id: UUID, admin: AdminJwt) -> None:
+@router.delete("/{backup_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+async def delete_backup(backup_id: UUID, admin: AdminJwt) -> Response:
     """Supprime un backup. Requiert rôle admin."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -273,6 +273,7 @@ async def delete_backup(backup_id: UUID, admin: AdminJwt) -> None:
             target_secret_id=None,
             metadata={"backup_id": str(backup_id), "filename": record.filename},
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 class RestoreBody(BaseModel):

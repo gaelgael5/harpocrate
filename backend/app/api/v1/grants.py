@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
@@ -123,13 +123,13 @@ async def update_grant(
 # ─── DELETE /v1/wallets/{wallet_id}/grants/{grant_id} ────────────────────────
 
 
-@router.delete("/{grant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{grant_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_grant(
     wallet_id: UUID,
     grant_id: UUID,
     current_user: JwtUser,
     request: Request,
-) -> JSONResponse:
+) -> Response:
     """Supprime un grant. Requiert [share]. Refuse de révoquer le grant owner."""
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -146,7 +146,7 @@ async def delete_grant(
             caller_user_id=user.id,
             actor_ip=_client_ip(request),
         )
-    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ─── GET /v1/wallets/{wallet_id}/my-grant ────────────────────────────────────

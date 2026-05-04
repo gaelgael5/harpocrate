@@ -37,6 +37,7 @@ def _build_local_jwt() -> str:
         "aud": settings.keycloak_client_id,
         "iat": now,
         "exp": now + _TOKEN_TTL_SECONDS,
+        "realm_access": {"roles": ["harpocrate-admin"]},
     }
     return jwt.encode(payload, hmac_key, algorithm="HS256")
 

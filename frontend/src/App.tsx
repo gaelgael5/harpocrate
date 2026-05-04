@@ -3,7 +3,6 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { LoadingOverlay } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
 
@@ -45,6 +44,7 @@ import { AdminSecretTypeDetailPage } from '@/pages/AdminSecretTypeDetailPage'
 import { ExportAllPage } from '@/pages/ExportAllPage'
 import { AdminEnvPage } from '@/pages/AdminEnvPage'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
+import { LandingPage } from '@/pages/LandingPage'
 
 /** Wrapper qui pousse tout le contenu sous le bandeau dev (s'il est actif). */
 function ContentWithBannerOffset({ children }: { children: ReactNode }) {
@@ -81,7 +81,17 @@ export default function App() {
   }, [t])
 
   if (!oidcReady) {
-    return <LoadingOverlay visible />
+    return (
+      <BrowserRouter>
+        <DevModeBanner />
+        <ContentWithBannerOffset>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ContentWithBannerOffset>
+      </BrowserRouter>
+    )
   }
 
   return (
@@ -99,6 +109,7 @@ export default function App() {
       >
         <Routes>
           {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
           <Route path="/first-login" element={<FirstLoginPage />} />
@@ -112,7 +123,6 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/wallets" replace />} />
             <Route path="/wallets" element={<WalletsPage />} />
             <Route path="/wallets/new" element={<WalletNewPage />} />
             <Route path="/wallets/import" element={<WalletImportPage />} />

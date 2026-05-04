@@ -9,6 +9,8 @@ import '@mantine/dates/styles.css'
 
 import App from './App'
 import './lib/i18n'
+import { theme } from './lib/theme'
+import './lib/global.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,7 +23,7 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <MantineProvider defaultColorScheme="light">
+    <MantineProvider theme={theme} defaultColorScheme="light">
       <Notifications position="top-right" autoClose={6000} zIndex={2000} containerWidth={420} />
       <QueryClientProvider client={queryClient}>
         <App />

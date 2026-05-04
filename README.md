@@ -10,28 +10,20 @@ L'installation se fait en trois étapes exécutées sur l'**hôte Proxmox**, pui
 
 ### Étape 1 — Créer le container LXC
 
-Sur l'hôte Proxmox, créer et configurer le LXC (Docker-ready, SSH, réseau DHCP) :
+Sur l'hôte Proxmox, créer et configurer le LXC (Docker-ready, SSH, réseau DHCP).
+
+> `bash <(wget -qO- URL)` est requis ici (pas `bash -c "$(wget ...)"`) car le script reçoit des arguments positionnels (`$1` = CTID, `$2` = nom).
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/gaelgael5/harpocrate/refs/heads/main/scripts/create-lxc.sh) 202 harpocrate --docker
+bash <(wget -qO- https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/create-lxc.sh) 202 harpocrate --docker
 ```
 
-Remplacer `202` par le CTID souhaité et `harpocrate` par le nom du container.
-
-> Le script installe Docker automatiquement s'il détecte `install-docker.sh` dans le même répertoire.  
-> Si Docker n'a pas été installé, l'étape 2 s'en charge manuellement.
+Remplacer `202` par le CTID souhaité et `harpocrate` par le nom du container.  
+Le flag `--docker` installe Docker automatiquement dans le LXC.
 
 ---
 
-### Étape 2 — Installer Docker *(si non fait automatiquement)*
-
-```bash
-pct exec 202 -- bash -c "$(wget -qLO - https://raw.githubusercontent.com/gaelgael5/harpocrate/refs/heads/main/scripts/install-docker.sh)"
-```
-
----
-
-### Étape 3 — Initialiser la stack
+### Étape 2 — Initialiser la stack
 
 Télécharge `docker-compose.yml`, `.env.example` et `refresh.sh` dans `/opt/harpocrate`, puis crée un `.env` prêt à éditer :
 
@@ -41,7 +33,7 @@ pct exec 202 -- bash -c "$(wget -qLO - https://raw.githubusercontent.com/gaelgae
 
 ---
 
-### Étape 4 — Configurer `.env`
+### Étape 3 — Configurer `.env`
 
 Se connecter au container et éditer le fichier :
 
@@ -50,20 +42,33 @@ pct exec 202 -- bash
 nano /opt/harpocrate/.env
 ```
 
-Champs obligatoires :
-
-| Variable | Description |
-|---|---|
-| `POSTGRES_PASSWORD` | Mot de passe PostgreSQL |
-| `HARPOCRATE_HMAC_KEY` | Clé HMAC — `openssl rand -base64 32` |
-| `HARPOCRATE_PUBLIC_URL` | URL publique du vault (ex: `https://vault.example.com`) |
 
 Auth locale (sans Keycloak) :
 
 ```env
+
+POSTGRES_USER=harpocrate
+POSTGRES_PASSWORD=GAgyAUFete1g58sR1Y0KxusQlED7v8h
+POSTGRES_DB=harpocrate
+
+HARPOCRATE_KEYCLOAK_URL=https://security.yourdomain.org
+HARPOCRATE_KEYCLOAK_REALM=yoops
+HARPOCRATE_KEYCLOAK_CLIENT_ID=
+HARPOCRATE_HMAC_KEY=
+HARPOCRATE_PUBLIC_URL=https://vault.yourdomain.org
+HARPOCRATE_LOG_LEVEL=INFO
+
+# Auth locale activee
 HARPOCRATE_ADMIN_LOCAL_ENABLED=true
 HARPOCRATE_ADMIN_LOCAL_USERNAME=admin
-HARPOCRATE_ADMIN_LOCAL_PASSWORD=mot-de-passe-fort
+HARPOCRATE_ADMIN_LOCAL_PASSWORD=mot-de-passe-fort-2026
+HARPOCRATE_ADMIN_LOCAL_EMAIL=gaelgael5@gmail.com
+HARPOCRATE_ADMIN_LOCAL_DISPLAY_NAME=Local Admin
+
+# Mode dev (bandeau visuel permanent)
+# HARPOCRATE_DEV_MODE=true
+# HARPOCRATE_DEV_MODE_LABEL=DEV - LXC 202
+
 ```
 
 ---

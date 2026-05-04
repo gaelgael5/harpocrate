@@ -46,4 +46,13 @@ services:
     volumes:
       - ./apps.json:/app/apps.json:ro
       - ./releases:/app/releases:ro
-      # Cross-app launcher menu — éditable côté CT sans rebuild
+
+  frontend:
+    image: ghcr.io/gaelgael5/harpocrate-frontend:${TAG:-latest}
+    container_name: harpocrate-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:8080:80"
+      - "0.0.0.0:8443:443"

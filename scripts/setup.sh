@@ -3,7 +3,7 @@
 # Script 02 : Initialisation de la stack harpocrate dans le LXC
 #
 # A executer DANS le container LXC (en tant que root).
-# Telecharge docker-compose.yml, types de secrets, refresh.sh depuis GitHub,
+# Telecharge docker-compose.yml, refresh.sh depuis GitHub ; types embarques inline,
 # et cree un .env pret a editer (sauf si .env existe deja).
 #
 # Usage depuis l'hote Proxmox :
@@ -42,18 +42,66 @@ wget -qO "${DEPLOY_DIR}/refresh.sh" \
 chmod +x "${DEPLOY_DIR}/refresh.sh"
 echo "  -> refresh.sh"
 
-# ── 3. Types de secrets ───────────────────────────────────────────────────────
-echo "[3/5] Telechargement des types de secrets..."
-for TYPE_DIR in raw site_login; do
-    mkdir -p "${DEPLOY_DIR}/types/${TYPE_DIR}"
-    for FNAME in meta.json schema_data.json schema_ui.json; do
-        URL="${RAW_BASE}/types/${TYPE_DIR}/${FNAME}"
-        DEST="${DEPLOY_DIR}/types/${TYPE_DIR}/${FNAME}"
-        if wget -qO "${DEST}" "${URL}" 2>/dev/null; then
-            echo "  -> types/${TYPE_DIR}/${FNAME}"
-        fi
-    done
-done
+# ── 3. Types de secrets (embarques dans ce script) ───────────────────────────
+echo "[3/5] Creation des types de secrets..."
+
+mkdir -p "${DEPLOY_DIR}/types/raw"
+cat > "${DEPLOY_DIR}/types/raw/meta.json" <<'TYPEEOF'
+{"type": "raw", "sous_type": "raw"}
+TYPEEOF
+cat > "${DEPLOY_DIR}/types/raw/schema_data.json" <<'TYPEEOF'
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Raw",
+  "description": "Valeur libre — cle API, token, mot de passe, chaine de connexion, ou tout texte sensible.",
+  "properties": {
+    "value": {"type": "string", "title": "Valeur", "minLength": 1}
+  },
+  "required": ["value"],
+  "additionalProperties": false
+}
+TYPEEOF
+cat > "${DEPLOY_DIR}/types/raw/schema_ui.json" <<'TYPEEOF'
+{
+  "value": {"ui:widget": "password", "ui:options": {"reveal": true, "copyable": true, "rows": 4}},
+  "ui:order": ["value"]
+}
+TYPEEOF
+echo "  -> types/raw"
+
+mkdir -p "${DEPLOY_DIR}/types/site_login"
+cat > "${DEPLOY_DIR}/types/site_login/meta.json" <<'TYPEEOF'
+{"type": "credential", "sous_type": "site_login"}
+TYPEEOF
+cat > "${DEPLOY_DIR}/types/site_login/schema_data.json" <<'TYPEEOF'
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Web Login",
+  "description": "Identifiants de connexion a un site web ou service en ligne.",
+  "properties": {
+    "email":    {"type": "string", "title": "Email",             "format": "email"},
+    "username": {"type": "string", "title": "Nom d'utilisateur"},
+    "password": {"type": "string", "title": "Mot de passe",      "minLength": 1},
+    "website":  {"type": "string", "title": "Site web",          "format": "uri"},
+    "note":     {"type": "string", "title": "Note"}
+  },
+  "required": ["password"],
+  "additionalProperties": false
+}
+TYPEEOF
+cat > "${DEPLOY_DIR}/types/site_login/schema_ui.json" <<'TYPEEOF'
+{
+  "ui:order": ["email", "username", "password", "website", "note"],
+  "email":    {"ui:options": {"copyable": true}},
+  "username": {"ui:options": {"copyable": true}},
+  "password": {"ui:widget": "password", "ui:options": {"reveal": true, "copyable": true}},
+  "website":  {"ui:options": {"linkable": true}},
+  "note":     {"ui:widget": "textarea", "ui:options": {"rows": 4}}
+}
+TYPEEOF
+echo "  -> types/site_login"
 
 # ── 4. Creer apps.json minimal si absent ─────────────────────────────────────
 if [ ! -f "${DEPLOY_DIR}/apps.json" ]; then
@@ -103,4 +151,5 @@ fi
 
 echo "  Lancer la stack :"
 echo "    cd ${DEPLOY_DIR} && ./refresh.sh"
+echo ""
 echo ""

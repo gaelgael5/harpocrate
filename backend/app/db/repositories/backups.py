@@ -22,23 +22,28 @@ class BackupRecord:
     created_at: datetime
     created_by_user_id: UUID | None
     imported: bool
+    tier: str | None = None
+    promoted_from_id: UUID | None = None
 
 
 def _row_to_backup(row: asyncpg.Record) -> BackupRecord:
     manifest = row["manifest"]
     if isinstance(manifest, str):
         manifest = json.loads(manifest)
+    cols = dict(row)
     return BackupRecord(
-        id=row["id"],
-        filename=row["filename"],
-        size_bytes=row["size_bytes"],
-        checksum_sha256=row["checksum_sha256"],
-        age_recipient=row["age_recipient"],
+        id=cols["id"],
+        filename=cols["filename"],
+        size_bytes=cols["size_bytes"],
+        checksum_sha256=cols["checksum_sha256"],
+        age_recipient=cols["age_recipient"],
         manifest=manifest,
-        description=row["description"],
-        created_at=row["created_at"],
-        created_by_user_id=row["created_by_user_id"],
-        imported=row["imported"],
+        description=cols["description"],
+        created_at=cols["created_at"],
+        created_by_user_id=cols["created_by_user_id"],
+        imported=cols["imported"],
+        tier=cols.get("tier"),
+        promoted_from_id=cols.get("promoted_from_id"),
     )
 
 
@@ -53,13 +58,15 @@ async def insert_backup(
     description: str | None,
     created_by_user_id: UUID | None,
     imported: bool = False,
+    tier: str | None = None,
+    promoted_from_id: UUID | None = None,
 ) -> BackupRecord:
     row = await conn.fetchrow(
         """
         INSERT INTO backups_local
             (filename, size_bytes, checksum_sha256, age_recipient, manifest,
-             description, created_by_user_id, imported)
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+             description, created_by_user_id, imported, tier, promoted_from_id)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
         RETURNING *
         """,
         filename,
@@ -70,9 +77,53 @@ async def insert_backup(
         description,
         created_by_user_id,
         imported,
+        tier,
+        promoted_from_id,
     )
     assert row is not None
     return _row_to_backup(row)
+
+
+async def set_backup_tier(
+    conn: asyncpg.Connection,
+    backup_id: UUID,
+    tier: str,
+    promoted_from_id: UUID | None = None,
+) -> None:
+    await conn.execute(
+        """
+        UPDATE backups_local SET tier = $1, promoted_from_id = $2
+        WHERE id = $3
+        """,
+        tier, promoted_from_id, backup_id,
+    )
+
+
+async def list_snapshots(
+    conn: asyncpg.Connection,
+    *,
+    tier: str | None = None,
+    limit: int = 100,
+) -> list[BackupRecord]:
+    if tier is not None:
+        rows = await conn.fetch(
+            """
+            SELECT * FROM backups_local
+            WHERE filename LIKE 'harpocrate-snapshot-%' AND tier = $1
+            ORDER BY created_at DESC LIMIT $2
+            """,
+            tier, limit,
+        )
+    else:
+        rows = await conn.fetch(
+            """
+            SELECT * FROM backups_local
+            WHERE filename LIKE 'harpocrate-snapshot-%'
+            ORDER BY created_at DESC LIMIT $1
+            """,
+            limit,
+        )
+    return [_row_to_backup(r) for r in rows]
 
 
 async def list_backups(

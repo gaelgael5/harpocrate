@@ -9,6 +9,9 @@ import {
   EnvConfigSchema,
   S3BackupListResponseSchema,
   S3PushResultSchema,
+  SnapshotPolicySchema,
+  SnapshotHistorySchema,
+  TriggerResultSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
@@ -18,6 +21,9 @@ import {
   type EnvConfig,
   type S3BackupListResponse,
   type S3PushResult,
+  type SnapshotPolicy,
+  type SnapshotHistory,
+  type TriggerResult,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -104,4 +110,34 @@ export async function pushBackupToS3(backupId: string): Promise<S3PushResult> {
 export async function pullBackupFromS3(s3Key: string): Promise<Backup> {
   const raw = await api.post<unknown>('/admin/backups/s3/pull', { s3_key: s3Key })
   return BackupSchema.parse(raw)
+}
+
+export async function fetchSnapshotPolicy(): Promise<SnapshotPolicy> {
+  const raw = await api.get<unknown>('/admin/snapshots/policy')
+  return SnapshotPolicySchema.parse(raw)
+}
+
+export async function updateSnapshotPolicy(policy: SnapshotPolicy): Promise<SnapshotPolicy> {
+  const raw = await api.put<unknown>('/admin/snapshots/policy', policy)
+  return SnapshotPolicySchema.parse(raw)
+}
+
+export async function triggerSnapshot(body: {
+  force?: boolean
+  skip_remote?: boolean
+  description?: string
+}): Promise<TriggerResult> {
+  const raw = await api.post<unknown>('/admin/snapshots/trigger', body)
+  return TriggerResultSchema.parse(raw)
+}
+
+export async function fetchSnapshotHistory(params?: {
+  tier?: string
+  limit?: number
+}): Promise<SnapshotHistory> {
+  const q = new URLSearchParams()
+  if (params?.tier) q.set('tier', params.tier)
+  if (params?.limit) q.set('limit', String(params.limit))
+  const raw = await api.get<unknown>(`/admin/snapshots/history?${q.toString()}`)
+  return SnapshotHistorySchema.parse(raw)
 }

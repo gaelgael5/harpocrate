@@ -301,6 +301,7 @@
   "admin": {
     "title": "Administration",
     "nav_backups": "Backups",
+    "nav_snapshots": "Auto snapshots",
     "nav_users": "Users",
     "nav_system": "System",
     "nav_env": "Configuration",
@@ -378,6 +379,39 @@
       "s3PullSuccess": "Backup imported from S3",
       "s3PullError": "Error importing from S3"
     }
+  },
+  "snapshots": {
+    "title": "Automated snapshots",
+    "status": "Scheduler status",
+    "active": "Active",
+    "disabled": "Disabled",
+    "intervalDesc": "Snapshot every {{minutes}} minutes",
+    "disabledDesc": "No automatic snapshots (interval = 0). Configure the policy to enable.",
+    "editPolicy": "Edit policy",
+    "policySaved": "Policy saved — scheduler restarted",
+    "intervalMinutes": "Interval (minutes)",
+    "intervalHint": "0 = disabled, minimum 5 if enabled",
+    "retention": "Retention",
+    "retentionTitle": "Current retention policy",
+    "hourly": "Hourly",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "pushRemote": "Push to S3 after snapshot",
+    "skipNoChange": "Skip if no change",
+    "manual": "Manual trigger",
+    "trigger": "Create snapshot",
+    "triggerForce": "Force (even if no change)",
+    "triggerSuccess": "Snapshot created successfully",
+    "skippedNoChange": "Snapshot skipped — no change detected",
+    "historyTitle": "Snapshot history",
+    "allTiers": "All tiers",
+    "noSnapshots": "No snapshots.",
+    "colCreated": "Date",
+    "colTier": "Tier",
+    "colSize": "Size",
+    "colDescription": "Description"
   },
   "topbar": {
     "apps_menu": "Applications"

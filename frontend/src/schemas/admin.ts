@@ -99,3 +99,48 @@ export const S3PushResultSchema = z.object({
 })
 
 export type S3PushResult = z.infer<typeof S3PushResultSchema>
+
+export const GFSRetentionSchema = z.object({
+  hourly: z.number().int().min(0),
+  daily: z.number().int().min(0),
+  weekly: z.number().int().min(0),
+  monthly: z.number().int().min(0),
+  yearly: z.number().int().min(0),
+})
+
+export type GFSRetention = z.infer<typeof GFSRetentionSchema>
+
+export const SnapshotPolicySchema = z.object({
+  interval_minutes: z.number().int().min(0),
+  retention: GFSRetentionSchema,
+  push_remote_after_snapshot: z.boolean(),
+  remote_destinations_to_push: z.array(z.string()),
+  skip_if_no_change: z.boolean(),
+})
+
+export type SnapshotPolicy = z.infer<typeof SnapshotPolicySchema>
+
+export const SnapshotItemSchema = z.object({
+  id: z.string().uuid(),
+  filename: z.string(),
+  size_bytes: z.number(),
+  created_at: z.string(),
+  tier: z.string().nullable(),
+  description: z.string().nullable(),
+  promoted_from_id: z.string().uuid().nullable(),
+})
+
+export type SnapshotItem = z.infer<typeof SnapshotItemSchema>
+
+export const SnapshotHistorySchema = z.object({
+  snapshots: z.array(SnapshotItemSchema),
+})
+
+export type SnapshotHistory = z.infer<typeof SnapshotHistorySchema>
+
+export const TriggerResultSchema = z.union([
+  z.object({ skipped: z.literal(true), reason: z.string() }),
+  z.object({ skipped: z.literal(false), snapshot: SnapshotItemSchema }),
+])
+
+export type TriggerResult = z.infer<typeof TriggerResultSchema>

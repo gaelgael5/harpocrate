@@ -301,6 +301,7 @@
   "admin": {
     "title": "Administration",
     "nav_backups": "Sauvegardes",
+    "nav_snapshots": "Snapshots auto",
     "nav_users": "Utilisateurs",
     "nav_system": "Système",
     "nav_env": "Configuration",
@@ -378,6 +379,39 @@
       "s3PullSuccess": "Backup importé depuis S3",
       "s3PullError": "Erreur lors de l'import S3"
     }
+  },
+  "snapshots": {
+    "title": "Snapshots automatiques",
+    "status": "État du scheduler",
+    "active": "Actif",
+    "disabled": "Désactivé",
+    "intervalDesc": "Snapshot toutes les {{minutes}} minutes",
+    "disabledDesc": "Aucun snapshot automatique (interval = 0). Configurez la politique pour activer.",
+    "editPolicy": "Modifier la politique",
+    "policySaved": "Politique enregistrée — scheduler redémarré",
+    "intervalMinutes": "Intervalle (minutes)",
+    "intervalHint": "0 = désactivé, minimum 5 si activé",
+    "retention": "Rétention",
+    "retentionTitle": "Politique de rétention courante",
+    "hourly": "Horaire",
+    "daily": "Quotidien",
+    "weekly": "Hebdo",
+    "monthly": "Mensuel",
+    "yearly": "Annuel",
+    "pushRemote": "Pousser vers S3 après snapshot",
+    "skipNoChange": "Ignorer si pas de changement",
+    "manual": "Déclenchement manuel",
+    "trigger": "Créer un snapshot",
+    "triggerForce": "Forcer (même sans changement)",
+    "triggerSuccess": "Snapshot créé avec succès",
+    "skippedNoChange": "Snapshot ignoré — aucun changement détecté",
+    "historyTitle": "Historique des snapshots",
+    "allTiers": "Tous les niveaux",
+    "noSnapshots": "Aucun snapshot.",
+    "colCreated": "Date",
+    "colTier": "Niveau",
+    "colSize": "Taille",
+    "colDescription": "Description"
   },
   "topbar": {
     "apps_menu": "Applications"

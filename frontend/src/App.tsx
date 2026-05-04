@@ -38,6 +38,7 @@ import { IntegrationPage } from '@/pages/IntegrationPage'
 import { AdminBackupsPage } from '@/pages/AdminBackupsPage'
 import { AdminUsersPage } from '@/pages/AdminUsersPage'
 import { AdminSystemPage } from '@/pages/AdminSystemPage'
+import { AdminSnapshotsPage } from '@/pages/AdminSnapshotsPage'
 import { ExportAllPage } from '@/pages/ExportAllPage'
 import { AdminEnvPage } from '@/pages/AdminEnvPage'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
@@ -133,6 +134,7 @@ export default function App() {
             <Route path="/account" element={<AccountPage />} />
             <Route path="/integration" element={<IntegrationPage />} />
             <Route path="/admin/backups" element={<AdminBackupsPage />} />
+            <Route path="/admin/snapshots" element={<AdminSnapshotsPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/system" element={<AdminSystemPage />} />
             <Route path="/export-all" element={<ExportAllPage />} />

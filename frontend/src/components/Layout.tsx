@@ -138,6 +138,11 @@ export function Layout() {
             />
             <NavLink
               component={RouterNavLink}
+              to="/admin/snapshots"
+              label={t('admin.nav_snapshots')}
+            />
+            <NavLink
+              component={RouterNavLink}
               to="/admin/users"
               label={t('admin.nav_users')}
             />

@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from app.api.v1 import (
     admin_backups,
     admin_maintenance,
+    admin_snapshots,
     admin_system,
     api_key_openapi,
     api_keys,
@@ -32,7 +33,8 @@ from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
 from app.core.maintenance import maintenance_state
-from app.db.pool import close_pool, init_pool
+from app.db.pool import close_pool, get_pool, init_pool
+from app.services import snapshot_scheduler as sched_svc
 
 configure_logging()
 
@@ -47,9 +49,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_pool()
     # Pré-charge le cache JWKS — best-effort (Keycloak peut être absent en dev)
     await prefetch_jwks()
+
+    pool = await get_pool()
+    scheduler = sched_svc.init_scheduler(pool)
+    try:
+        await scheduler.start()
+    except Exception as exc:
+        logger.warning("snapshot_scheduler_start_failed", error=str(exc))
+
     try:
         yield
     finally:
+        await scheduler.stop()
         await close_pool()
         logger.info("stopped")
 
@@ -123,6 +134,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
 
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
+app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_system.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")

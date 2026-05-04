@@ -65,3 +65,4 @@ export const PERM_ALL = 63
 export function hasPermission(perms: number, bit: number): boolean {
   return (perms & bit) !== 0
 }
+

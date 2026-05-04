@@ -83,3 +83,4 @@ export const useCryptoStore = create<CryptoState>()((set, get) => ({
       isUnlocked: false,
     }),
 }))
+

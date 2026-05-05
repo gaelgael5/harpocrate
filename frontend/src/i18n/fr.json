@@ -296,7 +296,14 @@
       "getOrPopulate": "Commande get-or-populate"
     },
     "apiDocsHint": "Référence complète de l'API REST :",
-    "apiDocsLink": "Ouvrir la doc API"
+    "apiDocsLink": "Ouvrir la doc API",
+    "chooseSdk": "Choisir un SDK",
+    "planned": "Bientôt",
+    "plannedDesc": "Le SDK {{sdk}} est prévu mais pas encore publié. Tu peux suivre l'avancement sur le wiki GitHub.",
+    "followProgress": "Voir le suivi sur le wiki",
+    "fullDocs": "Doc complète {{sdk}} sur le wiki",
+    "latestVersion": "Dernière version disponible :",
+    "noArtifact": "Aucun artefact disponible. Vérifie le déploiement (./scripts/deploy.sh)."
   },
   "nav": {
     "wallets": "Coffres",

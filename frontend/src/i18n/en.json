@@ -295,7 +295,14 @@
       "getOrPopulate": "get-or-populate command"
     },
     "apiDocsHint": "Full REST API reference:",
-    "apiDocsLink": "Open API docs"
+    "apiDocsLink": "Open API docs",
+    "chooseSdk": "Choose an SDK",
+    "planned": "Coming soon",
+    "plannedDesc": "The {{sdk}} SDK is planned but not yet published. You can follow progress on the GitHub wiki.",
+    "followProgress": "Follow progress on the wiki",
+    "fullDocs": "Full {{sdk}} docs on the wiki",
+    "latestVersion": "Latest available version:",
+    "noArtifact": "No artifact available. Check the deployment (./scripts/deploy.sh)."
   },
   "nav": {
     "wallets": "Vaults",

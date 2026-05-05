@@ -19,6 +19,8 @@ import {
   RemoteBackupConnectionSchema,
   RemoteBackupTestResponseSchema,
   RemoteBackupPushResultSchema,
+  ReplicationStrategyListResponseSchema,
+  ReplicationStatusResponseSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
@@ -38,6 +40,8 @@ import {
   type RemoteBackupConnectionListResponse,
   type RemoteBackupTestResponse,
   type RemoteBackupPushResult,
+  type ReplicationStrategyListResponse,
+  type ReplicationStatusResponse,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -289,5 +293,26 @@ export async function testRemoteBackupConnection(id: string): Promise<RemoteBack
       message: e.message ?? 'Connection test failed',
     }
   }
+}
+
+// ─── Replication strategies (LOT_20) ─────────────────────────────────────────
+
+export async function fetchReplicationStrategies(): Promise<ReplicationStrategyListResponse> {
+  const raw = await api.get<unknown>('/admin/replication/strategies')
+  return ReplicationStrategyListResponseSchema.parse(raw)
+}
+
+export async function fetchReplicationStatus(): Promise<ReplicationStatusResponse> {
+  const raw = await api.get<unknown>('/admin/replication/status')
+  return ReplicationStatusResponseSchema.parse(raw)
+}
+
+export async function activateReplicationStrategy(
+  strategyId: string,
+): Promise<{ activated: boolean; strategy_id: string }> {
+  return api.post<{ activated: boolean; strategy_id: string }>(
+    `/admin/replication/strategies/${strategyId}/activate`,
+    {},
+  )
 }
 

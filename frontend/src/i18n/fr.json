@@ -342,6 +342,7 @@
     "title": "Administration",
     "nav_backups": "Sauvegardes",
     "nav_remote_backups": "Backups distants",
+    "nav_replication": "Réplication",
     "nav_snapshots": "Snapshots auto",
     "nav_users": "Utilisateurs",
     "nav_system": "Système",
@@ -462,6 +463,20 @@
       "createSuccess": "Connexion créée",
       "updateSuccess": "Connexion mise à jour",
       "deleteSuccess": "Connexion supprimée"
+    },
+    "replication": {
+      "title": "Réplication",
+      "subtitle": "Gérez la stratégie de réplication PostgreSQL active. Le standalone est suffisant pour la plupart des installations ; Patroni + etcd offre du failover automatique.",
+      "activeStrategy": "Stratégie active",
+      "noActiveStrategy": "Aucune stratégie active. Activez-en une dans la liste ci-dessous.",
+      "availableStrategies": "Stratégies disponibles",
+      "active": "active",
+      "disabled": "désactivée",
+      "activate": "Activer",
+      "activateConfirmTitle": "Changer de stratégie",
+      "activateConfirmDesc": "Activer « {{label}} » ? Le pool de connexions Harpocrate va être réinitialisé.",
+      "activateSuccess": "Stratégie activée",
+      "nodes": "Nœuds Patroni"
     }
   },
   "snapshots": {

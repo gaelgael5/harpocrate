@@ -1,0 +1,20 @@
+# /etc/etcd/etcd.conf.yml — single-node etcd pour Patroni Harpocrate (LOT 20).
+# Remplacer <ETCD_IP> par l'IP du LXC etcd avant push.
+
+name: etcd-node-1
+data-dir: /var/lib/etcd
+
+listen-peer-urls: http://<ETCD_IP>:2380
+listen-client-urls: http://<ETCD_IP>:2379,http://127.0.0.1:2379
+advertise-client-urls: http://<ETCD_IP>:2379
+initial-advertise-peer-urls: http://<ETCD_IP>:2380
+
+initial-cluster: etcd-node-1=http://<ETCD_IP>:2380
+initial-cluster-token: harpocrate-etcd-cluster
+initial-cluster-state: new
+
+log-level: info
+log-outputs: [/var/log/etcd/etcd.log]
+
+snapshot-count: 10000
+auto-compaction-retention: "1h"

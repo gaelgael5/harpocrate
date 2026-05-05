@@ -1,0 +1,18 @@
+[Unit]
+Description=Patroni PostgreSQL HA (Harpocrate cluster)
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+EnvironmentFile=/etc/patroni/.env
+ExecStart=/usr/local/bin/patroni /etc/patroni/patroni.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+TimeoutSec=30
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

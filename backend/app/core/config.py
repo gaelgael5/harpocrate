@@ -41,6 +41,22 @@ class Settings(BaseSettings):
     # (hostname-pid). Injecter manuellement en prod pour avoir des IDs stables.
     instance_id: str = Field(default="")
 
+    # ─── Stratégie de réplication (LOT_20) ────────────────────────────────────
+    # Postgres standalone par défaut. Bascule possible en runtime via UI admin.
+    replication_strategy: str = Field(
+        default="none",
+        description="none | patroni | harpocrate_sync | s3_wal",
+    )
+    patroni_api_urls: str = Field(
+        default="",
+        description="CSV des URLs API REST Patroni (ex http://10.0.0.1:8008,http://10.0.0.2:8008)",
+    )
+    postgres_replica_dsn: str = Field(
+        default="",
+        description="DSN du replica Postgres pour les lectures non critiques (LOT_20)",
+        json_schema_extra={"is_secret": True},
+    )
+
     @field_validator("instance_id")
     @classmethod
     def _auto_instance_id(cls, v: str) -> str:

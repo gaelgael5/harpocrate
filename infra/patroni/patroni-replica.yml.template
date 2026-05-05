@@ -1,0 +1,70 @@
+# /etc/patroni/patroni.yml — Patroni replica (LOT 20).
+# Identique au primary sauf name + IPs.
+# Remplacer <PG_PRIMARY_IP>, <PG_REPLICA_IP>, <ETCD_IP> avant push.
+
+scope: harpocrate-postgres
+namespace: /patroni/
+name: pg-replica
+
+restapi:
+  listen: <PG_REPLICA_IP>:8008
+  connect_address: <PG_REPLICA_IP>:8008
+
+etcd3:
+  hosts: <ETCD_IP>:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 5
+        max_replication_slots: 5
+        wal_log_hints: "on"
+        archive_mode: "on"
+        archive_command: "/bin/true"
+        synchronous_commit: "off"
+
+postgresql:
+  listen: <PG_REPLICA_IP>:5432
+  connect_address: <PG_REPLICA_IP>:5432
+  data_dir: /var/lib/postgresql/16/main
+  bin_dir: /usr/lib/postgresql/16/bin
+  config_dir: /etc/postgresql/16/main
+
+  authentication:
+    replication:
+      username: replicator
+      password: "${PATRONI_REPLICATION_PASSWORD}"
+    superuser:
+      username: postgres
+      password: "${PATRONI_SUPERUSER_PASSWORD}"
+    rewind:
+      username: rewind_user
+      password: "${PATRONI_REWIND_PASSWORD}"
+
+  parameters:
+    max_connections: 100
+    shared_buffers: 256MB
+    effective_cache_size: 768MB
+    work_mem: 4MB
+    maintenance_work_mem: 64MB
+    log_timezone: UTC
+    timezone: UTC
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+
+callbacks:
+  on_role_change: /etc/patroni/callbacks/on_role_change.sh
+  on_start: /etc/patroni/callbacks/on_role_change.sh

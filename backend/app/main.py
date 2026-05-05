@@ -13,6 +13,7 @@ from app.api.v1 import (
     admin_backups,
     admin_maintenance,
     admin_remote_backups,
+    admin_replication,
     admin_secret_types,
     admin_snapshots,
     admin_system,
@@ -39,6 +40,7 @@ from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
 from app.db.pool import close_pool, get_pool, init_pool
 from app.middleware.cluster_coherence import cluster_coherence_middleware
+from app.services import replication as replication_svc
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import wallets as wallets_svc
@@ -63,6 +65,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await get_pool()
     async with pool.acquire() as conn:
         await seed_svc.seed_system_types(conn)
+        # LOT_20 — s'assurer que la stratégie de réplication env est active.
+        await replication_svc.ensure_env_strategy_active(conn)
 
     # LOT_21A — démarre la sync cluster (LISTEN/NOTIFY + refresh 5s).
     # Le start() effectue un refresh initial AVANT de retourner, donc l'app
@@ -168,6 +172,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
+app.include_router(admin_replication.router, prefix="/v1")
 app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")
 app.include_router(admin_secret_types.public_router, prefix="/v1")

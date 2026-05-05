@@ -235,3 +235,43 @@ export const RemoteBackupPushResultSchema = z.object({
 })
 
 export type RemoteBackupPushResult = z.infer<typeof RemoteBackupPushResultSchema>
+
+// ─── Replication strategies (LOT_20) ─────────────────────────────────────────
+
+export const ReplicationStrategySchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(['none', 'patroni', 'harpocrate_sync', 's3_wal']),
+  label: z.string(),
+  description: z.string().nullable(),
+  config: z.record(z.unknown()),
+  enabled: z.boolean(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+export type ReplicationStrategy = z.infer<typeof ReplicationStrategySchema>
+
+export const ReplicationStrategyListResponseSchema = z.object({
+  strategies: z.array(ReplicationStrategySchema),
+})
+
+export type ReplicationStrategyListResponse = z.infer<
+  typeof ReplicationStrategyListResponseSchema
+>
+
+export const ReplicationStatusResponseSchema = z.object({
+  strategy: ReplicationStrategySchema.nullable(),
+  status: z.string().optional(),
+  live: z
+    .object({
+      type: z.string(),
+      status: z.string(),
+      primary: z.unknown().nullable(),
+      replicas: z.array(z.record(z.unknown())),
+      nodes: z.array(z.record(z.unknown())).optional(),
+    })
+    .optional(),
+})
+
+export type ReplicationStatusResponse = z.infer<typeof ReplicationStatusResponseSchema>

@@ -28,6 +28,7 @@ import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { api, ApiError } from '@/lib/api-client'
+import { invalidateWalletQueries } from '@/lib/walletQueries'
 import { FolderTree } from '@/components/FolderTree'
 import { exportWallet } from '@/lib/exportImportApi'
 import { WalletItemSchema } from '@/schemas/wallets'
@@ -237,8 +238,7 @@ export function WalletDetailPage() {
               color: 'green',
               message: t('secrets.paths.deleteFolderSuccess', { count: r.deleted }),
             })
-            await queryClient.invalidateQueries({ queryKey: ['wallet-tree', walletId] })
-            await queryClient.invalidateQueries({ queryKey: ['wallet-secrets-path', walletId] })
+            if (walletId) await invalidateWalletQueries(queryClient, walletId)
           } catch (err) {
             const msg = err instanceof ApiError ? err.message : String(err)
             notifications.show({ color: 'red', title: t('common.error'), message: msg })

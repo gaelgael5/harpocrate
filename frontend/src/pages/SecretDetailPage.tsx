@@ -30,6 +30,7 @@ import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
 
 import { api, ApiError } from '@/lib/api-client'
+import { invalidateWalletQueries } from '@/lib/walletQueries'
 import { SecretDetailResponseSchema } from '@/schemas/secrets'
 import { rsaOaepDecrypt } from '@/crypto/rsa-oaep'
 import { aesGcmDecrypt, aesGcmEncrypt } from '@/crypto/aes-gcm'
@@ -95,10 +96,9 @@ export function SecretDetailPage() {
         color: 'green',
         message: t('secrets.delete_success'),
       })
-      // Invalide la liste des secrets et le wallet (pour les compteurs) avant
-      // de retourner sur la page wallet — sinon TanStack Query sert l'ancien cache.
-      await queryClient.invalidateQueries({ queryKey: ['secrets', walletId] })
-      await queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
+      // Invalide TOUTES les queries du wallet (compteurs, tree, sidebar arbre,
+      // listes par path) avant de retourner — sinon TanStack Query sert l'ancien cache.
+      if (walletId) await invalidateWalletQueries(queryClient, walletId)
       navigate(`/wallets/${walletId}`)
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : String(err)

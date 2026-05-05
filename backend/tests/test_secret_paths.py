@@ -212,6 +212,18 @@ def test_validate_rejects_too_deep() -> None:
         validate_secret_name(deep)
 
 
+def test_validate_secret_name_rejects_trailing_slash() -> None:
+    """Un nom qui finit par '/' est invalide (sinon il apparaît comme un dossier dans le tree)."""
+    with pytest.raises(InvalidSecretPath, match="trailing"):
+        validate_secret_name("/foo/bar/")
+
+
+def test_validate_secret_name_rejects_trailing_slash_without_leading() -> None:
+    """Même rejet pour les noms sans slash initial qui finissent par /."""
+    with pytest.raises(InvalidSecretPath, match="trailing"):
+        validate_secret_name("foo/bar/")
+
+
 def test_normalize_path_adds_trailing_slash() -> None:
     assert normalize_path("/bob") == "/bob/"
 

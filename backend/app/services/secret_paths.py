@@ -35,6 +35,11 @@ def validate_secret_name(name: str) -> str:
 
     normalized = name if name.startswith("/") else "/" + name
 
+    if normalized.endswith("/"):
+        raise InvalidSecretPath(
+            f"Invalid secret name '{name}': trailing '/' not allowed"
+        )
+
     if "//" in normalized:
         raise InvalidSecretPath("Empty path segments not allowed (found '//')")
 

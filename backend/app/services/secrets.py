@@ -798,6 +798,62 @@ async def delete_secret_by_id(
         )
 
 
+async def count_secrets_by_path(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    path: str,
+) -> int:
+    """Compte les secrets sous un path. path doit être /-prefixed et /-suffixed."""
+    from app.services.secret_paths import normalize_path
+    normalized = normalize_path(path)
+    if normalized == "/":
+        # Racine = tous les secrets du wallet
+        return await secrets_repo.count_by_path_prefix(conn, wallet_id=wallet_id, path_prefix="")
+    return await secrets_repo.count_by_path_prefix(conn, wallet_id=wallet_id, path_prefix=normalized)
+
+
+async def delete_secrets_by_path(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    path: str,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> int:
+    """Hard-delete tous les secrets sous un path. Retourne le nombre supprimé.
+
+    400 si path vide ou égal à '/' (refus de tout supprimer en une opération — protection).
+    """
+    from app.services.secret_paths import normalize_path
+    normalized = normalize_path(path)
+    if normalized == "/":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "cannot_delete_root_path",
+                "message": "Refusing to delete all secrets in wallet via path='/'. Delete the wallet itself instead.",
+            },
+        )
+
+    async with conn.transaction():
+        deleted = await secrets_repo.delete_by_path_prefix(
+            conn, wallet_id=wallet_id, path_prefix=normalized,
+        )
+        for secret_id, secret_name in deleted:
+            await audit_log_insert(
+                conn,
+                "secret.deleted",
+                actor_user_id=caller_user_id,
+                actor_ip=actor_ip,
+                target_wallet_id=wallet_id,
+                target_secret_id=secret_id,
+                metadata={"secret_name": secret_name, "access_via": "by_path", "path": normalized},
+            )
+
+    return len(deleted)
+
+
 async def patch_secret_by_id(
     conn: asyncpg.Connection[asyncpg.Record],
     *,

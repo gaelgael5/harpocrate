@@ -159,9 +159,12 @@ class SecretsClient:
         value: str,
         description: str | None = None,
         tags: list[str] | None = None,
+        type_uuid: UUID | None = None,
+        schema_version_uuid: UUID | None = None,
     ) -> str:
         """Crée un secret avec une valeur chiffrée côté client.
 
+        Si `type_uuid` n'est pas fourni, le serveur attache automatiquement le type RAW.
         Retourne le secret_id (UUID string). Requiert [add].
         """
         wallet_key = self._wallet_key()
@@ -172,6 +175,10 @@ class SecretsClient:
             body["description"] = description
         if tags is not None:
             body["tags"] = tags
+        if type_uuid is not None:
+            body["type_uuid"] = str(type_uuid)
+        if schema_version_uuid is not None:
+            body["schema_version_uuid"] = str(schema_version_uuid)
         result = self._http.post(self._path(), json=body)
         return str(result["secret_id"])
 
@@ -213,9 +220,12 @@ class SecretsClient:
         descriptor: dict[str, Any],
         description: str | None = None,
         tags: list[str] | None = None,
+        type_uuid: UUID | None = None,
+        schema_version_uuid: UUID | None = None,
     ) -> str:
         """Crée un placeholder avec son descripteur de génération.
 
+        Si `type_uuid` n'est pas fourni, le serveur attache automatiquement le type RAW.
         Retourne le secret_id. Requiert [add].
         """
         body: dict[str, Any] = {"name": name, "generation_descriptor": descriptor}
@@ -223,6 +233,10 @@ class SecretsClient:
             body["description"] = description
         if tags is not None:
             body["tags"] = tags
+        if type_uuid is not None:
+            body["type_uuid"] = str(type_uuid)
+        if schema_version_uuid is not None:
+            body["schema_version_uuid"] = str(schema_version_uuid)
         result = self._http.post(
             f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body
         )

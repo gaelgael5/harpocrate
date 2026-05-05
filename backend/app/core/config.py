@@ -57,6 +57,28 @@ class Settings(BaseSettings):
         json_schema_extra={"is_secret": True},
     )
 
+    # ─── Réplication MQTT (LOT_21B) ──────────────────────────────────────────
+    sync_enabled: bool = Field(
+        default=False,
+        description="Active la réplication applicative MQTT inter-instances",
+    )
+    sync_cluster_id: str = Field(
+        default="harpocrate",
+        description="Identifiant logique du cluster (isolation broker MQTT mutualisé)",
+    )
+    sync_mqtt_host: str = Field(default="")
+    sync_mqtt_port: int = Field(default=1883)
+    sync_mqtt_username: str = Field(default="")
+    sync_mqtt_password: str = Field(
+        default="",
+        json_schema_extra={"is_secret": True},
+    )
+    sync_log_retention_days: int = Field(
+        default=7,
+        ge=1,
+        description="Rétention sync_log avant purge (futur lot de cron)",
+    )
+
     @field_validator("instance_id")
     @classmethod
     def _auto_instance_id(cls, v: str) -> str:

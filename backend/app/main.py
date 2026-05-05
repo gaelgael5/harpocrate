@@ -14,6 +14,7 @@ from app.api.v1 import (
     admin_maintenance,
     admin_remote_backups,
     admin_replication,
+    admin_replication_sync,
     admin_secret_types,
     admin_snapshots,
     admin_system,
@@ -43,6 +44,7 @@ from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.services import replication as replication_svc
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
+from app.services import sync_replication_service as sync_svc
 from app.services import wallets as wallets_svc
 from app.services.secret_paths import InvalidSecretPath
 from migrations.apply_migrations import apply_migrations
@@ -74,6 +76,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cluster_sync = init_cluster_sync(pool)
     await cluster_sync.start()
 
+    # LOT_21B — réplication MQTT inter-instances (no-op si HARPOCRATE_SYNC_ENABLED=false).
+    await sync_svc.init_sync_replication(pool)
+
     scheduler = sched_svc.init_scheduler(pool)
     try:
         await scheduler.start()
@@ -102,6 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await purge_task
         await scheduler.stop()
+        await sync_svc.stop_sync_replication()
         sync = get_cluster_sync()
         if sync is not None:
             await sync.stop()
@@ -173,6 +179,7 @@ app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
 app.include_router(admin_replication.router, prefix="/v1")
+app.include_router(admin_replication_sync.router, prefix="/v1")
 app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")
 app.include_router(admin_secret_types.public_router, prefix="/v1")

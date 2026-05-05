@@ -475,6 +475,19 @@ async def migrate_schema(
                 detail={"error": "schema_version_does_not_belong_to_type"},
             )
 
+        # P1.5 : refuser de migrer vers une version d'un type deprecated
+        from app.db.repositories import secret_types as types_repo
+
+        target_type = await types_repo.get_type(conn, secret.type_uuid)
+        if target_type is not None and target_type["deprecated_at"] is not None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "deprecated_type",
+                    "message": "Cannot migrate to a version of a deprecated type",
+                },
+            )
+
         await conn.execute(
             """UPDATE secrets
                SET encrypted_value = $1,
@@ -546,6 +559,19 @@ async def assign_type(
             raise HTTPException(
                 status_code=400,
                 detail={"error": "schema_version_does_not_belong_to_type"},
+            )
+
+        # P1.5 : refuser d'assigner un type deprecated
+        from app.db.repositories import secret_types as types_repo
+
+        target_type = await types_repo.get_type(conn, req.type_uuid)
+        if target_type is not None and target_type["deprecated_at"] is not None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "deprecated_type",
+                    "message": "Cannot assign a deprecated type to a secret",
+                },
             )
 
         await conn.execute(

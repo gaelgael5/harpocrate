@@ -462,7 +462,21 @@
       "testFailed": "Échec du test de connexion",
       "createSuccess": "Connexion créée",
       "updateSuccess": "Connexion mise à jour",
-      "deleteSuccess": "Connexion supprimée"
+      "deleteSuccess": "Connexion supprimée",
+      "fieldKind": "Type de connexion",
+      "kindLockedHint": "Le type ne peut pas être modifié après création",
+      "fieldUseTls": "Activer TLS (FTPS)",
+      "fieldUseTlsHint": "Désactiver uniquement pour FTP en clair (déconseillé)",
+      "fieldS3Bucket": "Bucket S3",
+      "fieldS3Region": "Région",
+      "fieldS3Prefix": "Préfixe (optionnel)",
+      "fieldS3PrefixHint": "Sera préfixé devant chaque clé d'objet (ex : node-paris/)",
+      "fieldS3Endpoint": "Endpoint S3 (optionnel)",
+      "fieldS3EndpointHint": "Vide pour AWS S3 ; URL spécifique pour R2/B2/Scaleway/OVH/MinIO",
+      "fieldS3PathStyle": "Path-style addressing",
+      "fieldS3PathStyleHint": "Activer pour Cloudflare R2, Backblaze B2, MinIO. Désactiver pour AWS",
+      "fieldS3AccessKeyId": "Access Key ID",
+      "fieldS3SecretAccessKey": "Secret Access Key"
     },
     "replication": {
       "title": "Réplication",

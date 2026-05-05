@@ -24,6 +24,7 @@ import {
   Textarea,
   NumberInput,
   Select,
+  Switch,
   Badge,
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
@@ -43,57 +44,123 @@ import { ApiError } from '@/lib/api-client'
 import type { RemoteBackupConnection } from '@/schemas/admin'
 
 // ─── Form values pour le modal create/edit ────────────────────────────────────
+//
+// Form unifié pour les 3 kinds (sftp / s3 / ftps). Les champs non-pertinents
+// sont simplement masqués selon le kind sélectionné.
 
-interface SftpFormValues {
+type Kind = 'sftp' | 's3' | 'ftps'
+
+interface FormValues {
   name: string
+  kind: Kind
+  // SFTP + FTPS shared
   host: string
   port: number | string
   remote_path: string
-  host_key_fingerprint: string
   username: string
-  auth_method: 'password' | 'private_key'
   password: string
+  // SFTP only
+  host_key_fingerprint: string
+  auth_method: 'password' | 'private_key'
   private_key: string
   private_key_passphrase: string
+  // FTPS only
+  use_tls: boolean
+  // S3 only
+  s3_bucket: string
+  s3_region: string
+  s3_endpoint_url: string
+  s3_prefix: string
+  s3_path_style: boolean
+  s3_access_key_id: string
+  s3_secret_access_key: string
 }
 
-const DEFAULT_FORM: SftpFormValues = {
+const DEFAULT_FORM: FormValues = {
   name: '',
+  kind: 'sftp',
   host: '',
   port: 22,
   remote_path: '/',
-  host_key_fingerprint: '',
   username: '',
-  auth_method: 'password',
   password: '',
+  host_key_fingerprint: '',
+  auth_method: 'password',
   private_key: '',
   private_key_passphrase: '',
+  use_tls: true,
+  s3_bucket: '',
+  s3_region: 'us-east-1',
+  s3_endpoint_url: '',
+  s3_prefix: '',
+  s3_path_style: false,
+  s3_access_key_id: '',
+  s3_secret_access_key: '',
 }
 
-function buildPayload(values: SftpFormValues): RemoteBackupCreatePayload {
-  const config: Record<string, unknown> = {
-    host: values.host.trim(),
-    port: typeof values.port === 'number' ? values.port : parseInt(values.port, 10) || 22,
-    remote_path: values.remote_path.trim() || '/',
+function buildPayload(values: FormValues): RemoteBackupCreatePayload {
+  const name = values.name.trim()
+  if (values.kind === 'sftp') {
+    const config: Record<string, unknown> = {
+      host: values.host.trim(),
+      port: typeof values.port === 'number' ? values.port : parseInt(String(values.port), 10) || 22,
+      remote_path: values.remote_path.trim() || '/',
+    }
+    if (values.host_key_fingerprint.trim()) {
+      config.host_key_fingerprint = values.host_key_fingerprint.trim()
+    }
+    const credentials: Record<string, unknown> = {
+      username: values.username.trim(),
+      auth_method: values.auth_method,
+    }
+    if (values.auth_method === 'password') {
+      credentials.password = values.password
+    } else {
+      credentials.private_key = values.private_key
+      if (values.private_key_passphrase) {
+        credentials.private_key_passphrase = values.private_key_passphrase
+      }
+    }
+    return { name, kind: 'sftp', config, credentials }
   }
-  if (values.host_key_fingerprint.trim()) {
-    config.host_key_fingerprint = values.host_key_fingerprint.trim()
-  }
-
-  const credentials: Record<string, unknown> = {
-    username: values.username.trim(),
-    auth_method: values.auth_method,
-  }
-  if (values.auth_method === 'password') {
-    credentials.password = values.password
-  } else {
-    credentials.private_key = values.private_key
-    if (values.private_key_passphrase) {
-      credentials.private_key_passphrase = values.private_key_passphrase
+  if (values.kind === 'ftps') {
+    const config: Record<string, unknown> = {
+      host: values.host.trim(),
+      port: typeof values.port === 'number' ? values.port : parseInt(String(values.port), 10) || 21,
+      remote_path: values.remote_path.trim() || '/',
+      use_tls: values.use_tls,
+    }
+    return {
+      name,
+      kind: 'ftps',
+      config,
+      credentials: {
+        username: values.username.trim(),
+        password: values.password,
+      },
     }
   }
-
-  return { name: values.name.trim(), kind: 'sftp', config, credentials }
+  // s3
+  const config: Record<string, unknown> = {
+    bucket: values.s3_bucket.trim(),
+    region: values.s3_region.trim(),
+    path_style: values.s3_path_style,
+  }
+  if (values.s3_endpoint_url.trim()) {
+    config.endpoint_url = values.s3_endpoint_url.trim()
+  }
+  if (values.s3_prefix.trim()) {
+    config.prefix = values.s3_prefix.trim()
+  }
+  return {
+    name,
+    kind: 's3',
+    config,
+    credentials: {
+      access_key_id: values.s3_access_key_id.trim(),
+      secret_access_key: values.s3_secret_access_key,
+    },
+  }
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -284,7 +351,7 @@ export function AdminRemoteBackupsPage() {
         </Card>
       )}
 
-      <SftpFormModal
+      <ConnectionFormModal
         opened={modalOpen}
         onClose={() => {
           setModalOpen(false)
@@ -304,9 +371,9 @@ export function AdminRemoteBackupsPage() {
   )
 }
 
-// ─── Modal create/edit ────────────────────────────────────────────────────────
+// ─── Modal create/edit (3 kinds) ─────────────────────────────────────────────
 
-function SftpFormModal({
+function ConnectionFormModal({
   opened,
   onClose,
   editTarget,
@@ -321,35 +388,63 @@ function SftpFormModal({
 }) {
   const { t } = useTranslation()
 
-  const form = useForm<SftpFormValues>({
+  const form = useForm<FormValues>({
     initialValues: editTarget
       ? {
           ...DEFAULT_FORM,
           name: editTarget.name,
+          kind: editTarget.kind,
+          // Champs SFTP/FTPS
           host: String(editTarget.config.host ?? ''),
-          port: typeof editTarget.config.port === 'number' ? editTarget.config.port : 22,
+          port:
+            typeof editTarget.config.port === 'number'
+              ? editTarget.config.port
+              : editTarget.kind === 'ftps'
+                ? 21
+                : 22,
           remote_path: String(editTarget.config.remote_path ?? '/'),
           host_key_fingerprint: String(editTarget.config.host_key_fingerprint ?? ''),
+          use_tls:
+            typeof editTarget.config.use_tls === 'boolean'
+              ? editTarget.config.use_tls
+              : true,
+          // Champs S3
+          s3_bucket: String(editTarget.config.bucket ?? ''),
+          s3_region: String(editTarget.config.region ?? 'us-east-1'),
+          s3_endpoint_url: String(editTarget.config.endpoint_url ?? ''),
+          s3_prefix: String(editTarget.config.prefix ?? ''),
+          s3_path_style: Boolean(editTarget.config.path_style ?? false),
         }
       : DEFAULT_FORM,
     validate: {
       name: (v) => (!v.trim() ? t('common.required') : null),
-      host: (v) => (!v.trim() ? t('common.required') : null),
-      username: (v) => (!v.trim() ? t('common.required') : null),
+      host: (v, values) =>
+        values.kind !== 's3' && !v.trim() ? t('common.required') : null,
+      username: (v, values) =>
+        values.kind !== 's3' && !v.trim() ? t('common.required') : null,
       password: (v, values) =>
-        values.auth_method === 'password' && !editTarget && !v
+        values.kind === 'sftp' && values.auth_method === 'password' && !editTarget && !v
           ? t('common.required')
-          : null,
+          : values.kind === 'ftps' && !editTarget && !v
+            ? t('common.required')
+            : null,
       private_key: (v, values) =>
-        values.auth_method === 'private_key' && !editTarget && !v
+        values.kind === 'sftp' &&
+        values.auth_method === 'private_key' &&
+        !editTarget &&
+        !v
           ? t('common.required')
           : null,
+      s3_bucket: (v, values) =>
+        values.kind === 's3' && !v.trim() ? t('common.required') : null,
+      s3_region: (v, values) =>
+        values.kind === 's3' && !v.trim() ? t('common.required') : null,
+      s3_access_key_id: (v, values) =>
+        values.kind === 's3' && !editTarget && !v.trim() ? t('common.required') : null,
+      s3_secret_access_key: (v, values) =>
+        values.kind === 's3' && !editTarget && !v ? t('common.required') : null,
     },
   })
-
-  function handleSubmit(values: SftpFormValues) {
-    onSubmit(buildPayload(values))
-  }
 
   return (
     <Modal
@@ -358,7 +453,7 @@ function SftpFormModal({
       title={editTarget ? t('admin.remoteBackups.editTitle') : t('admin.remoteBackups.addTitle')}
       size="lg"
     >
-      <form onSubmit={form.onSubmit(handleSubmit)}>
+      <form onSubmit={form.onSubmit((v) => onSubmit(buildPayload(v)))}>
         <Stack gap="sm">
           <TextInput
             label={t('admin.remoteBackups.fieldName')}
@@ -366,69 +461,22 @@ function SftpFormModal({
             required
             {...form.getInputProps('name')}
           />
-          <Group grow>
-            <TextInput
-              label={t('admin.remoteBackups.fieldHost')}
-              required
-              {...form.getInputProps('host')}
-            />
-            <NumberInput
-              label={t('admin.remoteBackups.fieldPort')}
-              min={1}
-              max={65535}
-              {...form.getInputProps('port')}
-            />
-          </Group>
-          <TextInput
-            label={t('admin.remoteBackups.fieldRemotePath')}
-            description={t('admin.remoteBackups.fieldRemotePathHint')}
-            required
-            {...form.getInputProps('remote_path')}
-          />
-          <TextInput
-            label={t('admin.remoteBackups.fieldFingerprint')}
-            description={t('admin.remoteBackups.fieldFingerprintHint')}
-            {...form.getInputProps('host_key_fingerprint')}
-          />
-          <TextInput
-            label={t('admin.remoteBackups.fieldUsername')}
-            required
-            {...form.getInputProps('username')}
-          />
           <Select
-            label={t('admin.remoteBackups.fieldAuthMethod')}
+            label={t('admin.remoteBackups.fieldKind')}
             data={[
-              { value: 'password', label: t('admin.remoteBackups.authPassword') },
-              { value: 'private_key', label: t('admin.remoteBackups.authPrivateKey') },
+              { value: 'sftp', label: 'SFTP (SSH)' },
+              { value: 's3', label: 'S3-compatible (AWS / R2 / B2 / Scaleway / OVH)' },
+              { value: 'ftps', label: 'FTPS' },
             ]}
-            {...form.getInputProps('auth_method')}
+            {...form.getInputProps('kind')}
             allowDeselect={false}
+            disabled={editTarget !== null}
+            description={editTarget ? t('admin.remoteBackups.kindLockedHint') : undefined}
           />
-          {form.values.auth_method === 'password' ? (
-            <PasswordInput
-              label={t('admin.remoteBackups.fieldPassword')}
-              description={
-                editTarget ? t('admin.remoteBackups.passwordEditHint') : undefined
-              }
-              {...form.getInputProps('password')}
-            />
-          ) : (
-            <>
-              <Textarea
-                label={t('admin.remoteBackups.fieldPrivateKey')}
-                description={
-                  editTarget ? t('admin.remoteBackups.privateKeyEditHint') : undefined
-                }
-                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
-                rows={6}
-                {...form.getInputProps('private_key')}
-              />
-              <PasswordInput
-                label={t('admin.remoteBackups.fieldPrivateKeyPassphrase')}
-                {...form.getInputProps('private_key_passphrase')}
-              />
-            </>
-          )}
+
+          {form.values.kind === 'sftp' && <SftpFields form={form} editing={editTarget !== null} />}
+          {form.values.kind === 'ftps' && <FtpsFields form={form} editing={editTarget !== null} />}
+          {form.values.kind === 's3' && <S3Fields form={form} editing={editTarget !== null} />}
 
           <Group justify="flex-end" mt="md">
             <Button variant="subtle" onClick={onClose}>
@@ -441,5 +489,178 @@ function SftpFormModal({
         </Stack>
       </form>
     </Modal>
+  )
+}
+
+function SftpFields({
+  form,
+  editing,
+}: {
+  form: ReturnType<typeof useForm<FormValues>>
+  editing: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <Group grow>
+        <TextInput
+          label={t('admin.remoteBackups.fieldHost')}
+          required
+          {...form.getInputProps('host')}
+        />
+        <NumberInput
+          label={t('admin.remoteBackups.fieldPort')}
+          min={1}
+          max={65535}
+          {...form.getInputProps('port')}
+        />
+      </Group>
+      <TextInput
+        label={t('admin.remoteBackups.fieldRemotePath')}
+        description={t('admin.remoteBackups.fieldRemotePathHint')}
+        required
+        {...form.getInputProps('remote_path')}
+      />
+      <TextInput
+        label={t('admin.remoteBackups.fieldFingerprint')}
+        description={t('admin.remoteBackups.fieldFingerprintHint')}
+        {...form.getInputProps('host_key_fingerprint')}
+      />
+      <TextInput
+        label={t('admin.remoteBackups.fieldUsername')}
+        required
+        {...form.getInputProps('username')}
+      />
+      <Select
+        label={t('admin.remoteBackups.fieldAuthMethod')}
+        data={[
+          { value: 'password', label: t('admin.remoteBackups.authPassword') },
+          { value: 'private_key', label: t('admin.remoteBackups.authPrivateKey') },
+        ]}
+        {...form.getInputProps('auth_method')}
+        allowDeselect={false}
+      />
+      {form.values.auth_method === 'password' ? (
+        <PasswordInput
+          label={t('admin.remoteBackups.fieldPassword')}
+          description={editing ? t('admin.remoteBackups.passwordEditHint') : undefined}
+          {...form.getInputProps('password')}
+        />
+      ) : (
+        <>
+          <Textarea
+            label={t('admin.remoteBackups.fieldPrivateKey')}
+            description={editing ? t('admin.remoteBackups.privateKeyEditHint') : undefined}
+            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
+            rows={6}
+            {...form.getInputProps('private_key')}
+          />
+          <PasswordInput
+            label={t('admin.remoteBackups.fieldPrivateKeyPassphrase')}
+            {...form.getInputProps('private_key_passphrase')}
+          />
+        </>
+      )}
+    </>
+  )
+}
+
+function FtpsFields({
+  form,
+  editing,
+}: {
+  form: ReturnType<typeof useForm<FormValues>>
+  editing: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <Group grow>
+        <TextInput
+          label={t('admin.remoteBackups.fieldHost')}
+          required
+          {...form.getInputProps('host')}
+        />
+        <NumberInput
+          label={t('admin.remoteBackups.fieldPort')}
+          min={1}
+          max={65535}
+          {...form.getInputProps('port')}
+        />
+      </Group>
+      <TextInput
+        label={t('admin.remoteBackups.fieldRemotePath')}
+        description={t('admin.remoteBackups.fieldRemotePathHint')}
+        required
+        {...form.getInputProps('remote_path')}
+      />
+      <Switch
+        label={t('admin.remoteBackups.fieldUseTls')}
+        description={t('admin.remoteBackups.fieldUseTlsHint')}
+        {...form.getInputProps('use_tls', { type: 'checkbox' })}
+      />
+      <TextInput
+        label={t('admin.remoteBackups.fieldUsername')}
+        required
+        {...form.getInputProps('username')}
+      />
+      <PasswordInput
+        label={t('admin.remoteBackups.fieldPassword')}
+        description={editing ? t('admin.remoteBackups.passwordEditHint') : undefined}
+        {...form.getInputProps('password')}
+      />
+    </>
+  )
+}
+
+function S3Fields({
+  form,
+  editing,
+}: {
+  form: ReturnType<typeof useForm<FormValues>>
+  editing: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <TextInput
+        label={t('admin.remoteBackups.fieldS3Bucket')}
+        required
+        {...form.getInputProps('s3_bucket')}
+      />
+      <Group grow>
+        <TextInput
+          label={t('admin.remoteBackups.fieldS3Region')}
+          required
+          {...form.getInputProps('s3_region')}
+        />
+        <TextInput
+          label={t('admin.remoteBackups.fieldS3Prefix')}
+          description={t('admin.remoteBackups.fieldS3PrefixHint')}
+          {...form.getInputProps('s3_prefix')}
+        />
+      </Group>
+      <TextInput
+        label={t('admin.remoteBackups.fieldS3Endpoint')}
+        description={t('admin.remoteBackups.fieldS3EndpointHint')}
+        placeholder="https://abc123.r2.cloudflarestorage.com"
+        {...form.getInputProps('s3_endpoint_url')}
+      />
+      <Switch
+        label={t('admin.remoteBackups.fieldS3PathStyle')}
+        description={t('admin.remoteBackups.fieldS3PathStyleHint')}
+        {...form.getInputProps('s3_path_style', { type: 'checkbox' })}
+      />
+      <TextInput
+        label={t('admin.remoteBackups.fieldS3AccessKeyId')}
+        required
+        {...form.getInputProps('s3_access_key_id')}
+      />
+      <PasswordInput
+        label={t('admin.remoteBackups.fieldS3SecretAccessKey')}
+        description={editing ? t('admin.remoteBackups.passwordEditHint') : undefined}
+        {...form.getInputProps('s3_secret_access_key')}
+      />
+    </>
   )
 }

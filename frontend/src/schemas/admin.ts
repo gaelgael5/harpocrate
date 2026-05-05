@@ -202,7 +202,7 @@ export type ValidateSchemaResponse = z.infer<typeof ValidateSchemaResponseSchema
 export const RemoteBackupConnectionSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
-  kind: z.enum(['sftp']),
+  kind: z.enum(['sftp', 's3', 'ftps']),
   config: z.record(z.unknown()),
   created_at: z.string(),
   updated_at: z.string(),

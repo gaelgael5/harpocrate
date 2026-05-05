@@ -461,7 +461,21 @@
       "testFailed": "Connection test failed",
       "createSuccess": "Connection created",
       "updateSuccess": "Connection updated",
-      "deleteSuccess": "Connection deleted"
+      "deleteSuccess": "Connection deleted",
+      "fieldKind": "Connection type",
+      "kindLockedHint": "The type cannot be changed after creation",
+      "fieldUseTls": "Enable TLS (FTPS)",
+      "fieldUseTlsHint": "Disable only for plain FTP (not recommended)",
+      "fieldS3Bucket": "S3 bucket",
+      "fieldS3Region": "Region",
+      "fieldS3Prefix": "Prefix (optional)",
+      "fieldS3PrefixHint": "Prepended to each object key (e.g. node-paris/)",
+      "fieldS3Endpoint": "S3 endpoint (optional)",
+      "fieldS3EndpointHint": "Empty for AWS S3; specific URL for R2/B2/Scaleway/OVH/MinIO",
+      "fieldS3PathStyle": "Path-style addressing",
+      "fieldS3PathStyleHint": "Enable for Cloudflare R2, Backblaze B2, MinIO. Disable for AWS",
+      "fieldS3AccessKeyId": "Access Key ID",
+      "fieldS3SecretAccessKey": "Secret Access Key"
     },
     "replication": {
       "title": "Replication",

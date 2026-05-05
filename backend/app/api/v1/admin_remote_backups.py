@@ -17,14 +17,14 @@ from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
 from app.services import remote_backup_connections as svc
 from app.services.remote_backup_providers import (
+    SUPPORTED_KINDS as _ALLOWED_KINDS,
+)
+from app.services.remote_backup_providers import (
     RemoteBackupProviderError,
     get_provider,
 )
 
 router = APIRouter(prefix="/admin/backup-remotes", tags=["admin-remote-backups"])
-
-_ALLOWED_KINDS = {"sftp"}
-
 
 # ─── Models ──────────────────────────────────────────────────────────────────
 

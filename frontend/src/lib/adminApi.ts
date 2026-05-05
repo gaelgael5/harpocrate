@@ -239,7 +239,7 @@ export async function fetchRemoteBackupConnection(id: string): Promise<RemoteBac
 
 export interface RemoteBackupCreatePayload {
   name: string
-  kind: 'sftp'
+  kind: 'sftp' | 's3' | 'ftps'
   config: Record<string, unknown>
   credentials: Record<string, unknown>
 }

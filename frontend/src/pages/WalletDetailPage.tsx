@@ -28,6 +28,7 @@ import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { api, ApiError } from '@/lib/api-client'
+import { FolderTree } from '@/components/FolderTree'
 import { exportWallet } from '@/lib/exportImportApi'
 import { WalletItemSchema } from '@/schemas/wallets'
 import { type SecretListItem } from '@/schemas/secrets'
@@ -427,54 +428,81 @@ export function WalletDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="secrets" pt="md">
-          <Stack gap="md">
-            {/* Breadcrumb navigation */}
-            <PathBreadcrumb path={currentPath} onNavigate={setCurrentPath} />
+          <Group align="flex-start" wrap="nowrap" gap="md">
+            {/* Sidebar arbre */}
+            <Stack
+              gap="xs"
+              style={{
+                borderRight: '1px solid var(--mantine-color-gray-3)',
+                paddingRight: 12,
+                position: 'sticky',
+                top: 12,
+                maxHeight: 'calc(100vh - 200px)',
+                overflowY: 'auto',
+              }}
+            >
+              <Text fw={600} size="sm">
+                {t('secrets.paths.folders')}
+              </Text>
+              {walletId && (
+                <FolderTree
+                  walletId={walletId}
+                  currentPath={currentPath}
+                  onSelect={setCurrentPath}
+                />
+              )}
+            </Stack>
 
-            {secretsLoading ? (
-              <Center py="xl">
-                <Loader size="sm" />
-              </Center>
-            ) : (
-              <>
-                {/* Folder grid */}
-                {(treeData?.folders.length ?? 0) > 0 && (
-                  <Stack gap="xs">
-                    <Text fw={600} size="sm">
-                      {t('secrets.paths.folders')}
-                    </Text>
-                    <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
-                      {treeData?.folders.map((folder) => (
-                        <FolderCard
-                          key={folder.full_path}
-                          folder={folder}
-                          onClick={() => setCurrentPath(folder.full_path)}
-                          onDelete={() => deleteFolderMutation.mutate(folder.full_path)}
-                        />
-                      ))}
-                    </SimpleGrid>
-                  </Stack>
-                )}
+            {/* Contenu central */}
+            <Stack gap="md" style={{ flex: 1 }}>
+              {/* Breadcrumb navigation */}
+              <PathBreadcrumb path={currentPath} onNavigate={setCurrentPath} />
 
-                {/* Secrets at current level */}
-                {(pathSecrets?.secrets.length ?? 0) === 0 &&
-                (treeData?.folders.length ?? 0) === 0 ? (
-                  <Text c="dimmed">{t('secrets.noSecrets')}</Text>
-                ) : (
-                  (pathSecrets?.secrets.length ?? 0) > 0 && (
+              {secretsLoading ? (
+                <Center py="xl">
+                  <Loader size="sm" />
+                </Center>
+              ) : (
+                <>
+                  {/* Folder grid */}
+                  {(treeData?.folders.length ?? 0) > 0 && (
                     <Stack gap="xs">
                       <Text fw={600} size="sm">
-                        {t('secrets.paths.secretsHere')}
+                        {t('secrets.paths.folders')}
                       </Text>
-                      {pathSecrets?.secrets.map((s) => (
-                        <SecretCard key={s.id} secret={s} walletId={walletId ?? ''} />
-                      ))}
+                      <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
+                        {treeData?.folders.map((folder) => (
+                          <FolderCard
+                            key={folder.full_path}
+                            folder={folder}
+                            onClick={() => setCurrentPath(folder.full_path)}
+                            onDelete={() => deleteFolderMutation.mutate(folder.full_path)}
+                          />
+                        ))}
+                      </SimpleGrid>
                     </Stack>
-                  )
-                )}
-              </>
-            )}
-          </Stack>
+                  )}
+
+                  {/* Secrets at current level */}
+                  {(pathSecrets?.secrets.length ?? 0) === 0 &&
+                  (treeData?.folders.length ?? 0) === 0 ? (
+                    <Text c="dimmed">{t('secrets.noSecrets')}</Text>
+                  ) : (
+                    (pathSecrets?.secrets.length ?? 0) > 0 && (
+                      <Stack gap="xs">
+                        <Text fw={600} size="sm">
+                          {t('secrets.paths.secretsHere')}
+                        </Text>
+                        {pathSecrets?.secrets.map((s) => (
+                          <SecretCard key={s.id} secret={s} walletId={walletId ?? ''} />
+                        ))}
+                      </Stack>
+                    )
+                  )}
+                </>
+              )}
+            </Stack>
+          </Group>
         </Tabs.Panel>
       </Tabs>
     </Stack>

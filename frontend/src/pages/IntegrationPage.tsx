@@ -75,6 +75,10 @@ interface SdkCatalogEntry {
   wikiUrl: string
 }
 
+// Convention wiki : `dev_sdk-{language}` (page FR par défaut, voir
+// https://github.com/gaelgael5/harpocrate/wiki). Si une page EN distincte
+// existe un jour, transformer `wikiUrl` en `{ fr: string; en: string }` et
+// adapter `pickWikiUrl()` en bas du fichier.
 const SDK_CATALOG: SdkCatalogEntry[] = [
   {
     id: 'python',
@@ -82,7 +86,7 @@ const SDK_CATALOG: SdkCatalogEntry[] = [
     icon: '🐍',
     status: 'available',
     manifestLanguage: 'python',
-    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-Python',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/dev_sdk-python',
   },
   {
     id: 'bash',
@@ -90,7 +94,7 @@ const SDK_CATALOG: SdkCatalogEntry[] = [
     icon: '🖥️',
     status: 'available',
     manifestLanguage: 'bash',
-    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/CLI-Bash',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/dev_sdk-bash',
   },
   {
     id: 'typescript',
@@ -98,7 +102,7 @@ const SDK_CATALOG: SdkCatalogEntry[] = [
     icon: '🟦',
     status: 'planned',
     manifestLanguage: null,
-    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-TypeScript',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/dev_sdk-typescript',
   },
   {
     id: 'javascript',
@@ -106,7 +110,7 @@ const SDK_CATALOG: SdkCatalogEntry[] = [
     icon: '🟨',
     status: 'planned',
     manifestLanguage: null,
-    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-JavaScript',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/dev_sdk-javascript',
   },
   {
     id: 'go',
@@ -114,7 +118,7 @@ const SDK_CATALOG: SdkCatalogEntry[] = [
     icon: '🦦',
     status: 'planned',
     manifestLanguage: null,
-    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-Go',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/dev_sdk-go',
   },
   {
     id: 'rust',
@@ -122,7 +126,7 @@ const SDK_CATALOG: SdkCatalogEntry[] = [
     icon: '🦀',
     status: 'planned',
     manifestLanguage: null,
-    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-Rust',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/dev_sdk-rust',
   },
   {
     id: 'csharp',
@@ -130,7 +134,7 @@ const SDK_CATALOG: SdkCatalogEntry[] = [
     icon: '🟪',
     status: 'planned',
     manifestLanguage: null,
-    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-CSharp',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/dev_sdk-csharp',
   },
 ]
 

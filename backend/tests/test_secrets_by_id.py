@@ -375,6 +375,34 @@ async def test_put_by_id_cross_wallet_returns_404() -> None:
     assert r.json()["detail"]["error"] == "secret_not_found"
 
 
+@pytest.mark.asyncio
+async def test_put_by_id_requires_write_permission() -> None:
+    """403 si le caller n'a pas [write]."""
+    conn = _make_conn()
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        # Tout sauf write (PERM_WRITE = 0x08)
+        return _fake_wallet_row(permissions=_PERM_ALL & ~0x08)
+
+    conn.fetchrow = fetchrow_side
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.put(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}",
+            json={"encrypted_value": _FAKE_ENC_VALUE_B64},
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 403
+    assert r.json()["detail"]["error"] == "insufficient_permissions"
+
+
 # ─── DELETE /by-id/{sid} ──────────────────────────────────────────────────────
 
 

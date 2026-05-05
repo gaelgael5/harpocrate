@@ -623,3 +623,64 @@ async def get_secret_by_id(
         type_uuid=secret.type_uuid,
         schema_version_uuid=secret.schema_version_uuid,
     )
+
+
+async def put_secret_by_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    secret_id: UUID,
+    req: SecretPutRequest,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> SecretPutResponse:
+    """Remplace encrypted_value par UUID. 404 si le secret n'existe pas ou n'appartient pas au wallet."""
+    secret = await secrets_repo.get_secret_by_id(conn, secret_id=secret_id)
+    if secret is None or secret.wallet_id != wallet_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "secret_not_found", "message": "Secret not found"},
+        )
+
+    if secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "placeholder_expected",
+                "message": (
+                    "This secret is a placeholder. "
+                    "Use POST /populate (permission [init]) to set its value."
+                ),
+            },
+        )
+
+    try:
+        enc_value = base64.b64decode(req.encrypted_value)
+    except Exception as exc:  # pragma: no cover — validé par Pydantic
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_base64", "message": "encrypted_value is not valid base64"},
+        ) from exc
+
+    async with conn.transaction():
+        new_version = await secrets_repo.update_secret_value(
+            conn,
+            secret_id=secret.id,
+            encrypted_value=enc_value,
+            updated_by_user_id=caller_user_id,
+        )
+        await audit_log_insert(
+            conn,
+            "secret.updated",
+            actor_user_id=caller_user_id,
+            actor_ip=actor_ip,
+            target_wallet_id=wallet_id,
+            target_secret_id=secret.id,
+            metadata={
+                "secret_name": secret.name,
+                "field": "encrypted_value",
+                "access_via": "by_id",
+            },
+        )
+
+    return SecretPutResponse(generation_version=new_version)

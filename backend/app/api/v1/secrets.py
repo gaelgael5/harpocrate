@@ -160,6 +160,32 @@ async def get_secret_by_id(
     return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
+# ─── PUT /v1/wallets/{wallet_id}/secrets/by-id/{secret_id} ───────────────────
+
+
+@router.put("/by-id/{secret_id}")
+async def put_secret_by_id(
+    wallet_id: UUID,
+    secret_id: UUID,
+    req: SecretPutRequest,
+    auth: WriteAuth,
+    request: Request,
+) -> JSONResponse:
+    """Remplace encrypted_value par UUID. Requiert [write]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await secrets_svc.put_secret_by_id(
+            conn,
+            wallet_id=wallet_id,
+            secret_id=secret_id,
+            req=req,
+            caller_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
+
+
 # ─── GET /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────────
 
 

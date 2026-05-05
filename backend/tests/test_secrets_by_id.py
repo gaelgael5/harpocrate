@@ -264,3 +264,72 @@ async def test_get_by_id_returns_404_when_secret_does_not_exist() -> None:
 
     assert r.status_code == 404
     assert r.json()["detail"]["error"] == "secret_not_found"
+
+
+# ─── PUT /by-id/{sid} ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_put_by_id_happy_path() -> None:
+    """PUT by-id remplace encrypted_value et incrémente generation_version."""
+    conn = _make_conn()
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row()  # get_secret_by_id
+        return None
+
+    conn.fetchrow = fetchrow_side
+    conn.fetch = AsyncMock(return_value=[])
+    # update_secret_value retourne la nouvelle generation_version
+    conn.fetchval = AsyncMock(return_value=2)
+
+    new_value_b64 = base64.b64encode(b"new_encrypted_value").decode()
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.put(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}",
+            json={"encrypted_value": new_value_b64},
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["generation_version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_put_by_id_cross_wallet_returns_404() -> None:
+    """PUT sur un secret d'un autre wallet → 404."""
+    conn = _make_conn()
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(wallet_id=_WALLET_ID, permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row(wallet_id=_OTHER_WALLET_ID)
+        return None
+
+    conn.fetchrow = fetchrow_side
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.put(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}",
+            json={"encrypted_value": _FAKE_ENC_VALUE_B64},
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 404
+    assert r.json()["detail"]["error"] == "secret_not_found"

@@ -377,7 +377,7 @@ async def delete_secret_by_id(
     auth: RemoveAuth,
     request: Request,
 ) -> Response:
-    """Supprime le secret par UUID (cascade sur secret_tags + secret_path_index). Requiert [remove]."""
+    """Supprime le secret par UUID (cascade sur secret_tags + path_index). Requiert [remove]."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         await secrets_svc.delete_secret_by_id(

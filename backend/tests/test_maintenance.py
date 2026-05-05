@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import base64
-import datetime
-import uuid
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -45,15 +43,22 @@ def patch_jwks() -> Generator[None, None, None]:
 
 @pytest.fixture(autouse=True)
 def reset_maintenance() -> Generator[None, None, None]:
-    """Remet le mode maintenance à False entre chaque test."""
+    """Remet le mode maintenance à False entre chaque test (legacy + cluster_state)."""
+    from app.core.cluster_state import cluster_state
     from app.core.maintenance import maintenance_state
     maintenance_state.active = False
     maintenance_state.reason = None
     maintenance_state.started_at = None
     maintenance_state.effective_at = None
     maintenance_state.estimated_end_at = None
+    cluster_state.maintenance_active = False
+    cluster_state.maintenance_reason = None
+    cluster_state.maintenance_started_at = None
+    cluster_state.maintenance_effective_at = None
+    cluster_state.maintenance_estimated_end_at = None
     yield
     maintenance_state.active = False
+    cluster_state.maintenance_active = False
 
 
 def _make_conn() -> MagicMock:
@@ -139,8 +144,10 @@ async def test_maintenance_enable_sets_active() -> None:
 @pytest.mark.asyncio
 async def test_maintenance_blocks_normal_requests() -> None:
     """En mode maintenance, les requêtes non-admin reçoivent 503."""
+    from app.core.cluster_state import cluster_state
     from app.core.maintenance import maintenance_state
     maintenance_state.active = True
+    cluster_state.maintenance_active = True
 
     conn = _make_conn()
     async with _make_client(_make_pool(conn)) as client:
@@ -152,8 +159,10 @@ async def test_maintenance_blocks_normal_requests() -> None:
 @pytest.mark.asyncio
 async def test_maintenance_allows_health() -> None:
     """En mode maintenance, /v1/health passe toujours."""
+    from app.core.cluster_state import cluster_state
     from app.core.maintenance import maintenance_state
     maintenance_state.active = True
+    cluster_state.maintenance_active = True
 
     conn = _make_conn()
     async with _make_client(_make_pool(conn)) as client:
@@ -164,8 +173,10 @@ async def test_maintenance_allows_health() -> None:
 @pytest.mark.asyncio
 async def test_maintenance_allows_admin_routes() -> None:
     """En mode maintenance, /v1/admin/* passe."""
+    from app.core.cluster_state import cluster_state
     from app.core.maintenance import maintenance_state
     maintenance_state.active = True
+    cluster_state.maintenance_active = True
 
     conn = _make_conn()
     async with _make_client(_make_pool(conn)) as client:
@@ -176,8 +187,10 @@ async def test_maintenance_allows_admin_routes() -> None:
 @pytest.mark.asyncio
 async def test_maintenance_disable() -> None:
     """POST /v1/admin/maintenance/disable désactive le mode."""
+    from app.core.cluster_state import cluster_state
     from app.core.maintenance import maintenance_state
     maintenance_state.active = True
+    cluster_state.maintenance_active = True
 
     conn = _make_conn()
     conn.execute = AsyncMock(return_value=None)

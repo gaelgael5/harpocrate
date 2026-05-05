@@ -1,7 +1,8 @@
-"""FastAPI app — lifespan gère le pool asyncpg et le cache JWKS."""
+"""FastAPI app — lifespan gère le pool asyncpg, JWKS, cluster sync (LOT_21A)."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -32,16 +33,17 @@ from app.api.v1 import (
     users,
     wallets,
 )
+from app.core.cluster_sync import get_cluster_sync, init_cluster_sync
 from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
-from app.core.maintenance import maintenance_state
 from app.db.pool import close_pool, get_pool, init_pool
-from migrations.apply_migrations import apply_migrations
+from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import wallets as wallets_svc
 from app.services.secret_paths import InvalidSecretPath
+from migrations.apply_migrations import apply_migrations
 
 configure_logging()
 
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "starting",
         version="0.1.0",
         public_url=settings.public_url,
+        instance_id=settings.instance_id,
     )
     await init_pool()
     await apply_migrations()
@@ -60,6 +63,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await get_pool()
     async with pool.acquire() as conn:
         await seed_svc.seed_system_types(conn)
+
+    # LOT_21A — démarre la sync cluster (LISTEN/NOTIFY + refresh 5s).
+    # Le start() effectue un refresh initial AVANT de retourner, donc l'app
+    # n'accepte aucun trafic tant que `cluster_state` n'est pas synchronisé.
+    cluster_sync = init_cluster_sync(pool)
+    await cluster_sync.start()
+
     scheduler = sched_svc.init_scheduler(pool)
     try:
         await scheduler.start()
@@ -68,7 +78,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     async def _wallet_purge_loop() -> None:
         while True:
-            await asyncio.sleep(3600)  # toutes les heures
+            await asyncio.sleep(3600)
             try:
                 async with pool.acquire() as conn:
                     await wallets_svc.purge_expired_wallets(conn)
@@ -80,10 +90,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        # LOT_21A — graceful shutdown. uvicorn gère déjà `timeout_graceful_shutdown`
+        # (drain des requêtes en cours). On stop ici les tâches de fond dans
+        # l'ordre inverse du démarrage.
+        logger.info("shutdown_initiated", instance_id=settings.instance_id)
         purge_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await purge_task
         await scheduler.stop()
+        sync = get_cluster_sync()
+        if sync is not None:
+            await sync.stop()
         await close_pool()
-        logger.info("stopped")
+        logger.info("shutdown_complete", instance_id=settings.instance_id)
 
 
 app = FastAPI(
@@ -101,38 +120,23 @@ async def _invalid_secret_path_handler(_request: Request, exc: InvalidSecretPath
     )
 
 
-# ─── Middleware : log des requêtes HTTP ───────────────────────────────────────
+# ─── Middlewares ──────────────────────────────────────────────────────────────
 #
-# RÈGLE DE SÉCURITÉ : les chemins /secrets ne doivent JAMAIS avoir leur body loggé.
-# Ce middleware ne lit pas du tout le body ; il se contente de noter body_logged=False
-# pour les chemins secrets afin de documenter explicitement l'intention.
-# Les handlers eux-mêmes ne loguent jamais les champs encrypted_value.
+# RÈGLE DE SÉCURITÉ : les chemins /secrets ne doivent JAMAIS avoir leur body
+# loggé. Le middleware log_requests ne lit pas le body ; il marque seulement
+# body_logged=False pour les chemins secrets (documentaire).
+#
+# LOT_21A : le `cluster_coherence_middleware` remplace l'ancien
+# `maintenance_middleware`. Il bloque maintenance + epoch incohérent.
 
 
 @app.middleware("http")
-async def maintenance_middleware(request: Request, call_next: object) -> Response:
-    """Bloque toutes les requêtes non-admin avec 503 en mode maintenance."""
+async def _cluster_middleware(request: Request, call_next: object) -> Response:
     import typing
-    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
-    if maintenance_state.active:
-        path = request.url.path
-        if (
-            path.startswith("/v1/admin/")
-            or path == "/v1/health"
-        ):
-            return await _call_next(request)
-        return JSONResponse(
-            status_code=503,
-            content={
-                "error": "maintenance_in_progress",
-                "estimated_end_at": (
-                    maintenance_state.estimated_end_at.isoformat()
-                    if maintenance_state.estimated_end_at else None
-                ),
-            },
-            headers={"Retry-After": "60"},
-        )
-    return await _call_next(request)
+    _call_next = typing.cast(
+        "typing.Callable[[Request], typing.Awaitable[Response]]", call_next
+    )
+    return await cluster_coherence_middleware(request, _call_next)
 
 
 @app.middleware("http")
@@ -140,9 +144,10 @@ async def log_requests(request: Request, call_next: object) -> Response:
     """Log HTTP requests. Body NEVER read or logged for /secrets paths."""
     import typing
 
-    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
+    _call_next = typing.cast(
+        "typing.Callable[[Request], typing.Awaitable[Response]]", call_next
+    )
     path = request.url.path
-    # Détecte tout chemin contenant /secrets (liste ou item)
     is_secrets_path = "/secrets" in path
     body_logged = not is_secrets_path
 

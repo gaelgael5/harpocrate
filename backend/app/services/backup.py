@@ -88,12 +88,27 @@ async def get_current_session_epoch(conn: asyncpg.Connection) -> int:
 
 
 async def rotate_session_epoch(conn: asyncpg.Connection, reason: str) -> int:
+    """Incrémente l'epoch et notifie le cluster (LOT_21A).
+
+    Le NOTIFY est émis dans la même transaction que le UPDATE — Postgres ne
+    livre les notifications qu'au COMMIT, donc tout rollback annule la notif.
+    """
     row = await conn.fetchrow(
-        "UPDATE server_session_epoch SET epoch = epoch + 1, reason = $1, updated_at = NOW() RETURNING epoch",
+        """
+        UPDATE server_session_epoch
+        SET epoch = epoch + 1,
+            rotated_reason = $1,
+            rotated_at = NOW()
+        RETURNING epoch
+        """,
         reason,
     )
     assert row is not None
-    return int(row["epoch"])
+    new_epoch = int(row["epoch"])
+    # Import paresseux : évite import circulaire si cluster_notify importe backup.
+    from app.services.cluster_notify import notify_epoch_changed
+    await notify_epoch_changed(conn, new_epoch)
+    return new_epoch
 
 
 async def create_backup(

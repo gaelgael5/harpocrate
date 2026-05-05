@@ -36,6 +36,20 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     apps_file: str = Field(default="/app/apps.json")
 
+    # ─── Clustering (LOT_21A) ─────────────────────────────────────────────────
+    # Identifiant unique du nœud dans les logs cluster. Auto-généré si vide
+    # (hostname-pid). Injecter manuellement en prod pour avoir des IDs stables.
+    instance_id: str = Field(default="")
+
+    @field_validator("instance_id")
+    @classmethod
+    def _auto_instance_id(cls, v: str) -> str:
+        if v:
+            return v
+        import os
+        import socket
+        return f"{socket.gethostname()}-{os.getpid()}"
+
     # ─── Auth locale (alternative à Keycloak OIDC) ────────────────────────────
     # WARNING : mot de passe stocké en clair dans .env — le fichier doit être en 600.
     # Activer uniquement pour dev / break-glass.

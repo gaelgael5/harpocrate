@@ -3,6 +3,16 @@ from __future__ import annotations
 
 import re
 
+
+class InvalidSecretPath(Exception):
+    """Levée quand un nom de secret ne respecte pas les règles de path.
+
+    N'hérite PAS de ValueError pour ne pas être interceptée par les
+    field_validator Pydantic (qui convertissent ValueError en 422).
+    Mappée par un handler FastAPI global vers 400 invalid_secret_path.
+    """
+
+
 _ROOT_NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
 _SEGMENT_RE = re.compile(r"^[a-zA-Z0-9@._-]+$")
 _MAX_DEPTH = 10

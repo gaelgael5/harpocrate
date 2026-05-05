@@ -15,7 +15,7 @@ import pytest
 import pytest_asyncio
 
 from app.db.repositories.secrets import get_tree_data, list_by_path
-from app.services.secret_paths import normalize_path, validate_secret_name
+from app.services.secret_paths import InvalidSecretPath, normalize_path, validate_secret_name
 
 pytestmark = pytest.mark.asyncio
 
@@ -192,23 +192,23 @@ def test_validate_accepts_email_segment() -> None:
 
 
 def test_validate_rejects_empty_segment() -> None:
-    with pytest.raises(ValueError, match="[Ee]mpty"):  # noqa: RUF043
+    with pytest.raises(InvalidSecretPath, match="[Ee]mpty"):  # noqa: RUF043
         validate_secret_name("bob//key")
 
 
 def test_validate_rejects_dot_segment() -> None:
-    with pytest.raises(ValueError, match="[Rr]elative"):  # noqa: RUF043
+    with pytest.raises(InvalidSecretPath, match="[Rr]elative"):  # noqa: RUF043
         validate_secret_name("bob/../key")
 
 
 def test_validate_rejects_invalid_char() -> None:
-    with pytest.raises(ValueError, match="[Ii]nvalid"):  # noqa: RUF043
+    with pytest.raises(InvalidSecretPath, match="[Ii]nvalid"):  # noqa: RUF043
         validate_secret_name("bob/key with space")
 
 
 def test_validate_rejects_too_deep() -> None:
     deep = "/".join(["a"] * 13)
-    with pytest.raises(ValueError, match="deep"):
+    with pytest.raises(InvalidSecretPath, match="deep"):
         validate_secret_name(deep)
 
 

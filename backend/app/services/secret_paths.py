@@ -24,11 +24,11 @@ def validate_secret_name(name: str) -> str:
     - Sans '/' → doit matcher [A-Za-z0-9_.-] (env-var safe)
     - Avec '/' → '/' initial ajouté si absent, pas de '/' final
 
-    Lève ValueError si invalide.
+    Lève InvalidSecretPath si invalide.
     """
     if "/" not in name:
         if not _ROOT_NAME_RE.match(name):
-            raise ValueError(
+            raise InvalidSecretPath(
                 f"Invalid secret name '{name}': only [A-Za-z0-9_.-] allowed for root secrets"
             )
         return name
@@ -36,18 +36,18 @@ def validate_secret_name(name: str) -> str:
     normalized = name if name.startswith("/") else "/" + name
 
     if "//" in normalized:
-        raise ValueError("Empty path segments not allowed (found '//')")
+        raise InvalidSecretPath("Empty path segments not allowed (found '//')")
 
     segments = [s for s in normalized.split("/") if s]
 
     if len(segments) > _MAX_DEPTH + 1:
-        raise ValueError(f"Path too deep (max {_MAX_DEPTH} levels, got {len(segments) - 1})")
+        raise InvalidSecretPath(f"Path too deep (max {_MAX_DEPTH} levels, got {len(segments) - 1})")
 
     for seg in segments:
         if seg in (".", ".."):
-            raise ValueError("Relative path navigation not allowed ('.' or '..')")
+            raise InvalidSecretPath("Relative path navigation not allowed ('.' or '..')")
         if not _SEGMENT_RE.match(seg):
-            raise ValueError(
+            raise InvalidSecretPath(
                 f"Invalid path segment '{seg}': only [a-zA-Z0-9@._-] allowed"
             )
 

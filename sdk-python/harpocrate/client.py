@@ -82,6 +82,42 @@ class SecretsClient:
             return f"{base}/{encoded}"
         return base
 
+    def _resolve_id_if_pathstyle(self, name: str) -> str | None:
+        """Résout l'UUID d'un secret si son nom contient un '/' (path-style).
+
+        Pour les noms sans '/', retourne None — l'appelant utilisera la route name-based.
+        Pour les noms à '/', liste les secrets au path parent et trouve l'entrée matching.
+        Lève SecretNotFound si aucun secret ne correspond.
+        """
+        from harpocrate.exceptions import SecretNotFound
+
+        if "/" not in name:
+            return None
+
+        normalized = self._normalize_name(name)
+        # Path parent : tout sauf le dernier segment, avec '/' final garanti
+        parent_path = normalized.rsplit("/", 1)[0] + "/"
+        # Cas spécial : nom à un seul segment après le '/' initial → parent = '/'
+        if parent_path == "/" and not normalized.startswith("//"):
+            pass  # parent_path déjà '/'
+
+        data = self._http.get(
+            f"/v1/wallets/{self._wallet_id}/secrets",
+            path=parent_path,
+        )
+        for s in data.get("secrets", []):
+            if s.get("name") == normalized:
+                return str(s["id"])
+
+        raise SecretNotFound(f"Secret '{name}' not found in wallet")
+
+    def _path_for_op(self, name: str) -> str:
+        """URL d'opération unitaire — by-id si nom path-style, by-name sinon."""
+        sid = self._resolve_id_if_pathstyle(name)
+        if sid is not None:
+            return f"/v1/wallets/{self._wallet_id}/secrets/by-id/{sid}"
+        return self._path(name)
+
     def list_secrets(
         self,
         tag: str | None = None,
@@ -147,7 +183,7 @@ class SecretsClient:
         wallet_key = self._wallet_key()
         enc_value = aes_gcm_encrypt(value.encode("utf-8"), wallet_key)
         enc_value_b64 = base64.b64encode(enc_value).decode()
-        result = self._http.put(self._path(name), json={"encrypted_value": enc_value_b64})
+        result = self._http.put(self._path_for_op(name), json={"encrypted_value": enc_value_b64})
         return int(result["generation_version"])
 
     def patch(
@@ -165,11 +201,11 @@ class SecretsClient:
             body["description"] = description
         if tags is not None:
             body["tags"] = tags
-        self._http.patch(self._path(name), json=body)
+        self._http.patch(self._path_for_op(name), json=body)
 
     def delete(self, name: str) -> None:
-        """Supprime un secret. Requiert [remove]."""
-        self._http.delete(self._path(name))
+        """Supprime un secret (résout l'ID si le nom est path-style). Requiert [remove]."""
+        self._http.delete(self._path_for_op(name))
 
     def create_placeholder(
         self,
@@ -199,7 +235,7 @@ class SecretsClient:
         Lève PlaceholderNotPopulated si le secret n'a pas de valeur.
         Lève VaultDecryptionError si le déchiffrement échoue.
         """
-        data = self._http.get(self._path(name))
+        data = self._http.get(self._path_for_op(name))
         wallet_key = self._wallet_key()
 
         enc_value = base64.b64decode(data["encrypted_value"])
@@ -234,7 +270,7 @@ class SecretsClient:
 
     def get_descriptor(self, name: str) -> dict[str, Any]:
         """Récupère le descripteur de génération d'un placeholder."""
-        data = self._http.get(f"{self._path(name)}/descriptor")
+        data = self._http.get(f"{self._path_for_op(name)}/descriptor")
         return dict(data.get("generation_descriptor") or {})
 
     def populate(
@@ -268,7 +304,7 @@ class SecretsClient:
         enc_value_b64 = base64.b64encode(enc_value).decode()
 
         result = self._http.post(
-            f"{self._path(name)}/populate",
+            f"{self._path_for_op(name)}/populate",
             json={"encrypted_value": enc_value_b64},
         )
         version: int = result.get("generation_version", 0)

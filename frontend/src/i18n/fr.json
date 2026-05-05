@@ -419,7 +419,12 @@
       "s3Pull": "Importer en local",
       "s3Pulling": "Import...",
       "s3PullSuccess": "Backup importé depuis S3",
-      "s3PullError": "Erreur lors de l'import S3"
+      "s3PullError": "Erreur lors de l'import S3",
+      "pushRemote": "Pousser vers distant",
+      "pushRemotePick": "Choisir une connexion",
+      "pushRemoteEmpty": "Aucune connexion distante configurée — créez-en une dans Backups distants",
+      "pushRemoteSuccess": "Backup poussé vers « {{name}} » ({{size}})",
+      "pushRemoteError": "Erreur lors du push vers le serveur distant"
     },
     "remoteBackups": {
       "title": "Backups distants",

@@ -226,3 +226,12 @@ export const RemoteBackupTestResponseSchema = z.union([
 ])
 
 export type RemoteBackupTestResponse = z.infer<typeof RemoteBackupTestResponseSchema>
+
+export const RemoteBackupPushResultSchema = z.object({
+  remote_id: z.string().uuid(),
+  remote_name: z.string(),
+  remote_filename: z.string(),
+  bytes_sent: z.number(),
+})
+
+export type RemoteBackupPushResult = z.infer<typeof RemoteBackupPushResultSchema>

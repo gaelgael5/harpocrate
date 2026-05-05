@@ -18,6 +18,7 @@ import {
   RemoteBackupConnectionListResponseSchema,
   RemoteBackupConnectionSchema,
   RemoteBackupTestResponseSchema,
+  RemoteBackupPushResultSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
@@ -36,6 +37,7 @@ import {
   type RemoteBackupConnection,
   type RemoteBackupConnectionListResponse,
   type RemoteBackupTestResponse,
+  type RemoteBackupPushResult,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -259,6 +261,17 @@ export async function updateRemoteBackupConnection(
 
 export async function deleteRemoteBackupConnection(id: string): Promise<void> {
   await api.delete<void>(`/admin/backup-remotes/${id}`)
+}
+
+export async function pushBackupToRemote(
+  backupId: string,
+  remoteId: string,
+): Promise<RemoteBackupPushResult> {
+  const raw = await api.post<unknown>(
+    `/admin/backups/${backupId}/push-to-remote/${remoteId}`,
+    {},
+  )
+  return RemoteBackupPushResultSchema.parse(raw)
 }
 
 export async function testRemoteBackupConnection(id: string): Promise<RemoteBackupTestResponse> {

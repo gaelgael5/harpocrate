@@ -551,3 +551,75 @@ async def get_descriptor(
         generation_version=secret.generation_version,
         linked_secret_id=secret.linked_secret_id,
     )
+
+
+# ─── By-ID — get / put / delete avec vérif appartenance wallet ────────────────
+
+
+async def get_secret_by_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    secret_id: UUID,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> SecretDetailResponse:
+    """Retourne le secret par son UUID. Vérifie qu'il appartient bien au wallet ciblé.
+
+    404 si le secret n'existe pas OU appartient à un autre wallet (ne pas leak l'existence).
+    """
+    secret = await secrets_repo.get_secret_by_id(conn, secret_id=secret_id)
+    if secret is None or secret.wallet_id != wallet_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "secret_not_found", "message": "Secret not found"},
+        )
+
+    if secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY,
+            detail={
+                "error": "placeholder_value_missing",
+                "message": "Secret has no value yet, populate it first.",
+                "details": {
+                    "name": secret.name,
+                    "is_placeholder": True,
+                    "generation_descriptor": secret.generation_descriptor,
+                },
+            },
+        )
+
+    enc_wallet_key_bytes = await secrets_repo.get_caller_encrypted_wallet_key(
+        conn, wallet_id=wallet_id, user_id=caller_user_id
+    )
+    if enc_wallet_key_bytes is None:  # pragma: no cover — grant vérifié juste avant
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "grant_key_missing", "message": "Encrypted wallet key not found"},
+        )
+
+    await audit_log_insert(
+        conn,
+        "secret.read",
+        actor_user_id=caller_user_id,
+        actor_ip=actor_ip,
+        target_wallet_id=wallet_id,
+        target_secret_id=secret.id,
+        metadata={"secret_name": secret.name, "access_via": "by_id"},
+    )
+
+    enc_value_b64 = base64.b64encode(secret.encrypted_value or b"").decode()
+    enc_key_b64 = base64.b64encode(enc_wallet_key_bytes).decode()
+
+    return SecretDetailResponse(
+        id=secret.id,
+        name=secret.name,
+        encrypted_value=enc_value_b64,
+        encrypted_wallet_key=enc_key_b64,
+        description=secret.description,
+        tags=sorted(secret.tags),
+        is_placeholder=secret.is_placeholder,
+        generation_version=secret.generation_version,
+        type_uuid=secret.type_uuid,
+        schema_version_uuid=secret.schema_version_uuid,
+    )

@@ -716,3 +716,175 @@ async def test_get_descriptor_by_id_cross_wallet_returns_404() -> None:
 
     assert r.status_code == 404
     assert r.json()["detail"]["error"] == "secret_not_found"
+
+
+# ─── PATCH /by-id/{sid}/migrate-schema ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_migrate_schema_by_id_happy_path() -> None:
+    target_version_uuid = uuid.UUID("ffffffff-0000-0000-0000-000000000010")
+    conn = _make_conn()
+    call_n = 0
+
+    async def fr(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(permissions=_PERM_ALL)
+        if call_n == 3:
+            row = _fake_secret_row()
+            row["type_uuid"] = uuid.UUID("eeeeeeee-0000-0000-0000-000000000010")
+            return row
+        if "secret_schemas" in query and "parent_uuid" in query:
+            return FakeRecord({"parent_uuid": uuid.UUID("eeeeeeee-0000-0000-0000-000000000010")})
+        if "secret_types" in query and "type_uuid" in query:
+            return FakeRecord({
+                "type_uuid": uuid.UUID("eeeeeeee-0000-0000-0000-000000000010"),
+                "current_version_uuid": target_version_uuid,
+                "type": "x", "sous_type": "x", "label": None, "description": None,
+                "is_system": False, "created_by_user_id": None,
+                "created_at": _NOW, "updated_at": _NOW,
+                "deprecated_at": None,  # active
+                "cv_version": 2, "cv_schema_data": "{}", "cv_schema_ui": "{}",
+                "cv_created_at": _NOW, "used_count": 0,
+            })
+        return None
+
+    conn.fetchrow = fr
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.patch(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}/migrate-schema",
+            json={
+                "encrypted_value": _FAKE_ENC_VALUE_B64,
+                "target_schema_version_uuid": str(target_version_uuid),
+            },
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {"migrated": True}
+
+
+@pytest.mark.asyncio
+async def test_migrate_schema_by_id_cross_wallet_returns_404() -> None:
+    target_version_uuid = uuid.UUID("ffffffff-0000-0000-0000-000000000010")
+    conn = _make_conn()
+    call_n = 0
+
+    async def fr(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(wallet_id=_WALLET_ID, permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row(wallet_id=_OTHER_WALLET_ID)
+        return None
+
+    conn.fetchrow = fr
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.patch(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}/migrate-schema",
+            json={
+                "encrypted_value": _FAKE_ENC_VALUE_B64,
+                "target_schema_version_uuid": str(target_version_uuid),
+            },
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 404
+
+
+# ─── PATCH /by-id/{sid}/assign-type ───────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_assign_type_by_id_happy_path() -> None:
+    target_type_uuid = uuid.UUID("eeeeeeee-0000-0000-0000-000000000020")
+    target_version_uuid = uuid.UUID("ffffffff-0000-0000-0000-000000000020")
+    conn = _make_conn()
+    call_n = 0
+
+    async def fr(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row()
+        if "secret_schemas" in query and "parent_uuid" in query:
+            return FakeRecord({"parent_uuid": target_type_uuid})
+        if "secret_types" in query and "type_uuid" in query:
+            return FakeRecord({
+                "type_uuid": target_type_uuid,
+                "current_version_uuid": target_version_uuid,
+                "type": "x", "sous_type": "x", "label": None, "description": None,
+                "is_system": False, "created_by_user_id": None,
+                "created_at": _NOW, "updated_at": _NOW,
+                "deprecated_at": None,
+                "cv_version": 1, "cv_schema_data": "{}", "cv_schema_ui": "{}",
+                "cv_created_at": _NOW, "used_count": 0,
+            })
+        return None
+
+    conn.fetchrow = fr
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.patch(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}/assign-type",
+            json={
+                "type_uuid": str(target_type_uuid),
+                "schema_version_uuid": str(target_version_uuid),
+                "encrypted_value": _FAKE_ENC_VALUE_B64,
+            },
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {"assigned": True}
+
+
+@pytest.mark.asyncio
+async def test_assign_type_by_id_cross_wallet_returns_404() -> None:
+    target_type_uuid = uuid.UUID("eeeeeeee-0000-0000-0000-000000000020")
+    target_version_uuid = uuid.UUID("ffffffff-0000-0000-0000-000000000020")
+    conn = _make_conn()
+    call_n = 0
+
+    async def fr(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(wallet_id=_WALLET_ID, permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row(wallet_id=_OTHER_WALLET_ID)
+        return None
+
+    conn.fetchrow = fr
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.patch(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}/assign-type",
+            json={
+                "type_uuid": str(target_type_uuid),
+                "schema_version_uuid": str(target_version_uuid),
+                "encrypted_value": _FAKE_ENC_VALUE_B64,
+            },
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 404

@@ -530,6 +530,57 @@ async def populate_secret(
     return PopulateResponse(generation_version=new_version)
 
 
+async def get_descriptor_by_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    secret_id: UUID,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> DescriptorResponse:
+    """Retourne le descripteur d'un placeholder par UUID."""
+    secret = await secrets_repo.get_secret_by_id(conn, secret_id=secret_id)
+    if secret is None or secret.wallet_id != wallet_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "secret_not_found", "message": "Secret not found"},
+        )
+
+    if not secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "secret_not_placeholder",
+                "message": "This secret is not a placeholder; it has no generation descriptor.",
+            },
+        )
+
+    await audit_log_insert(
+        conn,
+        "secret.descriptor_accessed",
+        actor_user_id=caller_user_id,
+        actor_ip=actor_ip,
+        target_wallet_id=wallet_id,
+        target_secret_id=secret.id,
+        metadata={"secret_name": secret.name, "access_via": "by_id"},
+    )
+
+    descriptor: GenerationDescriptor | None = None
+    if secret.generation_descriptor is not None:
+        from pydantic import TypeAdapter
+
+        _ta: TypeAdapter[GenerationDescriptor] = TypeAdapter(GenerationDescriptor)
+        descriptor = _ta.validate_python(secret.generation_descriptor)
+
+    return DescriptorResponse(
+        name=secret.name,
+        is_placeholder=secret.is_placeholder,
+        generation_descriptor=descriptor,
+        generation_version=secret.generation_version,
+        linked_secret_id=secret.linked_secret_id,
+    )
+
+
 # ─── LOT_06 — Get descriptor ──────────────────────────────────────────────────
 
 

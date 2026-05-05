@@ -441,6 +441,29 @@ async def populate_secret_by_id(
     return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
+# ─── GET /v1/wallets/{wallet_id}/secrets/by-id/{secret_id}/descriptor ────────
+
+
+@router.get("/by-id/{secret_id}/descriptor")
+async def get_descriptor_by_id(
+    wallet_id: UUID,
+    secret_id: UUID,
+    auth: DescriptorAuth,
+    request: Request,
+) -> JSONResponse:
+    """Retourne le descripteur du placeholder par UUID. Requiert [read] ou [init]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await secrets_svc.get_descriptor_by_id(
+            conn,
+            wallet_id=wallet_id,
+            secret_id=secret_id,
+            caller_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+        )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
+
+
 # ─── DELETE /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────
 
 

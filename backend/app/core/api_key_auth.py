@@ -387,12 +387,12 @@ async def require_any_auth_no_scope(
 ) -> AuthContext:
     """Auth mixte JWT/API key sans wallet ni permission requise.
 
-    Pour les endpoints system-wide (catalogue de types, doc OpenAPI, etc.)
-    qui ne sont scopés à aucun wallet et qui doivent être consommables aussi
-    bien depuis le frontend (JWT) que depuis un client SDK (API key).
+    Pour les endpoints system-wide (catalogue de types, doc OpenAPI, etc.).
+    Côté JWT : valide la signature seulement (pas de lookup DB du user, donc
+    n'exige pas que le user soit déjà bootstrapped). Cohérent avec l'ancien
+    `require_jwt_user` que cette dep remplace pour ces endpoints publics.
     """
     from app.core.security import _validate_jwt
-    from app.db.repositories import users as users_repo
 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -410,20 +410,13 @@ async def require_any_auth_no_scope(
             my_permissions=api_key_caller.permissions,
         )
 
-    # JWT path
-    claims = await _validate_jwt(token)
-    async with pool.acquire() as conn:
-        user_row = await users_repo.get_by_keycloak_sub(conn, claims["sub"])
-        if user_row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error": "first_login", "message": "User not bootstrapped"},
-            )
-        return AuthContext(
-            user_db_id=user_row.id,
-            api_key=None,
-            my_permissions=0,
-        )
+    # JWT path : on valide la signature seulement, pas de lookup DB.
+    await _validate_jwt(token)
+    return AuthContext(
+        user_db_id=None,
+        api_key=None,
+        my_permissions=0,
+    )
 
 
 def require_any_auth_with_any_of_permissions(required_any: int):  # type: ignore[no-untyped-def]

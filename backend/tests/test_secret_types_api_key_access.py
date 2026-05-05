@@ -1,4 +1,5 @@
 """Tests P1.5 — Endpoints publics de secret-types accessibles via API key."""
+
 from __future__ import annotations
 
 import base64
@@ -34,6 +35,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def patch_jwks() -> Generator[None, None, None]:
     from app.core import jwks_cache
+
     keys_backup = dict(jwks_cache._keys)
     jwks_cache._keys.clear()
     jwks_cache._keys[TEST_KID] = TEST_PUBLIC_JWK

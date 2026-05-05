@@ -2,6 +2,7 @@
 
 Admin CRUD pour les types de secrets et leurs versions de schéma.
 """
+
 from __future__ import annotations
 
 import json
@@ -68,6 +69,7 @@ class ValidateSchemaBody(BaseModel):
 
 def _type_list_item(r: object) -> dict:
     from asyncpg import Record
+
     rec: Record = r  # type: ignore[assignment]
     current_version = None
     if rec["current_version_uuid"] is not None:
@@ -91,6 +93,7 @@ def _type_list_item(r: object) -> dict:
 
 def _version_dict(r: object) -> dict:
     from asyncpg import Record
+
     rec: Record = r  # type: ignore[assignment]
     sd = rec["schema_data"]
     su = rec["schema_ui"]
@@ -275,9 +278,7 @@ async def add_schema_version(
 
 
 @router.get("/{type_uuid}/schemas/{version_uuid}", response_class=JSONResponse)
-async def get_schema_version(
-    type_uuid: UUID, version_uuid: UUID, admin: AdminJwt
-) -> JSONResponse:
+async def get_schema_version(type_uuid: UUID, version_uuid: UUID, admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await repo.get_version(conn, version_uuid)
@@ -303,10 +304,12 @@ async def update_schema_version_notes(
     return JSONResponse({"updated": True})
 
 
-@router.delete("/{type_uuid}/schemas/{version_uuid}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
-async def delete_schema_version(
-    type_uuid: UUID, version_uuid: UUID, admin: AdminJwt
-) -> Response:
+@router.delete(
+    "/{type_uuid}/schemas/{version_uuid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_schema_version(type_uuid: UUID, version_uuid: UUID, admin: AdminJwt) -> Response:
     pool = await get_pool()
     async with pool.acquire() as conn:
         try:

@@ -1,4 +1,5 @@
 """Tests P1.5 — Rejet 400 sur migrate-schema/assign-type vers un type deprecated."""
+
 from __future__ import annotations
 
 import base64
@@ -63,83 +64,91 @@ def patch_jwks() -> Generator[None, None, None]:
 
 
 def _user_row() -> FakeRecord:
-    return FakeRecord({
-        "id": _CALLER_ID,
-        "keycloak_sub": "test-sub-001",
-        "email": "alice@example.com",
-        "display_name": "Alice",
-        "rsa_public_key": b"x",
-        "salt_passphrase": b"x" * 16,
-        "salt_recovery": b"y" * 16,
-        "encrypted_rsa_private_key": b"x",
-        "encrypted_sym_key_by_pass": b"x",
-        "encrypted_sym_key_by_recovery": b"x",
-        "kdf_memory_kb": 65536,
-        "kdf_iterations": 3,
-        "kdf_parallelism": 4,
-        "rsa_key_size": 2048,
-        "created_at": _NOW,
-        "updated_at": _NOW,
-        "last_unlock_at": None,
-    })
+    return FakeRecord(
+        {
+            "id": _CALLER_ID,
+            "keycloak_sub": "test-sub-001",
+            "email": "alice@example.com",
+            "display_name": "Alice",
+            "rsa_public_key": b"x",
+            "salt_passphrase": b"x" * 16,
+            "salt_recovery": b"y" * 16,
+            "encrypted_rsa_private_key": b"x",
+            "encrypted_sym_key_by_pass": b"x",
+            "encrypted_sym_key_by_recovery": b"x",
+            "kdf_memory_kb": 65536,
+            "kdf_iterations": 3,
+            "kdf_parallelism": 4,
+            "rsa_key_size": 2048,
+            "created_at": _NOW,
+            "updated_at": _NOW,
+            "last_unlock_at": None,
+        }
+    )
 
 
 def _wallet_row() -> FakeRecord:
-    return FakeRecord({
-        "id": _WALLET_ID,
-        "name": "W",
-        "description": None,
-        "owner_user_id": _CALLER_ID,
-        "created_at": _NOW,
-        "updated_at": _NOW,
-        "my_permissions": 63,
-        "valued_secrets_count": 0,
-        "placeholder_secrets_count": 0,
-        "deleted_at": None,
-    })
+    return FakeRecord(
+        {
+            "id": _WALLET_ID,
+            "name": "W",
+            "description": None,
+            "owner_user_id": _CALLER_ID,
+            "created_at": _NOW,
+            "updated_at": _NOW,
+            "my_permissions": 63,
+            "valued_secrets_count": 0,
+            "placeholder_secrets_count": 0,
+            "deleted_at": None,
+        }
+    )
 
 
 def _secret_row(type_uuid: uuid.UUID = _TYPE_UUID) -> FakeRecord:
-    return FakeRecord({
-        "id": _SECRET_ID,
-        "wallet_id": _WALLET_ID,
-        "name": "MY",
-        "description": None,
-        "encrypted_value": b"old",
-        "is_placeholder": False,
-        "generation_version": 1,
-        "generation_descriptor": None,
-        "linked_secret_id": None,
-        "created_at": _NOW,
-        "updated_at": _NOW,
-        "created_by_user_id": _CALLER_ID,
-        "created_by_api_key_id": None,
-        "updated_by_user_id": None,
-        "updated_by_api_key_id": None,
-        "type_uuid": type_uuid,
-        "schema_version_uuid": None,
-    })
+    return FakeRecord(
+        {
+            "id": _SECRET_ID,
+            "wallet_id": _WALLET_ID,
+            "name": "MY",
+            "description": None,
+            "encrypted_value": b"old",
+            "is_placeholder": False,
+            "generation_version": 1,
+            "generation_descriptor": None,
+            "linked_secret_id": None,
+            "created_at": _NOW,
+            "updated_at": _NOW,
+            "created_by_user_id": _CALLER_ID,
+            "created_by_api_key_id": None,
+            "updated_by_user_id": None,
+            "updated_by_api_key_id": None,
+            "type_uuid": type_uuid,
+            "schema_version_uuid": None,
+        }
+    )
 
 
 def _deprecated_type_row() -> FakeRecord:
-    return FakeRecord({
-        "type_uuid": _DEPRECATED_TYPE_UUID,
-        "current_version_uuid": _TARGET_VERSION_UUID,
-        "type": "old",
-        "sous_type": "old",
-        "label": None,
-        "description": None,
-        "is_system": False,
-        "created_by_user_id": None,
-        "created_at": _NOW,
-        "updated_at": _NOW,
-        "deprecated_at": _NOW,
-        "cv_version": 1,
-        "cv_schema_data": "{}",
-        "cv_schema_ui": "{}",
-        "cv_created_at": _NOW,
-        "used_count": 0,
-    })
+    return FakeRecord(
+        {
+            "type_uuid": _DEPRECATED_TYPE_UUID,
+            "current_version_uuid": _TARGET_VERSION_UUID,
+            "type": "old",
+            "sous_type": "old",
+            "label": None,
+            "description": None,
+            "is_system": False,
+            "created_by_user_id": None,
+            "created_at": _NOW,
+            "updated_at": _NOW,
+            "deprecated_at": _NOW,
+            "cv_version": 1,
+            "cv_schema_data": "{}",
+            "cv_schema_ui": "{}",
+            "cv_created_at": _NOW,
+            "used_count": 0,
+        }
+    )
 
 
 class _Tx:

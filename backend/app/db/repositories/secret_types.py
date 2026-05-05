@@ -1,4 +1,5 @@
 """Repository — secret_types et secret_schemas (LOT 15)."""
+
 from __future__ import annotations
 
 import json
@@ -61,9 +62,7 @@ async def get_type(conn: asyncpg.Connection, type_uuid: UUID) -> asyncpg.Record 
     )
 
 
-async def get_type_versions(
-    conn: asyncpg.Connection, type_uuid: UUID
-) -> list[asyncpg.Record]:
+async def get_type_versions(conn: asyncpg.Connection, type_uuid: UUID) -> list[asyncpg.Record]:
     return await conn.fetch(
         """
         SELECT * FROM secret_schemas
@@ -74,9 +73,7 @@ async def get_type_versions(
     )
 
 
-async def get_version(
-    conn: asyncpg.Connection, version_uuid: UUID
-) -> asyncpg.Record | None:
+async def get_version(conn: asyncpg.Connection, version_uuid: UUID) -> asyncpg.Record | None:
     return await conn.fetchrow(
         "SELECT * FROM secret_schemas WHERE version_uuid = $1",
         version_uuid,
@@ -99,7 +96,12 @@ async def insert_type_with_v1(
         type_row = await conn.fetchrow(
             """INSERT INTO secret_types (type, sous_type, label, description, created_by_user_id, is_system)
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING type_uuid""",
-            type_, sous_type, label, description, creator_id, is_system,
+            type_,
+            sous_type,
+            label,
+            description,
+            creator_id,
+            is_system,
         )
         type_uuid: UUID = type_row["type_uuid"]
 

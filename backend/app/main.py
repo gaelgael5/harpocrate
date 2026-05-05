@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, Response
 from app.api.v1 import (
     admin_backups,
     admin_maintenance,
+    admin_remote_backups,
     admin_secret_types,
     admin_snapshots,
     admin_system,
@@ -161,6 +162,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
 
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
+app.include_router(admin_remote_backups.router, prefix="/v1")
 app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")
 app.include_router(admin_secret_types.public_router, prefix="/v1")

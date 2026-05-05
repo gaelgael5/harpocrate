@@ -136,6 +136,30 @@ async def list_secrets(
     return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
+# ─── By-ID — accès par UUID (contourne les soucis de routing pour noms à '/') ─
+
+
+@router.get("/by-id/{secret_id}")
+async def get_secret_by_id(
+    wallet_id: UUID,
+    secret_id: UUID,
+    auth: ReadAuth,
+    request: Request,
+) -> JSONResponse:
+    """Retourne le secret par UUID. Requiert [read]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await secrets_svc.get_secret_by_id(
+            conn,
+            wallet_id=wallet_id,
+            secret_id=secret_id,
+            caller_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+        )
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
+
+
 # ─── GET /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────────
 
 

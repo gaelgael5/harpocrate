@@ -45,6 +45,9 @@ scp "${REPO_ROOT}/scripts/refresh.sh"             "${PVE_HOST}:${TMPDIR_PVE}/ref
 if [ -d "${REPO_ROOT}/types" ]; then
     scp -r "${REPO_ROOT}/types" "${PVE_HOST}:${TMPDIR_PVE}/types"
 fi
+if [ -d "${REPO_ROOT}/releases" ]; then
+    scp -r "${REPO_ROOT}/releases" "${PVE_HOST}:${TMPDIR_PVE}/releases"
+fi
 if [ -f "${REPO_ROOT}/.env" ]; then
     scp "${REPO_ROOT}/.env" "${PVE_HOST}:${TMPDIR_PVE}/.env"
     HAS_ENV=1
@@ -71,6 +74,15 @@ if [ -d "${TMPDIR_PVE}/types" ] 2>/dev/null || ssh "${PVE_HOST}" "[ -d '${TMPDIR
                 echo "    -> types/${TYPE_DIR}/${FNAME}"
             fi
         done
+    done
+fi
+if ssh "${PVE_HOST}" "[ -d '${TMPDIR_PVE}/releases' ]" 2>/dev/null; then
+    echo "  -> Deploiement des artefacts SDK + CLI (releases/)..."
+    ssh "${PVE_HOST}" "pct exec ${CTID} -- mkdir -p ${REMOTE_DIR}/releases"
+    # Liste les fichiers cote pve puis push un par un (pct push n'accepte pas les dirs)
+    for FNAME in $(ssh "${PVE_HOST}" "ls ${TMPDIR_PVE}/releases/" 2>/dev/null); do
+        ssh "${PVE_HOST}" "pct push ${CTID} ${TMPDIR_PVE}/releases/${FNAME} ${REMOTE_DIR}/releases/${FNAME}"
+        echo "    -> releases/${FNAME}"
     done
 fi
 if [ "${HAS_ENV}" = "1" ]; then

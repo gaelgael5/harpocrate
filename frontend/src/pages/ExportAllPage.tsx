@@ -109,7 +109,7 @@ export function ExportAllPage() {
         for (const s of secrets) {
           // Fetch secret detail (includes encrypted_value + encrypted_wallet_key)
           const detailRaw = await api.get<unknown>(
-            `/wallets/${wallet.id}/secrets/${s.name}`,
+            `/wallets/${wallet.id}/secrets/by-id/${s.id}`,
           )
           const detail = SecretDetailResponseSchema.parse(detailRaw)
 

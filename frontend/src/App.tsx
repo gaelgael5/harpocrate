@@ -152,7 +152,7 @@ export default function App() {
               element={<SecretNewPage />}
             />
             <Route
-              path="/wallets/:walletId/secrets/:secretName"
+              path="/wallets/:walletId/secrets/:secretId"
               element={<SecretDetailPage />}
             />
             <Route

@@ -2,7 +2,7 @@
  * Secret detail page — shows metadata, decrypts and displays value on demand.
  *
  * Decrypt flow:
- * 1. GET /v1/wallets/{id}/secrets/{name} → encrypted_value + encrypted_wallet_key
+ * 1. GET /v1/wallets/{id}/secrets/by-id/{secret_id} → encrypted_value + encrypted_wallet_key
  * 2. Decrypt wallet_key using rsa_priv (RSA-OAEP)
  * 3. Decrypt value using wallet_key (AES-GCM)
  * 4. Show for 30 seconds then auto-hide
@@ -40,9 +40,9 @@ const SHOW_TIMEOUT_SECS = 30
 
 export function SecretDetailPage() {
   const { t } = useTranslation()
-  const { walletId, secretName } = useParams<{
+  const { walletId, secretId } = useParams<{
     walletId: string
-    secretName: string
+    secretId: string
   }>()
   const navigate = useNavigate()
   const rsaPrivateKey = useCryptoStore((s) => s.rsaPrivateKey)
@@ -68,7 +68,7 @@ export function SecretDetailPage() {
       const plainBytes = textToBytes(editValue)
       const encValue = await aesGcmEncrypt(plainBytes, walletKey)
       await api.put<unknown>(
-        `/wallets/${walletId}/secrets/${secret.name}`,
+        `/wallets/${walletId}/secrets/by-id/${secret.id}`,
         { encrypted_value: toBase64(encValue) },
       )
       notifications.show({ color: 'green', message: t('secrets.edit_success') })
@@ -76,7 +76,7 @@ export function SecretDetailPage() {
       setEditValue('')
       setShownValue(null)
       // refresh la query
-      await queryClient.invalidateQueries({ queryKey: ['secret', walletId, secret.name] })
+      await queryClient.invalidateQueries({ queryKey: ['secret', walletId, secret.id] })
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : String(err)
       notifications.show({ color: 'red', title: t('common.error'), message: msg })
@@ -90,7 +90,7 @@ export function SecretDetailPage() {
     if (!window.confirm(t('secrets.delete_confirm', { name: secret.name }))) return
     setIsDeleting(true)
     try {
-      await api.delete<unknown>(`/wallets/${walletId}/secrets/${secret.name}`)
+      await api.delete<unknown>(`/wallets/${walletId}/secrets/by-id/${secret.id}`)
       notifications.show({
         color: 'green',
         message: t('secrets.delete_success'),
@@ -113,14 +113,14 @@ export function SecretDetailPage() {
   }
 
   const { data: secret, isLoading, error } = useQuery({
-    queryKey: ['secret', walletId, secretName],
+    queryKey: ['secret', walletId, secretId],
     queryFn: async () => {
       const raw = await api.get<unknown>(
-        `/wallets/${walletId ?? ''}/secrets/${secretName ?? ''}`,
+        `/wallets/${walletId ?? ''}/secrets/by-id/${secretId ?? ''}`,
       )
       return SecretDetailResponseSchema.parse(raw)
     },
-    enabled: !!walletId && !!secretName,
+    enabled: !!walletId && !!secretId,
   })
 
   async function getWalletKey(): Promise<Uint8Array> {

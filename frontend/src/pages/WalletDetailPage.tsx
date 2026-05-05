@@ -118,14 +118,13 @@ function FolderCard({ folder, onClick }: { folder: Folder; onClick: () => void }
 
 function SecretCard({ secret, walletId }: { secret: SecretListItem | PathSecret; walletId: string }) {
   const navigate = useNavigate()
-  const encodedName = encodeURIComponent(secret.name)
 
   return (
     <Card
       withBorder
       padding="sm"
       style={{ cursor: 'pointer' }}
-      onClick={() => navigate(`/wallets/${walletId}/secrets/${encodedName}`)}
+      onClick={() => navigate(`/wallets/${walletId}/secrets/${secret.id}`)}
     >
       <Group justify="space-between">
         <Group gap="sm">

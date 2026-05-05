@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "_comment": "Source de vérité unique des SDKs Harpocrate. Maintenu à la main : ajouter/retirer un SDK = éditer ce fichier + déposer les .whl/.tar.gz/.md correspondants dans releases/ et releases/docs/. Le backend lit ce fichier au runtime et marque available=false les artefacts dont le fichier n'est pas physiquement présent en local.",
+  "sdks": [
+    {
+      "id": "python",
+      "name": "Python",
+      "icon": "🐍",
+      "status": "available",
+      "artifacts": [
+        {
+          "kind": "wheel",
+          "version": "0.4.0",
+          "filename": "harpocrate-0.4.0-py3-none-any.whl"
+        },
+        {
+          "kind": "sdist",
+          "version": "0.4.0",
+          "filename": "harpocrate-sdk-0.4.0.tar.gz"
+        }
+      ],
+      "docs": {
+        "fr": "python-fr.md"
+      }
+    },
+    {
+      "id": "bash",
+      "name": "CLI Bash",
+      "icon": "🖥️",
+      "status": "available",
+      "artifacts": [
+        {
+          "kind": "cli",
+          "version": "0.1.0",
+          "filename": "harpocrate-cli-0.1.0.tar.gz"
+        }
+      ],
+      "docs": {
+        "fr": "bash-fr.md"
+      }
+    },
+    {
+      "id": "typescript",
+      "name": "TypeScript",
+      "icon": "🟦",
+      "status": "planned",
+      "artifacts": [],
+      "docs": {
+        "fr": "typescript-fr.md"
+      }
+    },
+    {
+      "id": "javascript",
+      "name": "JavaScript",
+      "icon": "🟨",
+      "status": "planned",
+      "artifacts": [],
+      "docs": {
+        "fr": "javascript-fr.md"
+      }
+    },
+    {
+      "id": "go",
+      "name": "Go",
+      "icon": "🦦",
+      "status": "planned",
+      "artifacts": [],
+      "docs": {
+        "fr": "go-fr.md"
+      }
+    },
+    {
+      "id": "rust",
+      "name": "Rust",
+      "icon": "🦀",
+      "status": "planned",
+      "artifacts": [],
+      "docs": {
+        "fr": "rust-fr.md"
+      }
+    },
+    {
+      "id": "csharp",
+      "name": "C#",
+      "icon": "🟪",
+      "status": "planned",
+      "artifacts": [],
+      "docs": {
+        "fr": "csharp-fr.md"
+      }
+    }
+  ]
+}

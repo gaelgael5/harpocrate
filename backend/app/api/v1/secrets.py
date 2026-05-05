@@ -391,6 +391,31 @@ async def delete_secret_by_id(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ─── PATCH /v1/wallets/{wallet_id}/secrets/by-id/{secret_id} ─────────────────
+
+
+@router.patch("/by-id/{secret_id}")
+async def patch_secret_by_id(
+    wallet_id: UUID,
+    secret_id: UUID,
+    req: SecretPatchRequest,
+    auth: WriteAuth,
+    request: Request,
+) -> JSONResponse:
+    """Met à jour description/tags par UUID. Requiert [write]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await secrets_svc.patch_secret_by_id(
+            conn,
+            wallet_id=wallet_id,
+            secret_id=secret_id,
+            req=req,
+            caller_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+        )
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"ok": True})
+
+
 # ─── DELETE /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────
 
 

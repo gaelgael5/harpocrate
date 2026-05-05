@@ -6,6 +6,7 @@ NOTE SÉCURITÉ — Body jamais loggé :
 
 Auth mixte (JWT ou API key hrpv_*) sur tous les endpoints selon permission requise.
 """
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -443,6 +444,7 @@ async def migrate_schema(
         )
 
     import base64 as _b64
+
     try:
         enc_value = _b64.b64decode(req.encrypted_value)
     except Exception as exc:
@@ -487,6 +489,7 @@ async def migrate_schema(
             secret.id,
         )
         from app.services.audit import audit_log_insert
+
         await audit_log_insert(
             conn,
             "secret.schema_migrated",
@@ -519,6 +522,7 @@ async def assign_type(
         )
 
     import base64 as _b64
+
     try:
         enc_value = _b64.b64decode(req.encrypted_value)
     except Exception as exc:
@@ -560,6 +564,7 @@ async def assign_type(
             secret.id,
         )
         from app.services.audit import audit_log_insert
+
         await audit_log_insert(
             conn,
             "secret.type_assigned",

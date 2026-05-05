@@ -1,6 +1,7 @@
 """Tests des routes /v1/wallets/{wid}/secrets/by-id/{sid} — accès par UUID
 pour les secrets dont le nom contient des '/' (path-style names).
 """
+
 from __future__ import annotations
 
 import base64
@@ -50,6 +51,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HARPOCRATE_PUBLIC_URL", "https://vault.yoops.org")
 
     import app.core.security
+
     _sec = app.core.security.__dict__["settings"]
     monkeypatch.setattr(_sec, "keycloak_url", "https://keycloak.yoops.org")
     monkeypatch.setattr(_sec, "keycloak_realm", "yoops")
@@ -59,6 +61,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def patch_jwks() -> Generator[None, None, None]:
     from app.core import jwks_cache
+
     keys_backup = dict(jwks_cache._keys)
     jwks_cache._keys.clear()
     jwks_cache._keys[TEST_KID] = TEST_PUBLIC_JWK
@@ -68,24 +71,44 @@ def patch_jwks() -> Generator[None, None, None]:
 
 
 def _fake_user_row() -> FakeRecord:
-    return FakeRecord({
-        "id": _CALLER_ID, "keycloak_sub": "test-sub-001", "email": "alice@example.com",
-        "display_name": "Alice", "rsa_public_key": b"x", "salt_passphrase": b"x" * 16,
-        "salt_recovery": b"y" * 16, "encrypted_rsa_private_key": b"x",
-        "encrypted_sym_key_by_pass": b"x", "encrypted_sym_key_by_recovery": b"x",
-        "kdf_memory_kb": 65536, "kdf_iterations": 3, "kdf_parallelism": 4,
-        "rsa_key_size": 2048, "created_at": _NOW, "updated_at": _NOW,
-        "last_unlock_at": None,
-    })
+    return FakeRecord(
+        {
+            "id": _CALLER_ID,
+            "keycloak_sub": "test-sub-001",
+            "email": "alice@example.com",
+            "display_name": "Alice",
+            "rsa_public_key": b"x",
+            "salt_passphrase": b"x" * 16,
+            "salt_recovery": b"y" * 16,
+            "encrypted_rsa_private_key": b"x",
+            "encrypted_sym_key_by_pass": b"x",
+            "encrypted_sym_key_by_recovery": b"x",
+            "kdf_memory_kb": 65536,
+            "kdf_iterations": 3,
+            "kdf_parallelism": 4,
+            "rsa_key_size": 2048,
+            "created_at": _NOW,
+            "updated_at": _NOW,
+            "last_unlock_at": None,
+        }
+    )
 
 
 def _fake_wallet_row(wallet_id: uuid.UUID = _WALLET_ID, permissions: int = _PERM_ALL) -> FakeRecord:
-    return FakeRecord({
-        "id": wallet_id, "name": "Test Wallet", "description": None,
-        "owner_user_id": _CALLER_ID, "created_at": _NOW, "updated_at": _NOW,
-        "my_permissions": permissions, "valued_secrets_count": 0,
-        "placeholder_secrets_count": 0, "deleted_at": None,
-    })
+    return FakeRecord(
+        {
+            "id": wallet_id,
+            "name": "Test Wallet",
+            "description": None,
+            "owner_user_id": _CALLER_ID,
+            "created_at": _NOW,
+            "updated_at": _NOW,
+            "my_permissions": permissions,
+            "valued_secrets_count": 0,
+            "placeholder_secrets_count": 0,
+            "deleted_at": None,
+        }
+    )
 
 
 def _fake_secret_row(
@@ -95,20 +118,33 @@ def _fake_secret_row(
     name: str = "/users/no_email/transcription/openai-whisper/api-1",
     is_placeholder: bool = False,
 ) -> FakeRecord:
-    return FakeRecord({
-        "id": secret_id, "wallet_id": wallet_id, "name": name,
-        "description": None, "encrypted_value": _FAKE_ENC_VALUE,
-        "is_placeholder": is_placeholder, "generation_version": 1,
-        "generation_descriptor": None, "linked_secret_id": None,
-        "created_at": _NOW, "updated_at": _NOW,
-        "created_by_user_id": _CALLER_ID, "created_by_api_key_id": None,
-        "updated_by_user_id": None, "updated_by_api_key_id": None,
-    })
+    return FakeRecord(
+        {
+            "id": secret_id,
+            "wallet_id": wallet_id,
+            "name": name,
+            "description": None,
+            "encrypted_value": _FAKE_ENC_VALUE,
+            "is_placeholder": is_placeholder,
+            "generation_version": 1,
+            "generation_descriptor": None,
+            "linked_secret_id": None,
+            "created_at": _NOW,
+            "updated_at": _NOW,
+            "created_by_user_id": _CALLER_ID,
+            "created_by_api_key_id": None,
+            "updated_by_user_id": None,
+            "updated_by_api_key_id": None,
+        }
+    )
 
 
 class _FakeTxCtx:
-    async def __aenter__(self) -> _FakeTxCtx: return self
-    async def __aexit__(self, *args: Any) -> None: pass
+    async def __aenter__(self) -> _FakeTxCtx:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        pass
 
 
 def _make_conn() -> MagicMock:
@@ -124,8 +160,11 @@ def _make_conn() -> MagicMock:
 
 def _make_pool(conn: MagicMock) -> MagicMock:
     class _AcquireCtx:
-        async def __aenter__(self) -> MagicMock: return conn
-        async def __aexit__(self, *args: Any) -> None: pass
+        async def __aenter__(self) -> MagicMock:
+            return conn
+
+        async def __aexit__(self, *args: Any) -> None:
+            pass
 
     pool = MagicMock()
     pool.acquire = MagicMock(return_value=_AcquireCtx())
@@ -135,6 +174,7 @@ def _make_pool(conn: MagicMock) -> MagicMock:
 def _make_client(pool: MagicMock) -> AsyncClient:
     from app.db import pool as pool_mod
     from app.main import app
+
     pool_mod._pool = pool
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -269,7 +309,6 @@ async def test_get_by_id_returns_404_when_secret_does_not_exist() -> None:
 # ─── PUT /by-id/{sid} ─────────────────────────────────────────────────────────
 
 
-
 @pytest.mark.asyncio
 async def test_put_by_id_happy_path() -> None:
     """PUT by-id remplace encrypted_value et incrémente generation_version."""
@@ -367,10 +406,7 @@ async def test_delete_by_id_happy_path() -> None:
 
     assert r.status_code == 204, r.text
     # Vérifie qu'un DELETE SQL a été émis
-    assert any(
-        "DELETE FROM secrets" in str(c.args[0])
-        for c in conn.execute.call_args_list
-    )
+    assert any("DELETE FROM secrets" in str(c.args[0]) for c in conn.execute.call_args_list)
 
 
 @pytest.mark.asyncio
@@ -401,10 +437,7 @@ async def test_delete_by_id_cross_wallet_returns_404() -> None:
 
     assert r.status_code == 404
     # Vérifie qu'aucun DELETE SQL n'a été émis (le secret n'a pas été touché)
-    assert not any(
-        "DELETE FROM secrets" in str(c.args[0])
-        for c in conn.execute.call_args_list
-    )
+    assert not any("DELETE FROM secrets" in str(c.args[0]) for c in conn.execute.call_args_list)
 
 
 @pytest.mark.asyncio

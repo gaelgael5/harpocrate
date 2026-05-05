@@ -1,10 +1,11 @@
 """Validation et normalisation des noms de secrets avec paths (LOT_18)."""
+
 from __future__ import annotations
 
 import re
 
 
-class InvalidSecretPath(Exception):
+class InvalidSecretPath(Exception):  # noqa: N818
     """Levée quand un nom de secret ne respecte pas les règles de path.
 
     N'hérite PAS de ValueError pour ne pas être interceptée par les
@@ -36,9 +37,7 @@ def validate_secret_name(name: str) -> str:
     normalized = name if name.startswith("/") else "/" + name
 
     if normalized.endswith("/"):
-        raise InvalidSecretPath(
-            f"Invalid secret name '{name}': trailing '/' not allowed"
-        )
+        raise InvalidSecretPath(f"Invalid secret name '{name}': trailing '/' not allowed")
 
     if "//" in normalized:
         raise InvalidSecretPath("Empty path segments not allowed (found '//')")
@@ -52,9 +51,7 @@ def validate_secret_name(name: str) -> str:
         if seg in (".", ".."):
             raise InvalidSecretPath("Relative path navigation not allowed ('.' or '..')")
         if not _SEGMENT_RE.match(seg):
-            raise InvalidSecretPath(
-                f"Invalid path segment '{seg}': only [a-zA-Z0-9@._-] allowed"
-            )
+            raise InvalidSecretPath(f"Invalid path segment '{seg}': only [a-zA-Z0-9@._-] allowed")
 
     return normalized
 

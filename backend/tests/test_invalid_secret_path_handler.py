@@ -1,5 +1,6 @@
 """Vérifie que les noms de secret invalides retournent 400 invalid_secret_path
 (et non 422 ValidationError de Pydantic)."""
+
 from __future__ import annotations
 
 import base64
@@ -36,43 +37,47 @@ class FakeRecord(dict[str, Any]):
         return super().get(key, default)
 
 
-_USER_ROW = FakeRecord({
-    "id": _CALLER_ID,
-    "keycloak_sub": "test-sub-001",
-    "email": "alice@example.com",
-    "display_name": "Alice",
-    "rsa_public_key": b"x",
-    "salt_passphrase": b"x" * 16,
-    "salt_recovery": b"y" * 16,
-    "encrypted_rsa_private_key": b"x",
-    "encrypted_sym_key_by_pass": b"x",
-    "encrypted_sym_key_by_recovery": b"x",
-    "kdf_memory_kb": 65536,
-    "kdf_iterations": 3,
-    "kdf_parallelism": 4,
-    "rsa_key_size": 2048,
-    "created_at": _NOW,
-    "updated_at": _NOW,
-    "last_unlock_at": None,
-    "quarantine_until": None,
-    "quarantine_reason": None,
-    "force_reverify_next_login": False,
-    "disabled_at": None,
-    "disabled_reason": None,
-})
+_USER_ROW = FakeRecord(
+    {
+        "id": _CALLER_ID,
+        "keycloak_sub": "test-sub-001",
+        "email": "alice@example.com",
+        "display_name": "Alice",
+        "rsa_public_key": b"x",
+        "salt_passphrase": b"x" * 16,
+        "salt_recovery": b"y" * 16,
+        "encrypted_rsa_private_key": b"x",
+        "encrypted_sym_key_by_pass": b"x",
+        "encrypted_sym_key_by_recovery": b"x",
+        "kdf_memory_kb": 65536,
+        "kdf_iterations": 3,
+        "kdf_parallelism": 4,
+        "rsa_key_size": 2048,
+        "created_at": _NOW,
+        "updated_at": _NOW,
+        "last_unlock_at": None,
+        "quarantine_until": None,
+        "quarantine_reason": None,
+        "force_reverify_next_login": False,
+        "disabled_at": None,
+        "disabled_reason": None,
+    }
+)
 
-_WALLET_ROW = FakeRecord({
-    "id": _WALLET_ID,
-    "name": "test-wallet",
-    "description": None,
-    "owner_user_id": _CALLER_ID,
-    "created_at": _NOW,
-    "updated_at": _NOW,
-    "deleted_at": None,
-    "my_permissions": _PERM_WRITE,
-    "valued_secrets_count": 0,
-    "placeholder_secrets_count": 0,
-})
+_WALLET_ROW = FakeRecord(
+    {
+        "id": _WALLET_ID,
+        "name": "test-wallet",
+        "description": None,
+        "owner_user_id": _CALLER_ID,
+        "created_at": _NOW,
+        "updated_at": _NOW,
+        "deleted_at": None,
+        "my_permissions": _PERM_WRITE,
+        "valued_secrets_count": 0,
+        "placeholder_secrets_count": 0,
+    }
+)
 
 
 @pytest.fixture(autouse=True)
@@ -85,6 +90,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HARPOCRATE_PUBLIC_URL", "https://vault.yoops.org")
 
     import app.core.security
+
     _sec = app.core.security.__dict__["settings"]
     monkeypatch.setattr(_sec, "keycloak_url", "https://keycloak.yoops.org")
     monkeypatch.setattr(_sec, "keycloak_realm", "yoops")
@@ -94,6 +100,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def patch_jwks() -> Generator[None, None, None]:
     from app.core import jwks_cache
+
     keys_backup = dict(jwks_cache._keys)
     jwks_cache._keys.clear()
     jwks_cache._keys[TEST_KID] = TEST_PUBLIC_JWK

@@ -3,6 +3,7 @@
 Tests d'intégration DB : nécessitent HARPOCRATE_DB_DSN_TEST=postgresql://...
 Tests unitaires (validation) : aucune DB requise.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -98,9 +99,7 @@ async def test_trigger_no_index_for_root_secret(
     db_conn: asyncpg.Connection, wallet_fixture: UUID, user_fixture: UUID
 ) -> None:
     """Un secret sans '/' ne crée aucune ligne dans secret_path_index."""
-    secret_id = await db_conn.fetchval(
-        _TRIGGER_SQL, wallet_fixture, "PLAIN_SECRET", user_fixture
-    )
+    secret_id = await db_conn.fetchval(_TRIGGER_SQL, wallet_fixture, "PLAIN_SECRET", user_fixture)
     count = await db_conn.fetchval(
         "SELECT COUNT(*) FROM secret_path_index WHERE secret_id = $1", secret_id
     )
@@ -111,12 +110,9 @@ async def test_trigger_populates_index_for_two_level_secret(
     db_conn: asyncpg.Connection, wallet_fixture: UUID, user_fixture: UUID
 ) -> None:
     """Un secret '/bob/key' crée 1 ligne (depth=1, path_segment='/bob/')."""
-    secret_id = await db_conn.fetchval(
-        _TRIGGER_SQL, wallet_fixture, "/bob/key", user_fixture
-    )
+    secret_id = await db_conn.fetchval(_TRIGGER_SQL, wallet_fixture, "/bob/key", user_fixture)
     rows = await db_conn.fetch(
-        "SELECT path_segment, depth FROM secret_path_index"
-        " WHERE secret_id = $1 ORDER BY depth",
+        "SELECT path_segment, depth FROM secret_path_index WHERE secret_id = $1 ORDER BY depth",
         secret_id,
     )
     assert len(rows) == 1
@@ -128,12 +124,9 @@ async def test_trigger_populates_index_for_three_level_secret(
     db_conn: asyncpg.Connection, wallet_fixture: UUID, user_fixture: UUID
 ) -> None:
     """Un secret '/bob/sub/key' crée 2 lignes (depth=1 et depth=2)."""
-    secret_id = await db_conn.fetchval(
-        _TRIGGER_SQL, wallet_fixture, "/bob/sub/key", user_fixture
-    )
+    secret_id = await db_conn.fetchval(_TRIGGER_SQL, wallet_fixture, "/bob/sub/key", user_fixture)
     rows = await db_conn.fetch(
-        "SELECT path_segment, depth FROM secret_path_index"
-        " WHERE secret_id = $1 ORDER BY depth",
+        "SELECT path_segment, depth FROM secret_path_index WHERE secret_id = $1 ORDER BY depth",
         secret_id,
     )
     assert len(rows) == 2
@@ -145,12 +138,8 @@ async def test_trigger_updates_index_on_rename(
     db_conn: asyncpg.Connection, wallet_fixture: UUID, user_fixture: UUID
 ) -> None:
     """Renommer un secret met à jour l'index."""
-    secret_id = await db_conn.fetchval(
-        _TRIGGER_SQL, wallet_fixture, "/bob/old_key", user_fixture
-    )
-    await db_conn.execute(
-        "UPDATE secrets SET name = '/alice/new_key' WHERE id = $1", secret_id
-    )
+    secret_id = await db_conn.fetchval(_TRIGGER_SQL, wallet_fixture, "/bob/old_key", user_fixture)
+    await db_conn.execute("UPDATE secrets SET name = '/alice/new_key' WHERE id = $1", secret_id)
     rows = await db_conn.fetch(
         "SELECT path_segment FROM secret_path_index WHERE secret_id = $1", secret_id
     )
@@ -162,9 +151,7 @@ async def test_trigger_cleans_index_on_delete(
     db_conn: asyncpg.Connection, wallet_fixture: UUID, user_fixture: UUID
 ) -> None:
     """Supprimer un secret efface ses lignes d'index (CASCADE)."""
-    secret_id = await db_conn.fetchval(
-        _TRIGGER_SQL, wallet_fixture, "/folder/key", user_fixture
-    )
+    secret_id = await db_conn.fetchval(_TRIGGER_SQL, wallet_fixture, "/folder/key", user_fixture)
     await db_conn.execute("DELETE FROM secrets WHERE id = $1", secret_id)
     count = await db_conn.fetchval(
         "SELECT COUNT(*) FROM secret_path_index WHERE secret_id = $1", secret_id
@@ -245,7 +232,9 @@ async def _insert_secret(
             "INSERT INTO secrets "
             "(wallet_id, name, encrypted_value, is_placeholder, created_by_user_id)"
             " VALUES ($1, $2, '\\xDEAD', FALSE, $3) RETURNING id",
-            wallet_id, name, user_id,
+            wallet_id,
+            name,
+            user_id,
         ),
     )
 
@@ -256,8 +245,12 @@ async def test_list_by_path_root_returns_only_root_secrets(
     await _insert_secret(db_conn, wallet_fixture, user_fixture, "ROOT_SECRET")
     await _insert_secret(db_conn, wallet_fixture, user_fixture, "/bob/nested")
     rows = await list_by_path(
-        db_conn, wallet_id=wallet_fixture, path="/",
-        limit=50, cursor_updated_at=None, cursor_id=None,
+        db_conn,
+        wallet_id=wallet_fixture,
+        path="/",
+        limit=50,
+        cursor_updated_at=None,
+        cursor_id=None,
     )
     names = [r.name for r in rows]
     assert "ROOT_SECRET" in names
@@ -270,8 +263,12 @@ async def test_list_by_path_folder_excludes_subfolders(
     await _insert_secret(db_conn, wallet_fixture, user_fixture, "/bob/direct_key")
     await _insert_secret(db_conn, wallet_fixture, user_fixture, "/bob/sub/nested_key")
     rows = await list_by_path(
-        db_conn, wallet_id=wallet_fixture, path="/bob/",
-        limit=50, cursor_updated_at=None, cursor_id=None,
+        db_conn,
+        wallet_id=wallet_fixture,
+        path="/bob/",
+        limit=50,
+        cursor_updated_at=None,
+        cursor_id=None,
     )
     names = [r.name for r in rows]
     assert "/bob/direct_key" in names

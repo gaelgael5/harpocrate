@@ -1,4 +1,5 @@
 """Service secrets — logique métier CRUD secrets (LOT_05/06)."""
+
 from __future__ import annotations
 
 import base64
@@ -374,7 +375,7 @@ async def create_placeholder(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> SecretCreateResponse:
-    """Crée un secret placeholder avec descripteur de génération. Accès vérifié par la couche auth."""
+    """Crée un secret placeholder avec descripteur de génération. Accès vérifié par la couche auth."""  # noqa: E501
     # Validation linked_secret_id : doit appartenir au même wallet
     if req.linked_secret_id is not None:
         linked_wallet_id: UUID | None = await conn.fetchval(
@@ -462,8 +463,7 @@ async def populate_secret(
             detail={
                 "error": "secret_already_populated",
                 "message": (
-                    "This secret already has a value. "
-                    "Use PUT (permission [write]) to update it."
+                    "This secret already has a value. Use PUT (permission [write]) to update it."
                 ),
             },
         )
@@ -509,7 +509,7 @@ async def get_descriptor(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> DescriptorResponse:
-    """Retourne le descripteur de génération. Accès vérifié par la couche auth ([read] ou [init])."""
+    """Retourne le descripteur de génération. Accès vérifié par la couche auth ([read] ou [init])."""  # noqa: E501
     secret = await secrets_repo.get_secret_by_name(conn, wallet_id=wallet_id, name=name)
     if secret is None:
         raise HTTPException(
@@ -634,7 +634,7 @@ async def put_secret_by_id(
     caller_user_id: UUID,
     actor_ip: str | None,
 ) -> SecretPutResponse:
-    """Remplace encrypted_value par UUID. 404 si le secret n'existe pas ou n'appartient pas au wallet."""
+    """Remplace encrypted_value par UUID. 404 si le secret n'existe pas ou n'appartient pas au wallet."""  # noqa: E501
     secret = await secrets_repo.get_secret_by_id(conn, secret_id=secret_id)
     if secret is None or secret.wallet_id != wallet_id:
         raise HTTPException(

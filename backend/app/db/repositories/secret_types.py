@@ -217,3 +217,22 @@ async def delete_version(conn: asyncpg.Connection, version_uuid: UUID) -> str:
         "DELETE FROM secret_schemas WHERE version_uuid = $1",
         version_uuid,
     )
+
+
+async def get_raw_type_with_current_version_uuid(
+    conn: asyncpg.Connection,
+) -> tuple[UUID, UUID] | None:
+    """Retourne (type_uuid, current_version_uuid) du type système RAW.
+
+    Le type RAW est seedé au démarrage via app.services.seed_types depuis
+    backend/types/raw/. None si pas encore seedé (cas de boot très précoce).
+    """
+    row = await conn.fetchrow(
+        """SELECT type_uuid, current_version_uuid
+           FROM secret_types
+           WHERE type = 'raw' AND sous_type = 'raw' AND is_system = TRUE
+           LIMIT 1"""
+    )
+    if row is None or row["current_version_uuid"] is None:
+        return None
+    return row["type_uuid"], row["current_version_uuid"]

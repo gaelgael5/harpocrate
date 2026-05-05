@@ -741,16 +741,26 @@ async def test_migrate_schema_by_id_happy_path() -> None:
         if "secret_schemas" in query and "parent_uuid" in query:
             return FakeRecord({"parent_uuid": uuid.UUID("eeeeeeee-0000-0000-0000-000000000010")})
         if "secret_types" in query and "type_uuid" in query:
-            return FakeRecord({
-                "type_uuid": uuid.UUID("eeeeeeee-0000-0000-0000-000000000010"),
-                "current_version_uuid": target_version_uuid,
-                "type": "x", "sous_type": "x", "label": None, "description": None,
-                "is_system": False, "created_by_user_id": None,
-                "created_at": _NOW, "updated_at": _NOW,
-                "deprecated_at": None,  # active
-                "cv_version": 2, "cv_schema_data": "{}", "cv_schema_ui": "{}",
-                "cv_created_at": _NOW, "used_count": 0,
-            })
+            return FakeRecord(
+                {
+                    "type_uuid": uuid.UUID("eeeeeeee-0000-0000-0000-000000000010"),
+                    "current_version_uuid": target_version_uuid,
+                    "type": "x",
+                    "sous_type": "x",
+                    "label": None,
+                    "description": None,
+                    "is_system": False,
+                    "created_by_user_id": None,
+                    "created_at": _NOW,
+                    "updated_at": _NOW,
+                    "deprecated_at": None,  # active
+                    "cv_version": 2,
+                    "cv_schema_data": "{}",
+                    "cv_schema_ui": "{}",
+                    "cv_created_at": _NOW,
+                    "used_count": 0,
+                }
+            )
         return None
 
     conn.fetchrow = fr
@@ -825,16 +835,26 @@ async def test_assign_type_by_id_happy_path() -> None:
         if "secret_schemas" in query and "parent_uuid" in query:
             return FakeRecord({"parent_uuid": target_type_uuid})
         if "secret_types" in query and "type_uuid" in query:
-            return FakeRecord({
-                "type_uuid": target_type_uuid,
-                "current_version_uuid": target_version_uuid,
-                "type": "x", "sous_type": "x", "label": None, "description": None,
-                "is_system": False, "created_by_user_id": None,
-                "created_at": _NOW, "updated_at": _NOW,
-                "deprecated_at": None,
-                "cv_version": 1, "cv_schema_data": "{}", "cv_schema_ui": "{}",
-                "cv_created_at": _NOW, "used_count": 0,
-            })
+            return FakeRecord(
+                {
+                    "type_uuid": target_type_uuid,
+                    "current_version_uuid": target_version_uuid,
+                    "type": "x",
+                    "sous_type": "x",
+                    "label": None,
+                    "description": None,
+                    "is_system": False,
+                    "created_by_user_id": None,
+                    "created_at": _NOW,
+                    "updated_at": _NOW,
+                    "deprecated_at": None,
+                    "cv_version": 1,
+                    "cv_schema_data": "{}",
+                    "cv_schema_ui": "{}",
+                    "cv_created_at": _NOW,
+                    "used_count": 0,
+                }
+            )
         return None
 
     conn.fetchrow = fr

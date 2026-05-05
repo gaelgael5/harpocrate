@@ -464,6 +464,44 @@ async def get_descriptor_by_id(
     return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
+# ─── By-path — operations récursives sur un dossier ───────────────────────────
+
+
+@router.get("/by-path/count")
+async def count_secrets_by_path(
+    wallet_id: UUID,
+    auth: ReadAuth,
+    path: str = Query(..., description="Path à compter, ex: /foo/bar/"),
+) -> JSONResponse:
+    """Compte récursivement les secrets sous un path. Requiert [read]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        count = await secrets_svc.count_secrets_by_path(
+            conn, wallet_id=wallet_id, path=path,
+        )
+    return JSONResponse({"count": count})
+
+
+@router.delete("/by-path")
+async def delete_secrets_by_path(
+    wallet_id: UUID,
+    auth: RemoveAuth,
+    request: Request,
+    path: str = Query(..., description="Path à supprimer récursivement, ex: /foo/bar/"),
+) -> JSONResponse:
+    """Supprime récursivement tous les secrets sous un path. 400 si path='/'. Requiert [remove]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        deleted = await secrets_svc.delete_secrets_by_path(
+            conn,
+            wallet_id=wallet_id,
+            path=path,
+            caller_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+        )
+    return JSONResponse({"deleted": deleted})
+
+
 # ─── PATCH /v1/wallets/{wallet_id}/secrets/by-id/{secret_id}/migrate-schema ──
 
 

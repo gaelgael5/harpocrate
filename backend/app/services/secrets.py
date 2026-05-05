@@ -809,8 +809,12 @@ async def count_secrets_by_path(
     normalized = normalize_path(path)
     if normalized == "/":
         # Racine = tous les secrets du wallet
-        return await secrets_repo.count_by_path_prefix(conn, wallet_id=wallet_id, path_prefix="")
-    return await secrets_repo.count_by_path_prefix(conn, wallet_id=wallet_id, path_prefix=normalized)
+        return await secrets_repo.count_by_path_prefix(
+            conn, wallet_id=wallet_id, path_prefix=""
+        )
+    return await secrets_repo.count_by_path_prefix(
+        conn, wallet_id=wallet_id, path_prefix=normalized
+    )
 
 
 async def delete_secrets_by_path(
@@ -832,7 +836,10 @@ async def delete_secrets_by_path(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": "cannot_delete_root_path",
-                "message": "Refusing to delete all secrets in wallet via path='/'. Delete the wallet itself instead.",
+                "message": (
+                    "Refusing to delete all secrets in wallet via path='/'. "
+                    "Delete the wallet itself instead."
+                ),
             },
         )
 

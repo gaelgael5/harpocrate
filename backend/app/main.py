@@ -36,11 +36,11 @@ from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
 from app.core.maintenance import maintenance_state
 from app.db.pool import close_pool, get_pool, init_pool
-from app.services.secret_paths import InvalidSecretPath
 from migrations.apply_migrations import apply_migrations
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import wallets as wallets_svc
+from app.services.secret_paths import InvalidSecretPath
 
 configure_logging()
 
@@ -120,7 +120,6 @@ async def maintenance_middleware(request: Request, call_next: object) -> Respons
             or path == "/v1/health"
         ):
             return await _call_next(request)
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=503,
             content={

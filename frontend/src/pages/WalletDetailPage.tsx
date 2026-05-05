@@ -19,6 +19,8 @@ import {
   Breadcrumbs,
   Anchor,
   SimpleGrid,
+  ActionIcon,
+  Tooltip,
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
@@ -97,20 +99,41 @@ function PathBreadcrumb({
   )
 }
 
-function FolderCard({ folder, onClick }: { folder: Folder; onClick: () => void }) {
+function FolderCard({
+  folder,
+  onClick,
+  onDelete,
+}: {
+  folder: Folder
+  onClick: () => void
+  onDelete: () => void
+}) {
   const { t } = useTranslation()
   return (
-    <Card withBorder padding="sm" style={{ cursor: 'pointer' }} onClick={onClick}>
-      <Group gap="xs">
-        <Text>📁</Text>
-        <Stack gap={0}>
-          <Text size="sm" fw={500}>
-            {folder.name}
-          </Text>
-          <Text size="xs" c="dimmed">
-            {t('secrets.paths.secretsCount', { count: folder.secrets_count })}
-          </Text>
-        </Stack>
+    <Card withBorder padding="sm">
+      <Group justify="space-between" wrap="nowrap">
+        <Group gap="xs" style={{ cursor: 'pointer', flex: 1 }} onClick={onClick}>
+          <Text>📁</Text>
+          <Stack gap={0}>
+            <Text size="sm" fw={500}>{folder.name}</Text>
+            <Text size="xs" c="dimmed">
+              {t('secrets.paths.secretsCount', { count: folder.secrets_count })}
+            </Text>
+          </Stack>
+        </Group>
+        <Tooltip label={t('secrets.paths.deleteFolder')}>
+          <ActionIcon
+            variant="subtle"
+            color="red"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            aria-label="delete-folder"
+          >
+            🗑
+          </ActionIcon>
+        </Tooltip>
       </Group>
     </Card>
   )
@@ -183,6 +206,49 @@ export function WalletDetailPage() {
       notifications.show({ color: 'green', message: t('wallets.restoreSuccess') })
     },
     onError: () => notifications.show({ color: 'red', message: t('wallets.restoreError') }),
+  })
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: async (folderPath: string) => {
+      // 1. Compter les secrets pour la confirmation
+      const countRaw = await api.get<unknown>(
+        `/wallets/${walletId ?? ''}/secrets/by-path/count?path=${encodeURIComponent(folderPath)}`,
+      )
+      const count = (countRaw as { count: number }).count
+      return { folderPath, count }
+    },
+    onSuccess: ({ folderPath, count }) => {
+      modals.openConfirmModal({
+        title: t('secrets.paths.deleteFolderTitle'),
+        children: (
+          <Text size="sm">
+            {t('secrets.paths.deleteFolderConfirm', { path: folderPath, count })}
+          </Text>
+        ),
+        labels: { confirm: t('secrets.paths.deleteFolder'), cancel: t('common.cancel') },
+        confirmProps: { color: 'red' },
+        onConfirm: async () => {
+          try {
+            const r = await api.delete<{ deleted: number }>(
+              `/wallets/${walletId ?? ''}/secrets/by-path?path=${encodeURIComponent(folderPath)}`,
+            )
+            notifications.show({
+              color: 'green',
+              message: t('secrets.paths.deleteFolderSuccess', { count: r.deleted }),
+            })
+            await queryClient.invalidateQueries({ queryKey: ['wallet-tree', walletId] })
+            await queryClient.invalidateQueries({ queryKey: ['wallet-secrets-path', walletId] })
+          } catch (err) {
+            const msg = err instanceof ApiError ? err.message : String(err)
+            notifications.show({ color: 'red', title: t('common.error'), message: msg })
+          }
+        },
+      })
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    },
   })
 
   function handleDelete() {
@@ -383,6 +449,7 @@ export function WalletDetailPage() {
                           key={folder.full_path}
                           folder={folder}
                           onClick={() => setCurrentPath(folder.full_path)}
+                          onDelete={() => deleteFolderMutation.mutate(folder.full_path)}
                         />
                       ))}
                     </SimpleGrid>

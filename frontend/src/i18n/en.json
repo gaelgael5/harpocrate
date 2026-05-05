@@ -168,7 +168,11 @@
       "secretsHere": "Secrets here",
       "newInFolder": "New secret here",
       "secretsCount": "{{count}} secret(s)",
-      "subfoldersCount": "{{count}} subfolder(s)"
+      "subfoldersCount": "{{count}} subfolder(s)",
+      "deleteFolder": "Delete this folder",
+      "deleteFolderTitle": "Delete folder?",
+      "deleteFolderConfirm": "Delete folder {{path}}? This will permanently delete {{count}} secret(s).",
+      "deleteFolderSuccess": "{{count}} secret(s) deleted"
     },
     "typeOptional": "Type (optional)",
     "type": "Type",

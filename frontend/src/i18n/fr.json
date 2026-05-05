@@ -169,7 +169,11 @@
       "secretsHere": "Secrets ici",
       "newInFolder": "Nouveau secret ici",
       "secretsCount": "{{count}} secret(s)",
-      "subfoldersCount": "{{count}} sous-dossier(s)"
+      "subfoldersCount": "{{count}} sous-dossier(s)",
+      "deleteFolder": "Supprimer ce dossier",
+      "deleteFolderTitle": "Supprimer le dossier ?",
+      "deleteFolderConfirm": "Supprimer le dossier {{path}} ? Cela supprimera {{count}} secret(s) de manière irréversible.",
+      "deleteFolderSuccess": "{{count}} secret(s) supprimé(s)"
     },
     "typeOptional": "Type (optionnel)",
     "type": "Type",

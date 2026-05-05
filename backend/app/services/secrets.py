@@ -781,3 +781,63 @@ async def patch_secret_by_id(
             target_secret_id=secret.id,
             metadata={"secret_name": secret.name, "field": "metadata", "access_via": "by_id"},
         )
+
+
+async def populate_secret_by_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    secret_id: UUID,
+    req: PopulateRequest,
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> PopulateResponse:
+    """Peuple un placeholder par UUID. 404 si secret introuvable ou wallet mismatch."""
+    secret = await secrets_repo.get_secret_by_id(conn, secret_id=secret_id)
+    if secret is None or secret.wallet_id != wallet_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "secret_not_found", "message": "Secret not found"},
+        )
+
+    if not secret.is_placeholder:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "secret_already_populated",
+                "message": "This secret already has a value. Use PUT to update it.",
+            },
+        )
+
+    try:
+        enc_value = base64.b64decode(req.encrypted_value)
+    except Exception as exc:  # pragma: no cover — Pydantic
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_base64", "message": "encrypted_value is not valid base64"},
+        ) from exc
+
+    descriptor_type = (secret.generation_descriptor or {}).get("type")
+
+    async with conn.transaction():
+        new_version = await secrets_repo.populate_secret(
+            conn,
+            secret_id=secret.id,
+            encrypted_value=enc_value,
+            updated_by_user_id=caller_user_id,
+        )
+        await audit_log_insert(
+            conn,
+            "secret.populated",
+            actor_user_id=caller_user_id,
+            actor_ip=actor_ip,
+            target_wallet_id=wallet_id,
+            target_secret_id=secret.id,
+            metadata={
+                "secret_name": secret.name,
+                "generator_type": descriptor_type,
+                "access_via": "by_id",
+            },
+        )
+
+    return PopulateResponse(generation_version=new_version)

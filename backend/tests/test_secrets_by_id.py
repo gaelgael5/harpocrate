@@ -557,3 +557,67 @@ async def test_patch_by_id_cross_wallet_returns_404() -> None:
 
     assert r.status_code == 404
     assert r.json()["detail"]["error"] == "secret_not_found"
+
+
+# ─── POST /by-id/{sid}/populate ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_populate_by_id_happy_path() -> None:
+    """POST /by-id/{sid}/populate sur un placeholder → 200."""
+    conn = _make_conn()
+    call_n = 0
+
+    async def fr(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row(is_placeholder=True)
+        return None
+
+    conn.fetchrow = fr
+    conn.fetch = AsyncMock(return_value=[])
+    conn.fetchval = AsyncMock(return_value=2)  # new generation_version
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}/populate",
+            json={"encrypted_value": _FAKE_ENC_VALUE_B64},
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["generation_version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_populate_by_id_cross_wallet_returns_404() -> None:
+    conn = _make_conn()
+    call_n = 0
+
+    async def fr(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(wallet_id=_WALLET_ID, permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row(wallet_id=_OTHER_WALLET_ID, is_placeholder=True)
+        return None
+
+    conn.fetchrow = fr
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}/populate",
+            json={"encrypted_value": _FAKE_ENC_VALUE_B64},
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 404

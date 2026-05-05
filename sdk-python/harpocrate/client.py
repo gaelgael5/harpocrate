@@ -305,6 +305,44 @@ class SecretsClient:
             return self.get(name)
 
 
+class TypesClient:
+    """Sous-client pour le catalogue de types de secrets (lecture seule).
+
+    Utilise les endpoints publics /v1/secret-types accessibles via API key
+    depuis P1.5 (ou via JWT user).
+    """
+
+    def __init__(self, http: VaultHttpClient) -> None:
+        self._http = http
+
+    def list(self, q: str | None = None, include_deprecated: bool = False) -> list["SecretType"]:
+        """Liste les types de secrets disponibles.
+
+        Paramètres :
+            q : filtre fulltext (type, sous_type, label)
+            include_deprecated : inclure les types dépréciés
+
+        Retourne : list[SecretType]
+        """
+        from harpocrate.models import SecretType
+
+        params: dict[str, Any] = {}
+        if q is not None:
+            params["q"] = q
+        if include_deprecated:
+            params["include_deprecated"] = include_deprecated
+
+        data = self._http.get("/v1/secret-types", **params)
+        return [SecretType.from_dict(t) for t in data.get("types", [])]
+
+    def get(self, type_uuid: UUID) -> "SecretType":
+        """Retourne le détail d'un type avec son schéma complet (data + UI) et toutes les versions."""
+        from harpocrate.models import SecretType
+
+        data = self._http.get(f"/v1/secret-types/{type_uuid}")
+        return SecretType.from_dict(data)
+
+
 class VaultClient:
     """Client haut niveau pour l'API Harpocrate.
 
@@ -346,6 +384,7 @@ class VaultClient:
             parsed_token=self._parsed,
             cache=self._cache,
         )
+        self.types = TypesClient(http=self._http)
 
     def _resolve_wallet_id(self) -> UUID:
         """Résout le wallet_id depuis l'endpoint my-api-key-grant."""

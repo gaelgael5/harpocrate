@@ -269,6 +269,7 @@ async def test_get_by_id_returns_404_when_secret_does_not_exist() -> None:
 # ─── PUT /by-id/{sid} ─────────────────────────────────────────────────────────
 
 
+
 @pytest.mark.asyncio
 async def test_put_by_id_happy_path() -> None:
     """PUT by-id remplace encrypted_value et incrémente generation_version."""
@@ -333,3 +334,101 @@ async def test_put_by_id_cross_wallet_returns_404() -> None:
 
     assert r.status_code == 404
     assert r.json()["detail"]["error"] == "secret_not_found"
+
+
+# ─── DELETE /by-id/{sid} ──────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_by_id_happy_path() -> None:
+    """DELETE by-id retourne 204 et exécute la suppression."""
+    conn = _make_conn()
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row()
+        return None
+
+    conn.fetchrow = fetchrow_side
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.delete(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}",
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 204, r.text
+    # Vérifie qu'un DELETE SQL a été émis
+    assert any(
+        "DELETE FROM secrets" in str(c.args[0])
+        for c in conn.execute.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_by_id_cross_wallet_returns_404() -> None:
+    """DELETE sur un secret d'un autre wallet → 404."""
+    conn = _make_conn()
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        if call_n == 2:
+            return _fake_wallet_row(wallet_id=_WALLET_ID, permissions=_PERM_ALL)
+        if call_n == 3:
+            return _fake_secret_row(wallet_id=_OTHER_WALLET_ID)
+        return None
+
+    conn.fetchrow = fetchrow_side
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.delete(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}",
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 404
+    # Vérifie qu'aucun DELETE SQL n'a été émis (le secret n'a pas été touché)
+    assert not any(
+        "DELETE FROM secrets" in str(c.args[0])
+        for c in conn.execute.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_by_id_requires_remove_permission() -> None:
+    """403 si le caller n'a pas [remove]."""
+    conn = _make_conn()
+    call_n = 0
+
+    async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
+        nonlocal call_n
+        call_n += 1
+        if call_n == 1:
+            return _fake_user_row()
+        # Tout sauf remove (0x10 = 16)
+        return _fake_wallet_row(permissions=_PERM_ALL & ~16)
+
+    conn.fetchrow = fetchrow_side
+    conn.fetch = AsyncMock(return_value=[])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.delete(
+            f"/v1/wallets/{_WALLET_ID}/secrets/by-id/{_SECRET_ID}",
+            headers=_auth_header(),
+        )
+
+    assert r.status_code == 403
+    assert r.json()["detail"]["error"] == "insufficient_permissions"

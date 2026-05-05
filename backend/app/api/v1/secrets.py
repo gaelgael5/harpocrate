@@ -363,6 +363,33 @@ async def get_descriptor(
     return JSONResponse(status_code=status.HTTP_200_OK, content=result.model_dump(mode="json"))
 
 
+# ─── DELETE /v1/wallets/{wallet_id}/secrets/by-id/{secret_id} ────────────────
+
+
+@router.delete(
+    "/by-id/{secret_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_secret_by_id(
+    wallet_id: UUID,
+    secret_id: UUID,
+    auth: RemoveAuth,
+    request: Request,
+) -> Response:
+    """Supprime le secret par UUID (cascade sur secret_tags + secret_path_index). Requiert [remove]."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await secrets_svc.delete_secret_by_id(
+            conn,
+            wallet_id=wallet_id,
+            secret_id=secret_id,
+            caller_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ─── DELETE /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────
 
 

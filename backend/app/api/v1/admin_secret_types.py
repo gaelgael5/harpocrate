@@ -2,17 +2,19 @@
 
 Admin CRUD pour les types de secrets et leurs versions de schéma.
 """
+
 from __future__ import annotations
 
 import json
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.admin_auth import AdminJwt
-from app.core.security import JwtUser
+from app.core.api_key_auth import AuthContext, require_any_auth_no_scope
 from app.db.pool import get_pool
 from app.db.repositories import secret_types as repo
 from app.services import secret_types as svc
@@ -67,6 +69,7 @@ class ValidateSchemaBody(BaseModel):
 
 def _type_list_item(r: object) -> dict:
     from asyncpg import Record
+
     rec: Record = r  # type: ignore[assignment]
     current_version = None
     if rec["current_version_uuid"] is not None:
@@ -90,6 +93,7 @@ def _type_list_item(r: object) -> dict:
 
 def _version_dict(r: object) -> dict:
     from asyncpg import Record
+
     rec: Record = r  # type: ignore[assignment]
     sd = rec["schema_data"]
     su = rec["schema_ui"]
@@ -274,9 +278,7 @@ async def add_schema_version(
 
 
 @router.get("/{type_uuid}/schemas/{version_uuid}", response_class=JSONResponse)
-async def get_schema_version(
-    type_uuid: UUID, version_uuid: UUID, admin: AdminJwt
-) -> JSONResponse:
+async def get_schema_version(type_uuid: UUID, version_uuid: UUID, admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await repo.get_version(conn, version_uuid)
@@ -302,10 +304,12 @@ async def update_schema_version_notes(
     return JSONResponse({"updated": True})
 
 
-@router.delete("/{type_uuid}/schemas/{version_uuid}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
-async def delete_schema_version(
-    type_uuid: UUID, version_uuid: UUID, admin: AdminJwt
-) -> Response:
+@router.delete(
+    "/{type_uuid}/schemas/{version_uuid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_schema_version(type_uuid: UUID, version_uuid: UUID, admin: AdminJwt) -> Response:
     pool = await get_pool()
     async with pool.acquire() as conn:
         try:
@@ -324,11 +328,14 @@ async def delete_schema_version(
 
 @public_router.get("", response_class=JSONResponse)
 async def list_secret_types_public(
-    user: JwtUser,
+    auth: Annotated[AuthContext, Depends(require_any_auth_no_scope)],
     q: str | None = Query(default=None),
     include_deprecated: bool = Query(default=False),
 ) -> JSONResponse:
-    """Liste publique des types de secrets (pour UI création de secret)."""
+    """Liste publique des types de secrets (pour UI création de secret).
+
+    Accepte JWT user OU API key (hrpv_*).
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await repo.list_types(conn, q=q, include_deprecated=include_deprecated)
@@ -336,7 +343,11 @@ async def list_secret_types_public(
 
 
 @public_router.get("/{type_uuid}", response_class=JSONResponse)
-async def get_secret_type_public(type_uuid: UUID, user: JwtUser) -> JSONResponse:
+async def get_secret_type_public(
+    type_uuid: UUID,
+    auth: Annotated[AuthContext, Depends(require_any_auth_no_scope)],
+) -> JSONResponse:
+    """Détail public d'un type. Accepte JWT user OU API key."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await repo.get_type(conn, type_uuid)

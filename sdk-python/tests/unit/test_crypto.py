@@ -1,4 +1,5 @@
 """Tests de l'implémentation AES-256-GCM — LOT_09."""
+
 from __future__ import annotations
 
 import os

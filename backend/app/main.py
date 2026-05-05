@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from app.api.v1 import (
     admin_backups,
@@ -40,6 +40,7 @@ from migrations.apply_migrations import apply_migrations
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import wallets as wallets_svc
+from app.services.secret_paths import InvalidSecretPath
 
 configure_logging()
 
@@ -91,6 +92,14 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(InvalidSecretPath)
+async def _invalid_secret_path_handler(_request: Request, exc: InvalidSecretPath) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={"error": "invalid_secret_path", "message": str(exc)},
+    )
+
+
 # ─── Middleware : log des requêtes HTTP ───────────────────────────────────────
 #
 # RÈGLE DE SÉCURITÉ : les chemins /secrets ne doivent JAMAIS avoir leur body loggé.
@@ -111,7 +120,6 @@ async def maintenance_middleware(request: Request, call_next: object) -> Respons
             or path == "/v1/health"
         ):
             return await _call_next(request)
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=503,
             content={

@@ -1,4 +1,5 @@
 """Tests de parsing du token hrpv_* côté client — LOT_09."""
+
 from __future__ import annotations
 
 import base64
@@ -62,6 +63,7 @@ class TestTokenParse:
     def test_parse_expiration_nonzero(self) -> None:
         """Une expiration non-zéro est correctement décodée."""
         import time
+
         future = int(time.time()) + 3600  # dans 1 heure
         # Encode en base36
         exp_b36 = ""
@@ -69,7 +71,9 @@ class TestTokenParse:
         while n:
             exp_b36 = "0123456789abcdefghijklmnopqrstuvwxyz"[n % 36] + exp_b36
             n //= 36
-        token = f"hrpv_1_{_TEST_ID_B32}_{exp_b36}_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
+        token = (
+            f"hrpv_1_{_TEST_ID_B32}_{exp_b36}_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
+        )
         parsed = parse_token(token)
         assert abs(parsed.exp - future) < 2  # tolérance 2s
 
@@ -137,13 +141,16 @@ class TestTokenExpiry:
     def test_expired_token_raises(self) -> None:
         """Un token expiré lève TokenExpiredError."""
         import time
+
         past = int(time.time()) - 100
         exp_b36 = ""
         n = past
         while n:
             exp_b36 = "0123456789abcdefghijklmnopqrstuvwxyz"[n % 36] + exp_b36
             n //= 36
-        token = f"hrpv_1_{_TEST_ID_B32}_{exp_b36}_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
+        token = (
+            f"hrpv_1_{_TEST_ID_B32}_{exp_b36}_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
+        )
         with pytest.raises(TokenExpiredError):
             parse_token(token)
 

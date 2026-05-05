@@ -1,4 +1,5 @@
 """Tests du cache wallet_key — LOT_09 SDK."""
+
 from __future__ import annotations
 
 import os
@@ -67,14 +68,13 @@ class TestWalletKeyCache:
         # Ajouter une 4e entrée → éviction d'une des 3 premières
         cache.set("w4", os.urandom(32))
         # Le cache ne doit pas dépasser maxsize
-        count = sum(
-            1 for k in ("w1", "w2", "w3", "w4") if cache.get(k) is not None
-        )
+        count = sum(1 for k in ("w1", "w2", "w3", "w4") if cache.get(k) is not None)
         assert count <= 3
 
     def test_thread_safety(self) -> None:
         """Le cache est thread-safe (pas de race condition)."""
         import threading
+
         cache = WalletKeyCache(ttl_seconds=60, maxsize=100)
         errors: list[Exception] = []
 

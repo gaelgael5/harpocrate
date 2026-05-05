@@ -1,4 +1,5 @@
 """Repository — secret_types et secret_schemas (LOT 15)."""
+
 from __future__ import annotations
 
 import json
@@ -61,9 +62,7 @@ async def get_type(conn: asyncpg.Connection, type_uuid: UUID) -> asyncpg.Record 
     )
 
 
-async def get_type_versions(
-    conn: asyncpg.Connection, type_uuid: UUID
-) -> list[asyncpg.Record]:
+async def get_type_versions(conn: asyncpg.Connection, type_uuid: UUID) -> list[asyncpg.Record]:
     return await conn.fetch(
         """
         SELECT * FROM secret_schemas
@@ -74,9 +73,7 @@ async def get_type_versions(
     )
 
 
-async def get_version(
-    conn: asyncpg.Connection, version_uuid: UUID
-) -> asyncpg.Record | None:
+async def get_version(conn: asyncpg.Connection, version_uuid: UUID) -> asyncpg.Record | None:
     return await conn.fetchrow(
         "SELECT * FROM secret_schemas WHERE version_uuid = $1",
         version_uuid,
@@ -99,7 +96,12 @@ async def insert_type_with_v1(
         type_row = await conn.fetchrow(
             """INSERT INTO secret_types (type, sous_type, label, description, created_by_user_id, is_system)
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING type_uuid""",
-            type_, sous_type, label, description, creator_id, is_system,
+            type_,
+            sous_type,
+            label,
+            description,
+            creator_id,
+            is_system,
         )
         type_uuid: UUID = type_row["type_uuid"]
 
@@ -217,3 +219,22 @@ async def delete_version(conn: asyncpg.Connection, version_uuid: UUID) -> str:
         "DELETE FROM secret_schemas WHERE version_uuid = $1",
         version_uuid,
     )
+
+
+async def get_raw_type_with_current_version_uuid(
+    conn: asyncpg.Connection,
+) -> tuple[UUID, UUID] | None:
+    """Retourne (type_uuid, current_version_uuid) du type système RAW.
+
+    Le type RAW est seedé au démarrage via app.services.seed_types depuis
+    backend/types/raw/. None si pas encore seedé (cas de boot très précoce).
+    """
+    row = await conn.fetchrow(
+        """SELECT type_uuid, current_version_uuid
+           FROM secret_types
+           WHERE type = 'raw' AND sous_type = 'raw' AND is_system = TRUE
+           LIMIT 1"""
+    )
+    if row is None or row["current_version_uuid"] is None:
+        return None
+    return row["type_uuid"], row["current_version_uuid"]

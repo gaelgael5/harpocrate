@@ -10,6 +10,7 @@ Note sur uuid7 :
   Pour Python 3.10-3.13, on utilise une implémentation manuelle compatible RFC 9562.
   Voir https://www.rfc-editor.org/rfc/rfc9562 § 5.7
 """
+
 from __future__ import annotations
 
 import secrets

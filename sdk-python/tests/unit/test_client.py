@@ -1,4 +1,5 @@
 """Tests du VaultClient avec mocks httpx — LOT_09 SDK."""
+
 from __future__ import annotations
 
 import base64
@@ -85,18 +86,20 @@ class TestSecretsClientGet:
         enc_wk = aes_gcm_encrypt(wallet_key, _TEST_DKEY_BYTES)
 
         path = f"/v1/wallets/{_TEST_WALLET_ID}/secrets/MY_SECRET"
-        mock_http = _make_mock_http({
-            path: {
-                "id": str(uuid.uuid4()),
-                "name": "MY_SECRET",
-                "encrypted_value": base64.b64encode(enc_value).decode(),
-                "encrypted_wallet_key": base64.b64encode(enc_wk).decode(),
-                "description": None,
-                "tags": [],
-                "is_placeholder": False,
-                "generation_version": 1,
+        mock_http = _make_mock_http(
+            {
+                path: {
+                    "id": str(uuid.uuid4()),
+                    "name": "MY_SECRET",
+                    "encrypted_value": base64.b64encode(enc_value).decode(),
+                    "encrypted_wallet_key": base64.b64encode(enc_wk).decode(),
+                    "description": None,
+                    "tags": [],
+                    "is_placeholder": False,
+                    "generation_version": 1,
+                }
             }
-        })
+        )
 
         client = _make_secrets_client(mock_http, wallet_key=wallet_key)
         result = client.get("MY_SECRET")
@@ -110,14 +113,20 @@ class TestSecretsClientGet:
         enc_wk = aes_gcm_encrypt(wallet_key, _TEST_DKEY_BYTES)
 
         path = f"/v1/wallets/{_TEST_WALLET_ID}/secrets/CACHED"
-        mock_http = _make_mock_http({path: {
-            "id": str(uuid.uuid4()),
-            "name": "CACHED",
-            "encrypted_value": base64.b64encode(enc_value).decode(),
-            "encrypted_wallet_key": base64.b64encode(enc_wk).decode(),
-            "description": None, "tags": [], "is_placeholder": False,
-            "generation_version": 1,
-        }})
+        mock_http = _make_mock_http(
+            {
+                path: {
+                    "id": str(uuid.uuid4()),
+                    "name": "CACHED",
+                    "encrypted_value": base64.b64encode(enc_value).decode(),
+                    "encrypted_wallet_key": base64.b64encode(enc_wk).decode(),
+                    "description": None,
+                    "tags": [],
+                    "is_placeholder": False,
+                    "generation_version": 1,
+                }
+            }
+        )
 
         client = _make_secrets_client(mock_http, wallet_key=wallet_key)
         # Appel 1
@@ -135,19 +144,23 @@ class TestSecretsClientGet:
 
         grant_path = f"/v1/wallets/{_TEST_WALLET_ID}/my-api-key-grant"
         secret_path = f"/v1/wallets/{_TEST_WALLET_ID}/secrets/FETCHED"
-        mock_http = _make_mock_http({
-            grant_path: {
-                "encrypted_wallet_key": base64.b64encode(enc_wk_for_grant).decode(),
-            },
-            secret_path: {
-                "id": str(uuid.uuid4()),
-                "name": "FETCHED",
-                "encrypted_value": base64.b64encode(enc_value).decode(),
-                "encrypted_wallet_key": base64.b64encode(enc_wk_for_grant).decode(),
-                "description": None, "tags": [], "is_placeholder": False,
-                "generation_version": 1,
-            },
-        })
+        mock_http = _make_mock_http(
+            {
+                grant_path: {
+                    "encrypted_wallet_key": base64.b64encode(enc_wk_for_grant).decode(),
+                },
+                secret_path: {
+                    "id": str(uuid.uuid4()),
+                    "name": "FETCHED",
+                    "encrypted_value": base64.b64encode(enc_value).decode(),
+                    "encrypted_wallet_key": base64.b64encode(enc_wk_for_grant).decode(),
+                    "description": None,
+                    "tags": [],
+                    "is_placeholder": False,
+                    "generation_version": 1,
+                },
+            }
+        )
 
         # Pas de wallet_key dans le cache
         client = _make_secrets_client(mock_http, wallet_key=None)
@@ -161,29 +174,31 @@ class TestSecretsClientList:
     def test_list_returns_secret_infos(self) -> None:
         """list() retourne une liste de SecretInfo."""
         path = f"/v1/wallets/{_TEST_WALLET_ID}/secrets"
-        mock_http = _make_mock_http({
-            path: {
-                "secrets": [
-                    {
-                        "id": str(uuid.uuid4()),
-                        "name": "SECRET_A",
-                        "description": None,
-                        "tags": [],
-                        "is_placeholder": False,
-                        "generation_version": 1,
-                    },
-                    {
-                        "id": str(uuid.uuid4()),
-                        "name": "PLACEHOLDER_B",
-                        "description": None,
-                        "tags": [],
-                        "is_placeholder": True,
-                        "generation_version": 0,
-                    },
-                ],
-                "next_cursor": None,
+        mock_http = _make_mock_http(
+            {
+                path: {
+                    "secrets": [
+                        {
+                            "id": str(uuid.uuid4()),
+                            "name": "SECRET_A",
+                            "description": None,
+                            "tags": [],
+                            "is_placeholder": False,
+                            "generation_version": 1,
+                        },
+                        {
+                            "id": str(uuid.uuid4()),
+                            "name": "PLACEHOLDER_B",
+                            "description": None,
+                            "tags": [],
+                            "is_placeholder": True,
+                            "generation_version": 0,
+                        },
+                    ],
+                    "next_cursor": None,
+                }
             }
-        })
+        )
 
         client = _make_secrets_client(mock_http)
         resp = client.list_secrets()
@@ -207,14 +222,20 @@ class TestSecretsClientPopulate:
         populate_path = f"/v1/wallets/{_TEST_WALLET_ID}/secrets/DB_PWD/populate"
         grant_path = f"/v1/wallets/{_TEST_WALLET_ID}/my-api-key-grant"
 
-        mock_http = _make_mock_http({
-            descriptor_path: {
-                "name": "DB_PWD",
-                "generation_descriptor": {"type": "random", "length": 24, "charset": "alphanum"},
-            },
-            populate_path: {"generation_version": 1},
-            grant_path: {"encrypted_wallet_key": base64.b64encode(enc_wk_for_grant).decode()},
-        })
+        mock_http = _make_mock_http(
+            {
+                descriptor_path: {
+                    "name": "DB_PWD",
+                    "generation_descriptor": {
+                        "type": "random",
+                        "length": 24,
+                        "charset": "alphanum",
+                    },
+                },
+                populate_path: {"generation_version": 1},
+                grant_path: {"encrypted_wallet_key": base64.b64encode(enc_wk_for_grant).decode()},
+            }
+        )
 
         client = _make_secrets_client(mock_http, wallet_key=wallet_key)
         result = client.populate("DB_PWD", auto_generate=True)
@@ -225,9 +246,11 @@ class TestSecretsClientPopulate:
         """populate(auto_generate=False, value=...) utilise la valeur fournie."""
         wallet_key = os.urandom(32)
         populate_path = f"/v1/wallets/{_TEST_WALLET_ID}/secrets/MY_SECRET/populate"
-        mock_http = _make_mock_http({
-            populate_path: {"generation_version": 2},
-        })
+        mock_http = _make_mock_http(
+            {
+                populate_path: {"generation_version": 2},
+            }
+        )
 
         client = _make_secrets_client(mock_http, wallet_key=wallet_key)
         result = client.populate("MY_SECRET", auto_generate=False, value="explicit-value")
@@ -255,8 +278,10 @@ class TestSecretsClientPopulate:
         mock_http.post.side_effect = capture_post
 
         client = SecretsClient(
-            http=mock_http, wallet_id=_TEST_WALLET_ID,
-            parsed_token=parsed, cache=cache,
+            http=mock_http,
+            wallet_id=_TEST_WALLET_ID,
+            parsed_token=parsed,
+            cache=cache,
         )
         client.populate("SECRET", auto_generate=True)
 
@@ -286,10 +311,22 @@ class TestSecretsClientPopulateAll:
             if path == list_path:
                 return {
                     "secrets": [
-                        {"id": str(uuid.uuid4()), "name": "VALUED", "description": None,
-                         "tags": [], "is_placeholder": False, "generation_version": 1},
-                        {"id": str(uuid.uuid4()), "name": "PLACEHOLDER", "description": None,
-                         "tags": [], "is_placeholder": True, "generation_version": 0},
+                        {
+                            "id": str(uuid.uuid4()),
+                            "name": "VALUED",
+                            "description": None,
+                            "tags": [],
+                            "is_placeholder": False,
+                            "generation_version": 1,
+                        },
+                        {
+                            "id": str(uuid.uuid4()),
+                            "name": "PLACEHOLDER",
+                            "description": None,
+                            "tags": [],
+                            "is_placeholder": True,
+                            "generation_version": 0,
+                        },
                     ],
                     "next_cursor": None,
                 }
@@ -302,8 +339,10 @@ class TestSecretsClientPopulateAll:
         mock_http.post.return_value = {"generation_version": 1}
 
         client = SecretsClient(
-            http=mock_http, wallet_id=_TEST_WALLET_ID,
-            parsed_token=parsed, cache=cache,
+            http=mock_http,
+            wallet_id=_TEST_WALLET_ID,
+            parsed_token=parsed,
+            cache=cache,
         )
         results = client.populate_all()
         # Seulement PLACEHOLDER doit être dans les résultats

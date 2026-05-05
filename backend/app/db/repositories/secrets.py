@@ -532,6 +532,50 @@ async def get_tree_data(
     }
 
 
+async def count_by_path_prefix(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    path_prefix: str,
+) -> int:
+    """Compte les secrets dont le nom commence par path_prefix.
+
+    path_prefix doit se terminer par '/'. Match récursif : tous les sous-niveaux comptent.
+    """
+    count: int = await conn.fetchval(
+        """
+        SELECT COUNT(*) FROM secrets
+        WHERE wallet_id = $1
+          AND name LIKE $2 || '%'
+        """,
+        wallet_id, path_prefix,
+    )
+    return count
+
+
+async def delete_by_path_prefix(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    path_prefix: str,
+) -> list[tuple[UUID, str]]:
+    """Hard-delete tous les secrets dont le nom commence par path_prefix.
+
+    Retourne la liste (id, name) des secrets supprimés (pour audit log).
+    Le trigger ON DELETE CASCADE supprime aussi les entrées de secret_path_index et secret_tags.
+    """
+    rows = await conn.fetch(
+        """
+        DELETE FROM secrets
+        WHERE wallet_id = $1
+          AND name LIKE $2 || '%'
+        RETURNING id, name
+        """,
+        wallet_id, path_prefix,
+    )
+    return [(r["id"], r["name"]) for r in rows]
+
+
 async def get_secret_by_id(
     conn: asyncpg.Connection[asyncpg.Record],
     *,

@@ -10,6 +10,7 @@ Sécurité :
   - Refuse http:// sauf si HARPOCRATE_ALLOW_INSECURE=1 (dev local)
   - Ne logue jamais le token ou les headers Authorization
 """
+
 from __future__ import annotations
 
 import os
@@ -91,7 +92,11 @@ class VaultHttpClient:
         if resp.status_code == 403:
             msg = ""
             if isinstance(detail, dict):
-                msg = detail.get("detail", {}).get("message", "") if isinstance(detail.get("detail"), dict) else str(detail)
+                msg = (
+                    detail.get("detail", {}).get("message", "")
+                    if isinstance(detail.get("detail"), dict)
+                    else str(detail)
+                )
             raise PermissionDenied(msg or "Permission denied")
 
         if resp.status_code == 404:

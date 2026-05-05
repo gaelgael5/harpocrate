@@ -2,7 +2,7 @@
  * New secret page — creates a manual secret by encrypting the value with wallet_key.
  */
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   Stack,
   Title,
@@ -37,12 +37,30 @@ interface FormValues {
   value: string
 }
 
-const NAME_RE = /^[A-Za-z0-9_.-]+$/
+// Aligné sur backend/app/services/secret_paths.py:validate_secret_name
+// - sans '/' : [A-Za-z0-9_.-]+
+// - avec '/' : segments [a-zA-Z0-9@._-]+, optionnellement '/'-préfixé, pas de '/' final, pas de '//'
+const NAME_RE_ROOT = /^[A-Za-z0-9_.-]+$/
+const NAME_RE_PATH = /^\/?([a-zA-Z0-9@._-]+\/)*[a-zA-Z0-9@._-]+$/
+
+function validateSecretName(name: string): string | null {
+  const stripped = name.trim()
+  if (!stripped) return 'common.required'
+  if (stripped.length > 256) return 'Max 256 characters'
+  if (!stripped.includes('/')) {
+    return NAME_RE_ROOT.test(stripped) ? null : 'secrets.nameHint'
+  }
+  if (stripped.endsWith('/')) return 'secrets.nameTrailingSlash'
+  if (stripped.includes('//')) return 'secrets.nameDoubleSlash'
+  return NAME_RE_PATH.test(stripped) ? null : 'secrets.namePathHint'
+}
 
 export function SecretNewPage() {
   const { t } = useTranslation()
   const { walletId } = useParams<{ walletId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  const prefixPath = (location.state as { prefixPath?: string } | null)?.prefixPath ?? ''
   const queryClient = useQueryClient()
   const rsaPrivateKey = useCryptoStore((s) => s.rsaPrivateKey)
   const getCachedKey = useCryptoStore((s) => s.getWalletKey)
@@ -66,14 +84,11 @@ export function SecretNewPage() {
   })
 
   const form = useForm<FormValues>({
-    initialValues: { name: '', description: '', tags: '', value: '' },
+    initialValues: { name: prefixPath, description: '', tags: '', value: '' },
     validate: {
       name: (v) => {
-        const stripped = v.trim()
-        if (!stripped) return t('common.required')
-        if (stripped.length > 256) return 'Max 256 characters'
-        if (!NAME_RE.test(stripped)) return t('secrets.nameHint')
-        return null
+        const errKey = validateSecretName(v)
+        return errKey ? t(errKey) : null
       },
       value: (v) =>
         !selectedTypeUuid && !v.trim() ? t('common.required') : null,

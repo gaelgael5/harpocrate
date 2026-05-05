@@ -9,6 +9,7 @@ Sécurité :
   - Tag de 128 bits (défaut de AESGCM).
   - La clé doit faire exactement 32 bytes (AES-256).
 """
+
 from __future__ import annotations
 
 import os
@@ -68,6 +69,4 @@ def aes_gcm_decrypt(blob: bytes, key: bytes, aad: bytes = b"") -> bytes:
     try:
         return aesgcm.decrypt(nonce, ciphertext_with_tag, aad or None)
     except Exception as exc:
-        raise VaultDecryptionError(
-            "AES-GCM decryption failed: invalid tag or wrong key"
-        ) from exc
+        raise VaultDecryptionError("AES-GCM decryption failed: invalid tag or wrong key") from exc

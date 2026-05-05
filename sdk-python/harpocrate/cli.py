@@ -16,6 +16,7 @@ Sécurité :
   - La sortie normale va sur stdout, les erreurs sur stderr.
   - Les valeurs de secrets vont sur stdout RAW (sans newline supplémentaire).
 """
+
 from __future__ import annotations
 
 import json

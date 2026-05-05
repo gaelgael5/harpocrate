@@ -11,6 +11,7 @@ Validation order (critique — ne pas réordonner) :
 
 SECURITY : hmac.compare_digest utilisé partout, jamais '=='.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -378,6 +379,44 @@ def require_any_auth_with_permission(required_permission: int):  # type: ignore[
             )
 
     return _check
+
+
+async def require_any_auth_no_scope(
+    authorization: Annotated[str | None, Header()] = None,
+    pool: asyncpg.Pool = Depends(get_pool),
+) -> AuthContext:
+    """Auth mixte JWT/API key sans wallet ni permission requise.
+
+    Pour les endpoints system-wide (catalogue de types, doc OpenAPI, etc.).
+    Côté JWT : valide la signature seulement (pas de lookup DB du user, donc
+    n'exige pas que le user soit déjà bootstrapped). Cohérent avec l'ancien
+    `require_jwt_user` que cette dep remplace pour ces endpoints publics.
+    """
+    from app.core.security import _validate_jwt
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "missing_bearer_token", "message": "Authorization header required"},
+        )
+
+    token = authorization[7:]
+
+    if token.startswith("hrpv_"):
+        api_key_caller = await validate_api_key_token(token, pool=pool)
+        return AuthContext(
+            user_db_id=None,
+            api_key=api_key_caller,
+            my_permissions=api_key_caller.permissions,
+        )
+
+    # JWT path : on valide la signature seulement, pas de lookup DB.
+    await _validate_jwt(token)
+    return AuthContext(
+        user_db_id=None,
+        api_key=None,
+        my_permissions=0,
+    )
 
 
 def require_any_auth_with_any_of_permissions(required_any: int):  # type: ignore[no-untyped-def]

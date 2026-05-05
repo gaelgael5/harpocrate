@@ -19,6 +19,7 @@ Modules :
     harpocrate.exceptions — toutes les exceptions SDK
     harpocrate.cli        — CLI Click (harpocrate-gen)
 """
+
 from __future__ import annotations
 
 from harpocrate.client import VaultClient

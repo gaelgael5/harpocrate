@@ -19,6 +19,8 @@ import {
   Breadcrumbs,
   Anchor,
   SimpleGrid,
+  ActionIcon,
+  Tooltip,
 } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
@@ -26,6 +28,7 @@ import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { api, ApiError } from '@/lib/api-client'
+import { FolderTree } from '@/components/FolderTree'
 import { exportWallet } from '@/lib/exportImportApi'
 import { WalletItemSchema } from '@/schemas/wallets'
 import { type SecretListItem } from '@/schemas/secrets'
@@ -97,20 +100,41 @@ function PathBreadcrumb({
   )
 }
 
-function FolderCard({ folder, onClick }: { folder: Folder; onClick: () => void }) {
+function FolderCard({
+  folder,
+  onClick,
+  onDelete,
+}: {
+  folder: Folder
+  onClick: () => void
+  onDelete: () => void
+}) {
   const { t } = useTranslation()
   return (
-    <Card withBorder padding="sm" style={{ cursor: 'pointer' }} onClick={onClick}>
-      <Group gap="xs">
-        <Text>📁</Text>
-        <Stack gap={0}>
-          <Text size="sm" fw={500}>
-            {folder.name}
-          </Text>
-          <Text size="xs" c="dimmed">
-            {t('secrets.paths.secretsCount', { count: folder.secrets_count })}
-          </Text>
-        </Stack>
+    <Card withBorder padding="sm">
+      <Group justify="space-between" wrap="nowrap">
+        <Group gap="xs" style={{ cursor: 'pointer', flex: 1 }} onClick={onClick}>
+          <Text>📁</Text>
+          <Stack gap={0}>
+            <Text size="sm" fw={500}>{folder.name}</Text>
+            <Text size="xs" c="dimmed">
+              {t('secrets.paths.secretsCount', { count: folder.secrets_count })}
+            </Text>
+          </Stack>
+        </Group>
+        <Tooltip label={t('secrets.paths.deleteFolder')}>
+          <ActionIcon
+            variant="subtle"
+            color="red"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            aria-label="delete-folder"
+          >
+            🗑
+          </ActionIcon>
+        </Tooltip>
       </Group>
     </Card>
   )
@@ -118,14 +142,13 @@ function FolderCard({ folder, onClick }: { folder: Folder; onClick: () => void }
 
 function SecretCard({ secret, walletId }: { secret: SecretListItem | PathSecret; walletId: string }) {
   const navigate = useNavigate()
-  const encodedName = encodeURIComponent(secret.name)
 
   return (
     <Card
       withBorder
       padding="sm"
       style={{ cursor: 'pointer' }}
-      onClick={() => navigate(`/wallets/${walletId}/secrets/${encodedName}`)}
+      onClick={() => navigate(`/wallets/${walletId}/secrets/${secret.id}`)}
     >
       <Group justify="space-between">
         <Group gap="sm">
@@ -184,6 +207,49 @@ export function WalletDetailPage() {
       notifications.show({ color: 'green', message: t('wallets.restoreSuccess') })
     },
     onError: () => notifications.show({ color: 'red', message: t('wallets.restoreError') }),
+  })
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: async (folderPath: string) => {
+      // 1. Compter les secrets pour la confirmation
+      const countRaw = await api.get<unknown>(
+        `/wallets/${walletId ?? ''}/secrets/by-path/count?path=${encodeURIComponent(folderPath)}`,
+      )
+      const count = (countRaw as { count: number }).count
+      return { folderPath, count }
+    },
+    onSuccess: ({ folderPath, count }) => {
+      modals.openConfirmModal({
+        title: t('secrets.paths.deleteFolderTitle'),
+        children: (
+          <Text size="sm">
+            {t('secrets.paths.deleteFolderConfirm', { path: folderPath, count })}
+          </Text>
+        ),
+        labels: { confirm: t('secrets.paths.deleteFolder'), cancel: t('common.cancel') },
+        confirmProps: { color: 'red' },
+        onConfirm: async () => {
+          try {
+            const r = await api.delete<{ deleted: number }>(
+              `/wallets/${walletId ?? ''}/secrets/by-path?path=${encodeURIComponent(folderPath)}`,
+            )
+            notifications.show({
+              color: 'green',
+              message: t('secrets.paths.deleteFolderSuccess', { count: r.deleted }),
+            })
+            await queryClient.invalidateQueries({ queryKey: ['wallet-tree', walletId] })
+            await queryClient.invalidateQueries({ queryKey: ['wallet-secrets-path', walletId] })
+          } catch (err) {
+            const msg = err instanceof ApiError ? err.message : String(err)
+            notifications.show({ color: 'red', title: t('common.error'), message: msg })
+          }
+        },
+      })
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    },
   })
 
   function handleDelete() {
@@ -362,53 +428,81 @@ export function WalletDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="secrets" pt="md">
-          <Stack gap="md">
-            {/* Breadcrumb navigation */}
-            <PathBreadcrumb path={currentPath} onNavigate={setCurrentPath} />
+          <Group align="flex-start" wrap="nowrap" gap="md">
+            {/* Sidebar arbre */}
+            <Stack
+              gap="xs"
+              style={{
+                borderRight: '1px solid var(--mantine-color-gray-3)',
+                paddingRight: 12,
+                position: 'sticky',
+                top: 12,
+                maxHeight: 'calc(100vh - 200px)',
+                overflowY: 'auto',
+              }}
+            >
+              <Text fw={600} size="sm">
+                {t('secrets.paths.folders')}
+              </Text>
+              {walletId && (
+                <FolderTree
+                  walletId={walletId}
+                  currentPath={currentPath}
+                  onSelect={setCurrentPath}
+                />
+              )}
+            </Stack>
 
-            {secretsLoading ? (
-              <Center py="xl">
-                <Loader size="sm" />
-              </Center>
-            ) : (
-              <>
-                {/* Folder grid */}
-                {(treeData?.folders.length ?? 0) > 0 && (
-                  <Stack gap="xs">
-                    <Text fw={600} size="sm">
-                      {t('secrets.paths.folders')}
-                    </Text>
-                    <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
-                      {treeData?.folders.map((folder) => (
-                        <FolderCard
-                          key={folder.full_path}
-                          folder={folder}
-                          onClick={() => setCurrentPath(folder.full_path)}
-                        />
-                      ))}
-                    </SimpleGrid>
-                  </Stack>
-                )}
+            {/* Contenu central */}
+            <Stack gap="md" style={{ flex: 1 }}>
+              {/* Breadcrumb navigation */}
+              <PathBreadcrumb path={currentPath} onNavigate={setCurrentPath} />
 
-                {/* Secrets at current level */}
-                {(pathSecrets?.secrets.length ?? 0) === 0 &&
-                (treeData?.folders.length ?? 0) === 0 ? (
-                  <Text c="dimmed">{t('secrets.noSecrets')}</Text>
-                ) : (
-                  (pathSecrets?.secrets.length ?? 0) > 0 && (
+              {secretsLoading ? (
+                <Center py="xl">
+                  <Loader size="sm" />
+                </Center>
+              ) : (
+                <>
+                  {/* Folder grid */}
+                  {(treeData?.folders.length ?? 0) > 0 && (
                     <Stack gap="xs">
                       <Text fw={600} size="sm">
-                        {t('secrets.paths.secretsHere')}
+                        {t('secrets.paths.folders')}
                       </Text>
-                      {pathSecrets?.secrets.map((s) => (
-                        <SecretCard key={s.id} secret={s} walletId={walletId ?? ''} />
-                      ))}
+                      <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
+                        {treeData?.folders.map((folder) => (
+                          <FolderCard
+                            key={folder.full_path}
+                            folder={folder}
+                            onClick={() => setCurrentPath(folder.full_path)}
+                            onDelete={() => deleteFolderMutation.mutate(folder.full_path)}
+                          />
+                        ))}
+                      </SimpleGrid>
                     </Stack>
-                  )
-                )}
-              </>
-            )}
-          </Stack>
+                  )}
+
+                  {/* Secrets at current level */}
+                  {(pathSecrets?.secrets.length ?? 0) === 0 &&
+                  (treeData?.folders.length ?? 0) === 0 ? (
+                    <Text c="dimmed">{t('secrets.noSecrets')}</Text>
+                  ) : (
+                    (pathSecrets?.secrets.length ?? 0) > 0 && (
+                      <Stack gap="xs">
+                        <Text fw={600} size="sm">
+                          {t('secrets.paths.secretsHere')}
+                        </Text>
+                        {pathSecrets?.secrets.map((s) => (
+                          <SecretCard key={s.id} secret={s} walletId={walletId ?? ''} />
+                        ))}
+                      </Stack>
+                    )
+                  )}
+                </>
+              )}
+            </Stack>
+          </Group>
         </Tabs.Panel>
       </Tabs>
     </Stack>

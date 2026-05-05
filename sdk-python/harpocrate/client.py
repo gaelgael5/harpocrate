@@ -10,6 +10,7 @@ Crypto :
   - La wallet_key est mise en cache (TTL configurable)
   - Chaque appel à secrets.get() déchiffre encrypted_value avec wallet_key (AES-GCM)
 """
+
 from __future__ import annotations
 
 import base64
@@ -29,6 +30,7 @@ from harpocrate.exceptions import (
 from harpocrate.generators import dispatch as generate_value
 from harpocrate.http import VaultHttpClient
 from harpocrate.models.secret import PopulateResult, SecretInfo, SecretListResponse
+from harpocrate.models.secret_type import SecretType
 from harpocrate.models.wallet import ApiKeyInfo, WalletInfo
 from harpocrate.token import ParsedToken, parse_token
 
@@ -82,6 +84,42 @@ class SecretsClient:
             return f"{base}/{encoded}"
         return base
 
+    def _resolve_id_if_pathstyle(self, name: str) -> str | None:
+        """Résout l'UUID d'un secret si son nom contient un '/' (path-style).
+
+        Pour les noms sans '/', retourne None — l'appelant utilisera la route name-based.
+        Pour les noms à '/', liste les secrets au path parent et trouve l'entrée matching.
+        Lève SecretNotFound si aucun secret ne correspond.
+        """
+        from harpocrate.exceptions import SecretNotFound
+
+        if "/" not in name:
+            return None
+
+        normalized = self._normalize_name(name)
+        # Path parent : tout sauf le dernier segment, avec '/' final garanti
+        parent_path = normalized.rsplit("/", 1)[0] + "/"
+        # Cas spécial : nom à un seul segment après le '/' initial → parent = '/'
+        if parent_path == "/" and not normalized.startswith("//"):
+            pass  # parent_path déjà '/'
+
+        data = self._http.get(
+            f"/v1/wallets/{self._wallet_id}/secrets",
+            path=parent_path,
+        )
+        for s in data.get("secrets", []):
+            if s.get("name") == normalized:
+                return str(s["id"])
+
+        raise SecretNotFound(f"Secret '{name}' not found in wallet")
+
+    def _path_for_op(self, name: str) -> str:
+        """URL d'opération unitaire — by-id si nom path-style, by-name sinon."""
+        sid = self._resolve_id_if_pathstyle(name)
+        if sid is not None:
+            return f"/v1/wallets/{self._wallet_id}/secrets/by-id/{sid}"
+        return self._path(name)
+
     def list_secrets(
         self,
         tag: str | None = None,
@@ -123,9 +161,12 @@ class SecretsClient:
         value: str,
         description: str | None = None,
         tags: list[str] | None = None,
+        type_uuid: UUID | None = None,
+        schema_version_uuid: UUID | None = None,
     ) -> str:
         """Crée un secret avec une valeur chiffrée côté client.
 
+        Si `type_uuid` n'est pas fourni, le serveur attache automatiquement le type RAW.
         Retourne le secret_id (UUID string). Requiert [add].
         """
         wallet_key = self._wallet_key()
@@ -136,6 +177,10 @@ class SecretsClient:
             body["description"] = description
         if tags is not None:
             body["tags"] = tags
+        if type_uuid is not None:
+            body["type_uuid"] = str(type_uuid)
+        if schema_version_uuid is not None:
+            body["schema_version_uuid"] = str(schema_version_uuid)
         result = self._http.post(self._path(), json=body)
         return str(result["secret_id"])
 
@@ -147,7 +192,7 @@ class SecretsClient:
         wallet_key = self._wallet_key()
         enc_value = aes_gcm_encrypt(value.encode("utf-8"), wallet_key)
         enc_value_b64 = base64.b64encode(enc_value).decode()
-        result = self._http.put(self._path(name), json={"encrypted_value": enc_value_b64})
+        result = self._http.put(self._path_for_op(name), json={"encrypted_value": enc_value_b64})
         return int(result["generation_version"])
 
     def patch(
@@ -165,11 +210,11 @@ class SecretsClient:
             body["description"] = description
         if tags is not None:
             body["tags"] = tags
-        self._http.patch(self._path(name), json=body)
+        self._http.patch(self._path_for_op(name), json=body)
 
     def delete(self, name: str) -> None:
-        """Supprime un secret. Requiert [remove]."""
-        self._http.delete(self._path(name))
+        """Supprime un secret (résout l'ID si le nom est path-style). Requiert [remove]."""
+        self._http.delete(self._path_for_op(name))
 
     def create_placeholder(
         self,
@@ -177,9 +222,12 @@ class SecretsClient:
         descriptor: dict[str, Any],
         description: str | None = None,
         tags: list[str] | None = None,
+        type_uuid: UUID | None = None,
+        schema_version_uuid: UUID | None = None,
     ) -> str:
         """Crée un placeholder avec son descripteur de génération.
 
+        Si `type_uuid` n'est pas fourni, le serveur attache automatiquement le type RAW.
         Retourne le secret_id. Requiert [add].
         """
         body: dict[str, Any] = {"name": name, "generation_descriptor": descriptor}
@@ -187,9 +235,11 @@ class SecretsClient:
             body["description"] = description
         if tags is not None:
             body["tags"] = tags
-        result = self._http.post(
-            f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body
-        )
+        if type_uuid is not None:
+            body["type_uuid"] = str(type_uuid)
+        if schema_version_uuid is not None:
+            body["schema_version_uuid"] = str(schema_version_uuid)
+        result = self._http.post(f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body)
         return str(result["secret_id"])
 
     def get(self, name: str) -> str:
@@ -199,7 +249,7 @@ class SecretsClient:
         Lève PlaceholderNotPopulated si le secret n'a pas de valeur.
         Lève VaultDecryptionError si le déchiffrement échoue.
         """
-        data = self._http.get(self._path(name))
+        data = self._http.get(self._path_for_op(name))
         wallet_key = self._wallet_key()
 
         enc_value = base64.b64decode(data["encrypted_value"])
@@ -234,7 +284,7 @@ class SecretsClient:
 
     def get_descriptor(self, name: str) -> dict[str, Any]:
         """Récupère le descripteur de génération d'un placeholder."""
-        data = self._http.get(f"{self._path(name)}/descriptor")
+        data = self._http.get(f"{self._path_for_op(name)}/descriptor")
         return dict(data.get("generation_descriptor") or {})
 
     def populate(
@@ -268,7 +318,7 @@ class SecretsClient:
         enc_value_b64 = base64.b64encode(enc_value).decode()
 
         result = self._http.post(
-            f"{self._path(name)}/populate",
+            f"{self._path_for_op(name)}/populate",
             json={"encrypted_value": enc_value_b64},
         )
         version: int = result.get("generation_version", 0)
@@ -303,6 +353,40 @@ class SecretsClient:
         except PlaceholderNotPopulated:
             self.populate(name, auto_generate=True)
             return self.get(name)
+
+
+class TypesClient:
+    """Sous-client pour le catalogue de types de secrets (lecture seule).
+
+    Utilise les endpoints publics /v1/secret-types accessibles via API key
+    depuis P1.5 (ou via JWT user).
+    """
+
+    def __init__(self, http: VaultHttpClient) -> None:
+        self._http = http
+
+    def list(self, q: str | None = None, include_deprecated: bool = False) -> list[SecretType]:
+        """Liste les types de secrets disponibles.
+
+        Paramètres :
+            q : filtre fulltext (type, sous_type, label)
+            include_deprecated : inclure les types dépréciés
+
+        Retourne : list[SecretType]
+        """
+        params: dict[str, Any] = {}
+        if q is not None:
+            params["q"] = q
+        if include_deprecated:
+            params["include_deprecated"] = include_deprecated
+
+        data = self._http.get("/v1/secret-types", **params)
+        return [SecretType.from_dict(t) for t in data.get("types", [])]
+
+    def get(self, type_uuid: UUID) -> SecretType:
+        """Retourne le détail d'un type avec son schéma complet (data + UI) et toutes les versions."""
+        data = self._http.get(f"/v1/secret-types/{type_uuid}")
+        return SecretType.from_dict(data)
 
 
 class VaultClient:
@@ -346,6 +430,7 @@ class VaultClient:
             parsed_token=self._parsed,
             cache=self._cache,
         )
+        self.types = TypesClient(http=self._http)
 
     def _resolve_wallet_id(self) -> UUID:
         """Résout le wallet_id depuis l'endpoint my-api-key-grant."""

@@ -9,6 +9,7 @@ Sécurité :
 - Si l'API key est révoquée, le serveur retournera 401 au prochain appel HTTP.
   Le cache local peut continuer à fonctionner jusqu'au TTL expiry (acceptable MVP).
 """
+
 from __future__ import annotations
 
 import threading

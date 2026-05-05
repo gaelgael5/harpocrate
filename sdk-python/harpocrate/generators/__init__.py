@@ -6,6 +6,7 @@ Usage :
 
 Tous les générateurs reçoivent un dict ``descriptor`` et retournent str.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -64,14 +65,13 @@ def dispatch(descriptor: dict[str, Any]) -> str:
 
     try:
         from collections.abc import Callable
+
         generate_fn: Callable[[dict[str, Any]], str] = fn
         return generate_fn(descriptor)
     except GeneratorError:
         raise
     except Exception as exc:
-        raise GeneratorError(
-            f"Generator '{gen_type}' failed: {exc}"
-        ) from exc
+        raise GeneratorError(f"Generator '{gen_type}' failed: {exc}") from exc
 
 
 __all__ = ["dispatch"]

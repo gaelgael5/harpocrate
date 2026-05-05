@@ -3,6 +3,7 @@
 Génère des octets via secrets.token_bytes() puis les encode.
 Encodages supportés : base64url (sans padding), hex.
 """
+
 from __future__ import annotations
 
 import base64

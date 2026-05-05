@@ -7,6 +7,7 @@ mais ne doivent pas être présentés à des clients publics.
 
 Retourne un JSON {"certificate": "<PEM cert>", "private_key": "<PEM key>"}.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -55,9 +56,11 @@ def generate(descriptor: dict[str, Any]) -> str:
     )
 
     # Sujet et émetteur identiques (auto-signé)
-    name = x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, common_name),
-    ])
+    name = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+        ]
+    )
 
     # Construction des SANs
     san_list: list[x509.GeneralName] = []

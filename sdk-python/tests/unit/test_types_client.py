@@ -1,11 +1,10 @@
 """Tests P3 — TypesClient : accès au catalogue /v1/secret-types via API key."""
+
 from __future__ import annotations
 
 import uuid
 from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 from harpocrate.client import TypesClient
 from harpocrate.http import VaultHttpClient
@@ -28,27 +27,29 @@ def test_types_list_returns_list_of_secret_type() -> None:
     """`client.types.list()` retourne une liste de SecretType."""
     type_uuid = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
     version_uuid = uuid.UUID("ffffffff-0000-0000-0000-000000000001")
-    http = _mock_http_with_responses({
-        "/v1/secret-types": {
-            "types": [
-                {
-                    "type_uuid": str(type_uuid),
-                    "type": "raw",
-                    "sous_type": "raw",
-                    "label": "Raw",
-                    "description": None,
-                    "is_system": True,
-                    "deprecated_at": None,
-                    "current_version": {
-                        "version_uuid": str(version_uuid),
-                        "version": 1,
-                        "created_at": "2026-01-01T00:00:00",
+    http = _mock_http_with_responses(
+        {
+            "/v1/secret-types": {
+                "types": [
+                    {
+                        "type_uuid": str(type_uuid),
+                        "type": "raw",
+                        "sous_type": "raw",
+                        "label": "Raw",
+                        "description": None,
+                        "is_system": True,
+                        "deprecated_at": None,
+                        "current_version": {
+                            "version_uuid": str(version_uuid),
+                            "version": 1,
+                            "created_at": "2026-01-01T00:00:00",
+                        },
+                        "used_by_secrets_count": 5,
                     },
-                    "used_by_secrets_count": 5,
-                },
-            ],
-        },
-    })
+                ],
+            },
+        }
+    )
 
     client = TypesClient(http=http)
     types = client.list()
@@ -68,41 +69,43 @@ def test_types_get_returns_full_type_with_schemas() -> None:
     """`client.types.get(uuid)` retourne le SecretType avec schema_data + schema_ui complets."""
     type_uuid = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
     version_uuid = uuid.UUID("ffffffff-0000-0000-0000-000000000001")
-    http = _mock_http_with_responses({
-        f"/v1/secret-types/{type_uuid}": {
-            "type_uuid": str(type_uuid),
-            "type": "raw",
-            "sous_type": "raw",
-            "label": "Raw",
-            "description": None,
-            "is_system": True,
-            "deprecated_at": None,
-            "current_version": {
-                "version_uuid": str(version_uuid),
-                "version": 1,
-                "created_at": "2026-01-01T00:00:00",
-            },
-            "current_version_full": {
-                "version_uuid": str(version_uuid),
-                "version": 1,
-                "schema_data": {"type": "object", "properties": {"value": {"type": "string"}}},
-                "schema_ui": {"value": {"widget": "password"}},
-                "created_at": "2026-01-01T00:00:00",
-            },
-            "all_versions": [
-                {
+    http = _mock_http_with_responses(
+        {
+            f"/v1/secret-types/{type_uuid}": {
+                "type_uuid": str(type_uuid),
+                "type": "raw",
+                "sous_type": "raw",
+                "label": "Raw",
+                "description": None,
+                "is_system": True,
+                "deprecated_at": None,
+                "current_version": {
                     "version_uuid": str(version_uuid),
-                    "parent_uuid": str(type_uuid),
                     "version": 1,
-                    "schema_data": {"type": "object"},
-                    "schema_ui": {},
-                    "notes": None,
                     "created_at": "2026-01-01T00:00:00",
                 },
-            ],
-            "used_by_secrets_count": 5,
-        },
-    })
+                "current_version_full": {
+                    "version_uuid": str(version_uuid),
+                    "version": 1,
+                    "schema_data": {"type": "object", "properties": {"value": {"type": "string"}}},
+                    "schema_ui": {"value": {"widget": "password"}},
+                    "created_at": "2026-01-01T00:00:00",
+                },
+                "all_versions": [
+                    {
+                        "version_uuid": str(version_uuid),
+                        "parent_uuid": str(type_uuid),
+                        "version": 1,
+                        "schema_data": {"type": "object"},
+                        "schema_ui": {},
+                        "notes": None,
+                        "created_at": "2026-01-01T00:00:00",
+                    },
+                ],
+                "used_by_secrets_count": 5,
+            },
+        }
+    )
 
     client = TypesClient(http=http)
     secret_type = client.get(type_uuid)

@@ -1,4 +1,5 @@
 """Modèles de données wallet et API key info du SDK Harpocrate."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

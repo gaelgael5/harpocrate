@@ -1,18 +1,15 @@
 """Tests P3 — create() et create_placeholder() acceptent un type_uuid optionnel."""
+
 from __future__ import annotations
 
 import base64
 import uuid
-from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 from harpocrate.cache import WalletKeyCache
 from harpocrate.client import SecretsClient
 from harpocrate.http import VaultHttpClient
 from harpocrate.token import parse_token
-
 
 _TEST_DKEY_BYTES = bytes(range(32))
 _TEST_DKEY_B64 = base64.urlsafe_b64encode(_TEST_DKEY_BYTES).rstrip(b"=").decode()
@@ -26,9 +23,7 @@ def _uuid_to_b32(uid: uuid.UUID) -> str:
     return base64.b32encode(uid.bytes).decode().lower().rstrip("=")
 
 
-_TEST_TOKEN = (
-    f"hrpv_1_{_uuid_to_b32(_TEST_API_KEY_ID)}_0_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
-)
+_TEST_TOKEN = f"hrpv_1_{_uuid_to_b32(_TEST_API_KEY_ID)}_0_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
 
 
 def _make_sc() -> tuple[SecretsClient, MagicMock]:
@@ -67,7 +62,9 @@ def test_create_with_type_uuid_includes_field() -> None:
     type_uuid = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
     schema_version_uuid = uuid.UUID("ffffffff-0000-0000-0000-000000000001")
 
-    sc.create("MY_KEY", "secret_value", type_uuid=type_uuid, schema_version_uuid=schema_version_uuid)
+    sc.create(
+        "MY_KEY", "secret_value", type_uuid=type_uuid, schema_version_uuid=schema_version_uuid
+    )
 
     call = http.post.call_args
     body = call.kwargs.get("json") or call.args[1]

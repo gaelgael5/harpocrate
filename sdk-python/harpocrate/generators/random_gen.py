@@ -10,6 +10,7 @@ Jeux de caractères nommés pris en charge :
   - printable_ascii : 0x20..0x7E (espace inclus)
   - <custom>   : chaîne littérale printable ASCII (longueur >= 4)
 """
+
 from __future__ import annotations
 
 import secrets
@@ -37,9 +38,7 @@ def _resolve_charset(charset: str) -> str:
         return _CHARSETS[charset]
     # Charset personnalisé
     if len(charset) < 4:
-        raise GeneratorError(
-            f"Custom charset must have at least 4 characters, got {len(charset)}"
-        )
+        raise GeneratorError(f"Custom charset must have at least 4 characters, got {len(charset)}")
     return charset
 
 

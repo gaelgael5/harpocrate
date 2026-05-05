@@ -10,6 +10,7 @@ pour l'application, le plain uniquement si nécessaire à la configuration initi
 Note : bcrypt limite les mots de passe à 72 bytes (limitation OpenBSD).
 La longueur est limitée à 64 chars dans les descripteurs pour rester en dessous.
 """
+
 from __future__ import annotations
 
 import json

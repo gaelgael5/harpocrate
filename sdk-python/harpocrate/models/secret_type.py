@@ -1,4 +1,5 @@
 """Modèles SDK pour le catalogue de types de secrets."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

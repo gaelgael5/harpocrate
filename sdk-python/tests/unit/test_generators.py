@@ -1,4 +1,5 @@
 """Tests des 9 générateurs — LOT_09 SDK."""
+
 from __future__ import annotations
 
 import json
@@ -101,6 +102,7 @@ class TestUuidGenerator:
     def test_uuid7_monotone(self) -> None:
         """Deux UUID v7 consécutifs sont ordonnés (timestamps croissants)."""
         import time
+
         r1 = dispatch({"type": "uuid", "version": 7})
         time.sleep(0.001)
         r2 = dispatch({"type": "uuid", "version": 7})
@@ -192,26 +194,30 @@ class TestTemplateGenerator:
 
     def test_literal_substitution(self) -> None:
         """Les valeurs littérales sont substituées correctement."""
-        result = dispatch({
-            "type": "template",
-            "template": "{user}:{pass}@{host}",
-            "variables": {
-                "user": {"literal": "admin"},
-                "pass": {"literal": "secret"},
-                "host": {"literal": "db.example.com"},
-            },
-        })
+        result = dispatch(
+            {
+                "type": "template",
+                "template": "{user}:{pass}@{host}",
+                "variables": {
+                    "user": {"literal": "admin"},
+                    "pass": {"literal": "secret"},
+                    "host": {"literal": "db.example.com"},
+                },
+            }
+        )
         assert result == "admin:secret@db.example.com"
 
     def test_generated_variable_substituted(self) -> None:
         """Une variable générée est substituée correctement."""
-        result = dispatch({
-            "type": "template",
-            "template": "prefix-{suffix}",
-            "variables": {
-                "suffix": {"type": "random", "length": 8, "charset": "hex"},
-            },
-        })
+        result = dispatch(
+            {
+                "type": "template",
+                "template": "prefix-{suffix}",
+                "variables": {
+                    "suffix": {"type": "random", "length": 8, "charset": "hex"},
+                },
+            }
+        )
         assert result.startswith("prefix-")
         suffix = result[7:]
         assert len(suffix) == 8
@@ -220,26 +226,30 @@ class TestTemplateGenerator:
     def test_recursive_template_rejected(self) -> None:
         """Un template récursif (variable de type template) est rejeté."""
         with pytest.raises(GeneratorError):
-            dispatch({
-                "type": "template",
-                "template": "{inner}",
-                "variables": {
-                    "inner": {
-                        "type": "template",
-                        "template": "nested",
-                        "variables": {},
+            dispatch(
+                {
+                    "type": "template",
+                    "template": "{inner}",
+                    "variables": {
+                        "inner": {
+                            "type": "template",
+                            "template": "nested",
+                            "variables": {},
+                        },
                     },
-                },
-            })
+                }
+            )
 
     def test_missing_variable_raises(self) -> None:
         """Un placeholder sans variable définie lève GeneratorError."""
         with pytest.raises(GeneratorError):
-            dispatch({
-                "type": "template",
-                "template": "{defined}-{undefined}",
-                "variables": {"defined": {"literal": "ok"}},
-            })
+            dispatch(
+                {
+                    "type": "template",
+                    "template": "{defined}-{undefined}",
+                    "variables": {"defined": {"literal": "ok"}},
+                }
+            )
 
 
 class TestRsaKeypairGenerator:
@@ -276,6 +286,7 @@ class TestRsaKeypairGenerator:
         data = json.loads(result)
         from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
         from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
         key = load_pem_private_key(data["private"].encode(), password=None)
         assert isinstance(key, RSAPrivateKey)
         assert key.key_size == 4096
@@ -290,11 +301,12 @@ class TestRsaKeypairGenerator:
             PublicFormat,
             load_pem_private_key,
         )
+
         priv = load_pem_private_key(data["private"].encode(), password=None)
         assert isinstance(priv, RSAPrivateKey)
-        pub_from_priv = priv.public_key().public_bytes(
-            Encoding.PEM, PublicFormat.SubjectPublicKeyInfo
-        ).decode()
+        pub_from_priv = (
+            priv.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode()
+        )
         assert pub_from_priv == data["public"]
 
 
@@ -337,6 +349,7 @@ class TestSshKeypairGenerator:
         result = dispatch({"type": "ssh_keypair", "algorithm": "ed25519"})
         data = json.loads(result)
         from cryptography.hazmat.primitives.serialization import load_ssh_private_key
+
         key = load_ssh_private_key(data["private"].encode(), password=None)
         assert key is not None
 
@@ -346,67 +359,80 @@ class TestTlsCertificateGenerator:
 
     def test_returns_json(self) -> None:
         """Retourne un JSON avec 'certificate' et 'private_key'."""
-        result = dispatch({
-            "type": "tls_certificate",
-            "common_name": "test.example.com",
-        })
+        result = dispatch(
+            {
+                "type": "tls_certificate",
+                "common_name": "test.example.com",
+            }
+        )
         data = json.loads(result)
         assert "certificate" in data
         assert "private_key" in data
 
     def test_certificate_pem_format(self) -> None:
         """Le certificat est en format PEM."""
-        result = dispatch({
-            "type": "tls_certificate",
-            "common_name": "test.example.com",
-        })
+        result = dispatch(
+            {
+                "type": "tls_certificate",
+                "common_name": "test.example.com",
+            }
+        )
         data = json.loads(result)
         assert data["certificate"].startswith("-----BEGIN CERTIFICATE-----")
 
     def test_private_key_pem_format(self) -> None:
         """La clé privée est en format PEM."""
-        result = dispatch({
-            "type": "tls_certificate",
-            "common_name": "test.example.com",
-        })
+        result = dispatch(
+            {
+                "type": "tls_certificate",
+                "common_name": "test.example.com",
+            }
+        )
         data = json.loads(result)
         assert data["private_key"].startswith("-----BEGIN PRIVATE KEY-----")
 
     def test_self_signed_validity(self) -> None:
         """Le certificat est valide (auto-signé)."""
-        result = dispatch({
-            "type": "tls_certificate",
-            "common_name": "test.example.com",
-            "validity_days": 365,
-        })
+        result = dispatch(
+            {
+                "type": "tls_certificate",
+                "common_name": "test.example.com",
+                "validity_days": 365,
+            }
+        )
         data = json.loads(result)
         from cryptography import x509
+
         cert = x509.load_pem_x509_certificate(data["certificate"].encode())
         assert cert.subject == cert.issuer  # auto-signé
 
     def test_common_name_set(self) -> None:
         """Le Common Name est correctement défini."""
-        result = dispatch({
-            "type": "tls_certificate",
-            "common_name": "vault.example.org",
-        })
+        result = dispatch(
+            {
+                "type": "tls_certificate",
+                "common_name": "vault.example.org",
+            }
+        )
         data = json.loads(result)
         from cryptography import x509
+
         cert = x509.load_pem_x509_certificate(data["certificate"].encode())
-        cn = cert.subject.get_attributes_for_oid(
-            x509.oid.NameOID.COMMON_NAME
-        )[0].value
+        cn = cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value
         assert cn == "vault.example.org"
 
     def test_subject_alt_names(self) -> None:
         """Les SANs sont correctement inclus dans le certificat."""
-        result = dispatch({
-            "type": "tls_certificate",
-            "common_name": "example.com",
-            "subject_alt_names": ["www.example.com", "api.example.com"],
-        })
+        result = dispatch(
+            {
+                "type": "tls_certificate",
+                "common_name": "example.com",
+                "subject_alt_names": ["www.example.com", "api.example.com"],
+            }
+        )
         data = json.loads(result)
         from cryptography import x509
+
         cert = x509.load_pem_x509_certificate(data["certificate"].encode())
         san_ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
         dns_names = san_ext.value.get_values_for_type(x509.DNSName)
@@ -433,6 +459,7 @@ class TestBcryptPasswordGenerator:
     def test_hash_verifiable(self) -> None:
         """Le hash peut être vérifié avec bcrypt.checkpw()."""
         import bcrypt
+
         result = dispatch({"type": "bcrypt_password", "length": 20, "rounds": 4})
         data = json.loads(result)
         assert bcrypt.checkpw(data["plain"].encode(), data["hash"].encode())
@@ -467,8 +494,16 @@ class TestDispatch:
     def test_all_9_types_registered(self) -> None:
         """Les 9 types de générateurs sont enregistrés."""
         from harpocrate.generators import _GENERATORS
+
         expected = {
-            "random", "uuid", "bytes", "passphrase", "template",
-            "rsa_keypair", "ssh_keypair", "tls_certificate", "bcrypt_password",
+            "random",
+            "uuid",
+            "bytes",
+            "passphrase",
+            "template",
+            "rsa_keypair",
+            "ssh_keypair",
+            "tls_certificate",
+            "bcrypt_password",
         }
         assert set(_GENERATORS.keys()) == expected

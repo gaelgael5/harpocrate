@@ -1,4 +1,5 @@
 """Configuration pytest pour les tests SDK Harpocrate."""
+
 from __future__ import annotations
 
 import base64

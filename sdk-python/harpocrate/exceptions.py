@@ -1,4 +1,5 @@
 """Exceptions publiques du SDK Harpocrate."""
+
 from __future__ import annotations
 
 

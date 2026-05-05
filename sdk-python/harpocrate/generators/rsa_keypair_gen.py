@@ -8,6 +8,7 @@ Formats : 'pem' (PKCS8/SubjectPublicKeyInfo) ou 'openssh'.
 Note sécurité : clés générées sans passphrase (NoEncryption).
 La valeur est chiffrée par AES-GCM par le SDK avant envoi au serveur.
 """
+
 from __future__ import annotations
 
 import json

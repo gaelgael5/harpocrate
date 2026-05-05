@@ -13,6 +13,7 @@ Entropie approx. avec la wordlist MVP :
 
 Note : la wordlist complète EFF est disponible sur https://www.eff.org/dice
 """
+
 from __future__ import annotations
 
 import pathlib
@@ -34,9 +35,7 @@ def _load_wordlist(language: str) -> list[str]:
 
     path = _WORDLIST_DIR / f"{language}.txt"
     if not path.exists():
-        raise ValueError(
-            f"Wordlist for language '{language}' not found. Supported: en, fr"
-        )
+        raise ValueError(f"Wordlist for language '{language}' not found. Supported: en, fr")
 
     words = [w.strip() for w in path.read_text(encoding="utf-8").splitlines() if w.strip()]
     if len(words) < 10:

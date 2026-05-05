@@ -10,6 +10,7 @@ Crypto :
   - La wallet_key est mise en cache (TTL configurable)
   - Chaque appel à secrets.get() déchiffre encrypted_value avec wallet_key (AES-GCM)
 """
+
 from __future__ import annotations
 
 import base64
@@ -29,6 +30,7 @@ from harpocrate.exceptions import (
 from harpocrate.generators import dispatch as generate_value
 from harpocrate.http import VaultHttpClient
 from harpocrate.models.secret import PopulateResult, SecretInfo, SecretListResponse
+from harpocrate.models.secret_type import SecretType
 from harpocrate.models.wallet import ApiKeyInfo, WalletInfo
 from harpocrate.token import ParsedToken, parse_token
 
@@ -237,9 +239,7 @@ class SecretsClient:
             body["type_uuid"] = str(type_uuid)
         if schema_version_uuid is not None:
             body["schema_version_uuid"] = str(schema_version_uuid)
-        result = self._http.post(
-            f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body
-        )
+        result = self._http.post(f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body)
         return str(result["secret_id"])
 
     def get(self, name: str) -> str:
@@ -365,7 +365,7 @@ class TypesClient:
     def __init__(self, http: VaultHttpClient) -> None:
         self._http = http
 
-    def list(self, q: str | None = None, include_deprecated: bool = False) -> list["SecretType"]:
+    def list(self, q: str | None = None, include_deprecated: bool = False) -> list[SecretType]:
         """Liste les types de secrets disponibles.
 
         Paramètres :
@@ -374,8 +374,6 @@ class TypesClient:
 
         Retourne : list[SecretType]
         """
-        from harpocrate.models import SecretType
-
         params: dict[str, Any] = {}
         if q is not None:
             params["q"] = q
@@ -385,10 +383,8 @@ class TypesClient:
         data = self._http.get("/v1/secret-types", **params)
         return [SecretType.from_dict(t) for t in data.get("types", [])]
 
-    def get(self, type_uuid: UUID) -> "SecretType":
+    def get(self, type_uuid: UUID) -> SecretType:
         """Retourne le détail d'un type avec son schéma complet (data + UI) et toutes les versions."""
-        from harpocrate.models import SecretType
-
         data = self._http.get(f"/v1/secret-types/{type_uuid}")
         return SecretType.from_dict(data)
 

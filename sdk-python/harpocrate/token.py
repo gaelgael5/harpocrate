@@ -13,6 +13,7 @@ Longueurs fixes (même convention que le backend) :
   - dkey_b64 : 43 chars (32 bytes → base64url sans padding)
   - hmac_b64 : 22 chars (16 bytes → base64url sans padding)
 """
+
 from __future__ import annotations
 
 import base64
@@ -70,13 +71,20 @@ def parse_token(token: str) -> ParsedToken:
 
     # Longueur minimale
     min_len = (
-        len(_TOKEN_PREFIX) + 1  # "hrpv_"
-        + 1 + 1  # version + "_"
-        + _ID_B32_LEN + 1  # id + "_"
-        + 1 + 1  # exp (min 1 char) + "_"
-        + 2 + 1  # perms_hex + "_"
-        + _AUTH_SECRET_LEN + 1  # auth + "_"
-        + _DKEY_LEN + 1  # dkey + "_"
+        len(_TOKEN_PREFIX)
+        + 1  # "hrpv_"
+        + 1
+        + 1  # version + "_"
+        + _ID_B32_LEN
+        + 1  # id + "_"
+        + 1
+        + 1  # exp (min 1 char) + "_"
+        + 2
+        + 1  # perms_hex + "_"
+        + _AUTH_SECRET_LEN
+        + 1  # auth + "_"
+        + _DKEY_LEN
+        + 1  # dkey + "_"
         + _HMAC_LEN  # hmac
     )
     if len(token) < min_len:
@@ -88,17 +96,17 @@ def parse_token(token: str) -> ParsedToken:
         raise InvalidTokenError("invalid_format", "Malformed token structure")
 
     dkey_end = _HMAC_LEN + 1 + _DKEY_LEN
-    dkey_b64 = token[-dkey_end: -(_HMAC_LEN + 1)]
+    dkey_b64 = token[-dkey_end : -(_HMAC_LEN + 1)]
     if token[-(dkey_end + 1)] != "_":
         raise InvalidTokenError("invalid_format", "Malformed token structure")
 
     auth_end = dkey_end + 1 + _AUTH_SECRET_LEN
-    auth_secret_b64 = token[-auth_end: -(dkey_end + 1)]
+    auth_secret_b64 = token[-auth_end : -(dkey_end + 1)]
     if token[-(auth_end + 1)] != "_":
         raise InvalidTokenError("invalid_format", "Malformed token structure")
 
     suffix_len = _AUTH_SECRET_LEN + 1 + _DKEY_LEN + 1 + _HMAC_LEN
-    prefix_part = token[:-(suffix_len + 1)]
+    prefix_part = token[: -(suffix_len + 1)]
 
     early_parts = prefix_part.split("_")
     if len(early_parts) != 5:  # hrpv, v, id, exp, perms

@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Stack,
@@ -10,10 +11,10 @@ import {
   Divider,
   Code,
   Alert,
-  SimpleGrid,
-  ThemeIcon,
   Box,
   Container,
+  Select,
+  Anchor,
 } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -21,8 +22,9 @@ import { z } from 'zod'
 
 import { api } from '@/lib/api-client'
 import { useSessionStore } from '@/stores/session'
+import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 
-// ─── Schema ──────────────────────────────────────────────────────────────────
+// ─── Schema (manifest backend) ───────────────────────────────────────────────
 
 const ArtifactSchema = z.object({
   key: z.string(),
@@ -32,59 +34,107 @@ const ArtifactSchema = z.object({
   available: z.enum(['true', 'false']),
 })
 
+const VersionedArtifactSchema = z.object({
+  key: z.string(),
+  language: z.string(),
+  kind: z.string(),
+  version: z.string(),
+  filename: z.string(),
+  media_type: z.string(),
+  url: z.string(),
+  available: z.string(),
+  size_bytes: z.number().optional(),
+})
+
 const ManifestSchema = z.object({
   artifacts: z.array(ArtifactSchema),
+  all_versions: z.array(VersionedArtifactSchema).optional(),
 })
 
 type Artifact = z.infer<typeof ArtifactSchema>
+type VersionedArtifact = z.infer<typeof VersionedArtifactSchema>
+
+// ─── Catalogue SDK ────────────────────────────────────────────────────────────
+
+type SdkStatus = 'available' | 'planned'
+
+interface SdkCatalogEntry {
+  id: string                // identifiant interne (ex: 'python', 'bash')
+  label: string             // nom affiché (ex: 'Python', 'CLI Bash')
+  icon: string              // emoji ou caractère
+  status: SdkStatus         // 'available' ou 'planned' (placeholder UI)
+  /**
+   * Filtre sur les `language` du manifest pour récupérer les artefacts.
+   * Si null → SDK planned, pas de download.
+   */
+  manifestLanguage: string | null
+  /**
+   * URL de la doc complète sur le wiki GitHub. Placeholder pour l'instant —
+   * sera renseigné quand on publiera la doc dans le wiki du repo.
+   */
+  wikiUrl: string
+}
+
+const SDK_CATALOG: SdkCatalogEntry[] = [
+  {
+    id: 'python',
+    label: 'Python',
+    icon: '🐍',
+    status: 'available',
+    manifestLanguage: 'python',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-Python',
+  },
+  {
+    id: 'bash',
+    label: 'CLI Bash',
+    icon: '🖥️',
+    status: 'available',
+    manifestLanguage: 'bash',
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/CLI-Bash',
+  },
+  {
+    id: 'typescript',
+    label: 'TypeScript',
+    icon: '🟦',
+    status: 'planned',
+    manifestLanguage: null,
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-TypeScript',
+  },
+  {
+    id: 'javascript',
+    label: 'JavaScript',
+    icon: '🟨',
+    status: 'planned',
+    manifestLanguage: null,
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-JavaScript',
+  },
+  {
+    id: 'go',
+    label: 'Go',
+    icon: '🦦',
+    status: 'planned',
+    manifestLanguage: null,
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-Go',
+  },
+  {
+    id: 'rust',
+    label: 'Rust',
+    icon: '🦀',
+    status: 'planned',
+    manifestLanguage: null,
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-Rust',
+  },
+  {
+    id: 'csharp',
+    label: 'C#',
+    icon: '🟪',
+    status: 'planned',
+    manifestLanguage: null,
+    wikiUrl: 'https://github.com/gaelgael5/harpocrate/wiki/SDK-CSharp',
+  },
+]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const ARTIFACT_META: Record<string, { label: string; icon: string; tech: string }> = {
-  'python-wheel': { label: 'Python wheel (.whl)', icon: '🐍', tech: 'python' },
-  'python-sdist': { label: 'Python sdist (.tar.gz)', icon: '🐍', tech: 'python' },
-  'cli-bash':     { label: 'CLI Bash (.tar.gz)',   icon: '🖥️',  tech: 'bash'   },
-}
-
-function downloadUrl(artifact: Artifact): string {
-  return artifact.url
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function ArtifactCard({ artifact }: { artifact: Artifact }) {
-  const { t } = useTranslation()
-  const available = artifact.available === 'true'
-  const meta = ARTIFACT_META[artifact.key]
-
-  return (
-    <Card withBorder p="md" radius="md">
-      <Group justify="space-between" mb="xs">
-        <Group gap="xs">
-          <Text size="xl">{meta?.icon ?? '📦'}</Text>
-          <Text fw={600}>{meta?.label ?? artifact.filename}</Text>
-        </Group>
-        <Badge color={available ? 'green' : 'gray'} variant="light">
-          {available ? t('integration.available') : t('integration.unavailable')}
-        </Badge>
-      </Group>
-      <Text size="sm" c="dimmed" mb="sm">
-        {artifact.filename}
-      </Text>
-      <Button
-        component="a"
-        href={downloadUrl(artifact)}
-        download
-        disabled={!available}
-        variant="light"
-        size="sm"
-        fullWidth
-      >
-        {t('integration.download')}
-      </Button>
-    </Card>
-  )
-}
 
 function CodeBlock({ children }: { children: string }) {
   return (
@@ -102,8 +152,6 @@ function CodeBlock({ children }: { children: string }) {
     </Box>
   )
 }
-
-// ─── Public nav ──────────────────────────────────────────────────────────────
 
 function PublicNav({ isAuthenticated }: { isAuthenticated: boolean }) {
   return (
@@ -149,78 +197,190 @@ function PublicNav({ isAuthenticated }: { isAuthenticated: boolean }) {
   )
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── Panneaux par SDK ─────────────────────────────────────────────────────────
 
-export function IntegrationPage() {
+interface SdkPanelProps {
+  sdk: SdkCatalogEntry
+  artifacts: VersionedArtifact[]    // artefacts du manifest pour ce SDK (toutes versions, kinds)
+  legacyArtifacts: Artifact[]       // pour fallback du download principal
+}
+
+function SdkPanel({ sdk, artifacts, legacyArtifacts }: SdkPanelProps) {
   const { t } = useTranslation()
-  const user = useSessionStore((s) => s.user)
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['sdk-manifest'],
-    queryFn: async () => {
-      const raw = await api.get<unknown>('/sdk/manifest')
-      return ManifestSchema.parse(raw)
-    },
-  })
-
-  const artifacts = data?.artifacts ?? []
+  if (sdk.status === 'planned') {
+    return (
+      <Card withBorder p="lg" radius="md">
+        <Stack gap="md">
+          <Group gap="xs">
+            <Text size="xl">{sdk.icon}</Text>
+            <Title order={3}>{sdk.label}</Title>
+            <Badge color="gray" variant="light">
+              {t('integration.planned')}
+            </Badge>
+          </Group>
+          <Text c="dimmed">
+            {t('integration.plannedDesc', { sdk: sdk.label })}
+          </Text>
+          <Anchor href={sdk.wikiUrl} target="_blank" rel="noopener noreferrer">
+            {t('integration.followProgress')} ↗
+          </Anchor>
+        </Stack>
+      </Card>
+    )
+  }
 
   return (
-    <Box style={{ background: 'var(--mantine-color-body)', minHeight: '100vh' }}>
-      <PublicNav isAuthenticated={!!user} />
-    <Container size="lg" py="xl">
-    <Stack gap="xl" maw={860}>
-      <div>
-        <Title order={2} mb="xs">
-          {t('integration.title')}
-        </Title>
-        <Text c="dimmed">{t('integration.subtitle')}</Text>
-      </div>
-
-      <Alert color="blue" variant="light" title={t('integration.apiKeyNote.title')}>
-        {t('integration.apiKeyNote.body')}
-      </Alert>
-
-      {/* Downloads */}
-      <div>
-        <Title order={3} mb="md">
-          {t('integration.downloads')}
-        </Title>
-        {isLoading && <Text c="dimmed">{t('common.loading')}</Text>}
-        {isError && <Text c="red">{t('common.error')}</Text>}
-        {!isLoading && !isError && (
-          <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            {artifacts.map((a) => (
-              <ArtifactCard key={a.key} artifact={a} />
-            ))}
-          </SimpleGrid>
-        )}
-      </div>
-
-      <Divider />
-
-      {/* Python SDK */}
-      <Stack gap="sm">
-        <Group gap="xs">
-          <ThemeIcon variant="light" color="blue" size="lg" radius="md">
-            🐍
-          </ThemeIcon>
-          <Title order={3}>{t('integration.python.title')}</Title>
+    <Card withBorder p="lg" radius="md">
+      <Stack gap="md">
+        <Group justify="space-between" wrap="nowrap">
+          <Group gap="xs">
+            <Text size="xl">{sdk.icon}</Text>
+            <Title order={3}>{sdk.label}</Title>
+            <Badge color="green" variant="light">
+              {t('integration.available')}
+            </Badge>
+          </Group>
         </Group>
-        <Text c="dimmed">{t('integration.python.desc')}</Text>
 
-        <Text fw={500} mt="xs">{t('integration.python.install')}</Text>
-        <CodeBlock>
-          {`# Depuis le wheel téléchargé
-pip install harpocrate-0.2.0-py3-none-any.whl
+        <SdkDownloads artifacts={artifacts} legacyArtifacts={legacyArtifacts} sdk={sdk} />
 
-# Ou directement depuis le vault (remplacer l'URL)
+        {sdk.id === 'python' && <PythonContent />}
+        {sdk.id === 'bash' && <BashContent />}
+
+        <Divider />
+
+        <Anchor href={sdk.wikiUrl} target="_blank" rel="noopener noreferrer">
+          {t('integration.fullDocs', { sdk: sdk.label })} ↗
+        </Anchor>
+      </Stack>
+    </Card>
+  )
+}
+
+function SdkDownloads({
+  artifacts,
+  legacyArtifacts,
+  sdk,
+}: {
+  artifacts: VersionedArtifact[]
+  legacyArtifacts: Artifact[]
+  sdk: SdkCatalogEntry
+}) {
+  const { t } = useTranslation()
+
+  // Pour chaque kind présent dans les artefacts (wheel, sdist, cli...), on
+  // affiche un bouton qui pointe sur la version la plus récente disponible.
+  const latestByKind = useMemo(() => {
+    const map = new Map<string, VersionedArtifact>()
+    for (const a of artifacts) {
+      const existing = map.get(a.kind)
+      if (!existing || compareVersions(a.version, existing.version) > 0) {
+        map.set(a.kind, a)
+      }
+    }
+    return Array.from(map.values()).sort((x, y) => x.kind.localeCompare(y.kind))
+  }, [artifacts])
+
+  if (latestByKind.length === 0) {
+    // Fallback : si le manifest backend ne renvoie pas all_versions (vieux backend),
+    // on retombe sur la liste legacy filtrée par language hardcodé.
+    const fallback = legacyArtifacts.filter((a) => {
+      if (sdk.id === 'python') return a.key.startsWith('python-')
+      if (sdk.id === 'bash') return a.key.startsWith('cli-')
+      return false
+    })
+    if (fallback.length === 0) {
+      return (
+        <Text c="dimmed" size="sm">
+          {t('integration.noArtifact')}
+        </Text>
+      )
+    }
+    return (
+      <Group gap="xs">
+        {fallback.map((a) => (
+          <Button
+            key={a.key}
+            component="a"
+            href={a.url}
+            download
+            disabled={a.available !== 'true'}
+            variant="light"
+            size="sm"
+          >
+            {t('integration.download')} {a.filename}
+          </Button>
+        ))}
+      </Group>
+    )
+  }
+
+  return (
+    <Stack gap="xs">
+      <Text size="sm" c="dimmed">
+        {t('integration.latestVersion')}{' '}
+        <Code>{latestByKind[0]?.version ?? '?'}</Code>
+      </Text>
+      <Group gap="xs">
+        {latestByKind.map((a) => (
+          <Button
+            key={a.key}
+            component="a"
+            href={a.url}
+            download
+            variant="light"
+            size="sm"
+          >
+            {labelForKind(a.kind)} ({a.filename})
+          </Button>
+        ))}
+      </Group>
+    </Stack>
+  )
+}
+
+function labelForKind(kind: string): string {
+  switch (kind) {
+    case 'wheel': return 'Wheel (.whl)'
+    case 'sdist': return 'Source (.tar.gz)'
+    case 'cli':   return 'CLI archive (.tar.gz)'
+    default:      return kind
+  }
+}
+
+/** Compare deux versions semver-like (0.4.0 > 0.10.0 → false, correct natural sort). */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((p) => parseInt(p.replace(/[^\d]/g, ''), 10) || 0)
+  const pb = b.split('.').map((p) => parseInt(p.replace(/[^\d]/g, ''), 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const xa = pa[i] ?? 0
+    const xb = pb[i] ?? 0
+    if (xa !== xb) return xa - xb
+  }
+  return 0
+}
+
+// ─── Contenu spécifique par SDK (les 3 blocs de code conservés) ──────────────
+
+function PythonContent() {
+  const { t } = useTranslation()
+  return (
+    <Stack gap="sm">
+      <Text c="dimmed">{t('integration.python.desc')}</Text>
+
+      <Text fw={500} mt="xs">{t('integration.python.install')}</Text>
+      <CodeBlock>
+        {`# Depuis le wheel téléchargé
+pip install harpocrate-0.4.0-py3-none-any.whl
+
+# Ou directement depuis le vault
 pip install https://vault.yoops.org/v1/sdk/python-wheel`}
-        </CodeBlock>
+      </CodeBlock>
 
-        <Text fw={500} mt="xs">{t('integration.python.quickstart')}</Text>
-        <CodeBlock>
-          {`from harpocrate import VaultClient
+      <Text fw={500} mt="xs">{t('integration.python.quickstart')}</Text>
+      <CodeBlock>
+        {`from harpocrate import VaultClient
 
 client = VaultClient(
     token="hrpv_1_...",           # clé API créée dans l'interface
@@ -230,40 +390,39 @@ client = VaultClient(
 # Lire un secret (déchiffrement côté client)
 api_key = client.secrets.get("ANTHROPIC_API_KEY")
 
+# Lire un secret avec path (résout l'ID en interne via lookup)
+db_pass = client.secrets.get("/users/no_email/database/postgres")
+
 # Lister les secrets
 secrets = client.secrets.list()
 
+# Catalogue des types disponibles (P1.5)
+types = client.types.list()
+
 # Peupler un placeholder
-client.secrets.populate("DATABASE_PASSWORD")
+client.secrets.populate("DATABASE_PASSWORD")`}
+      </CodeBlock>
 
-# Peupler tous les placeholders d'un coup
-results = client.secrets.populate_all()`}
-        </CodeBlock>
-
-        <Text fw={500} mt="xs">{t('integration.python.env')}</Text>
-        <CodeBlock>
-          {`export HARPOCRATE_TOKEN="hrpv_1_..."
+      <Text fw={500} mt="xs">{t('integration.python.env')}</Text>
+      <CodeBlock>
+        {`export HARPOCRATE_TOKEN="hrpv_1_..."
 export HARPOCRATE_URL="https://vault.yoops.org"
 
 python -c "from harpocrate import VaultClient; c = VaultClient(); print(c.secrets.get('MY_SECRET'))"`}
-        </CodeBlock>
-      </Stack>
+      </CodeBlock>
+    </Stack>
+  )
+}
 
-      <Divider />
+function BashContent() {
+  const { t } = useTranslation()
+  return (
+    <Stack gap="sm">
+      <Text c="dimmed">{t('integration.bash.desc')}</Text>
 
-      {/* CLI Bash */}
-      <Stack gap="sm">
-        <Group gap="xs">
-          <ThemeIcon variant="light" color="gray" size="lg" radius="md">
-            🖥️
-          </ThemeIcon>
-          <Title order={3}>{t('integration.bash.title')}</Title>
-        </Group>
-        <Text c="dimmed">{t('integration.bash.desc')}</Text>
-
-        <Text fw={500} mt="xs">{t('integration.bash.install')}</Text>
-        <CodeBlock>
-          {`# Télécharger et extraire
+      <Text fw={500} mt="xs">{t('integration.bash.install')}</Text>
+      <CodeBlock>
+        {`# Télécharger et extraire
 curl -fsSL https://vault.yoops.org/v1/sdk/cli-bash -o harpocrate-cli.tar.gz
 tar -xzf harpocrate-cli.tar.gz
 
@@ -273,11 +432,11 @@ sudo mv harpocrate-cli /usr/local/bin/
 
 # Vérifier l'installation
 harpocrate-cli --help`}
-        </CodeBlock>
+      </CodeBlock>
 
-        <Text fw={500} mt="xs">{t('integration.bash.quickstart')}</Text>
-        <CodeBlock>
-          {`export HARPOCRATE_TOKEN="hrpv_1_..."
+      <Text fw={500} mt="xs">{t('integration.bash.quickstart')}</Text>
+      <CodeBlock>
+        {`export HARPOCRATE_TOKEN="hrpv_1_..."
 export HARPOCRATE_URL="https://vault.yoops.org"
 
 # Lister les secrets
@@ -289,33 +448,112 @@ harpocrate-cli get ANTHROPIC_API_KEY
 # Peupler un placeholder
 harpocrate-cli populate DATABASE_PASSWORD
 
-# Peupler tous les placeholders
-harpocrate-cli populate-all
-
 # Utiliser dans un script
 DB_PASS=$(harpocrate-cli get DATABASE_PASSWORD)
 psql "postgresql://user:\${DB_PASS}@localhost/mydb"`}
-        </CodeBlock>
+      </CodeBlock>
 
-        <Text fw={500} mt="xs">{t('integration.bash.getOrPopulate')}</Text>
-        <CodeBlock>
-          {`# get-or-populate : lit la valeur, la génère si c'est un placeholder
+      <Text fw={500} mt="xs">{t('integration.bash.getOrPopulate')}</Text>
+      <CodeBlock>
+        {`# get-or-populate : lit la valeur, la génère si c'est un placeholder
 SECRET=$(harpocrate-cli get-or-populate MY_API_KEY)
 echo "Secret prêt : \${SECRET:0:4}..."`}
-        </CodeBlock>
-      </Stack>
-
-      <Divider />
-
-      {/* API reference link */}
-      <Group>
-        <Text c="dimmed">{t('integration.apiDocsHint')}</Text>
-        <Link to="/integration/api-docs" style={{ color: '#1e40af', textDecoration: 'none', fontWeight: 500 }}>
-          {t('integration.apiDocsLink')} →
-        </Link>
-      </Group>
+      </CodeBlock>
     </Stack>
-    </Container>
+  )
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export function IntegrationPage() {
+  const { t } = useTranslation()
+  const user = useSessionStore((s) => s.user)
+  const [selectedSdkId, setSelectedSdkId] = useState<string>('python')
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['sdk-manifest'],
+    queryFn: async () => {
+      const raw = await api.get<unknown>('/sdk/manifest')
+      return ManifestSchema.parse(raw)
+    },
+  })
+
+  const legacyArtifacts = data?.artifacts ?? []
+  const selectedSdk = SDK_CATALOG.find((s) => s.id === selectedSdkId) ?? SDK_CATALOG[0]!
+
+  const artifactsForSelected = useMemo(() => {
+    const all = data?.all_versions ?? []
+    return selectedSdk.manifestLanguage
+      ? all.filter((a) => a.language === selectedSdk.manifestLanguage)
+      : []
+  }, [data, selectedSdk])
+
+  const selectData = SDK_CATALOG.map((sdk) => ({
+    value: sdk.id,
+    label:
+      sdk.status === 'planned'
+        ? `${sdk.icon} ${sdk.label} — ${t('integration.planned')}`
+        : `${sdk.icon} ${sdk.label}`,
+  }))
+
+  return (
+    <Box style={{ background: 'var(--mantine-color-body)', minHeight: '100vh' }}>
+      <PublicNav isAuthenticated={!!user} />
+      <Container size="lg" py="xl">
+        <Stack gap="xl" maw={860}>
+          {/* Header — titre + sélecteur de langue */}
+          <Group justify="space-between" align="flex-start">
+            <div>
+              <Title order={2} mb="xs">
+                {t('integration.title')}
+              </Title>
+              <Text c="dimmed">{t('integration.subtitle')}</Text>
+            </div>
+            <LocaleSwitcher />
+          </Group>
+
+          <Alert color="blue" variant="light" title={t('integration.apiKeyNote.title')}>
+            {t('integration.apiKeyNote.body')}
+          </Alert>
+
+          {/* Sélecteur de SDK */}
+          <Stack gap="xs">
+            <Text fw={500}>{t('integration.chooseSdk')}</Text>
+            <Select
+              data={selectData}
+              value={selectedSdkId}
+              onChange={(v) => v && setSelectedSdkId(v)}
+              size="md"
+              allowDeselect={false}
+              searchable={false}
+            />
+          </Stack>
+
+          {/* Panneau du SDK actif */}
+          {isLoading && <Text c="dimmed">{t('common.loading')}</Text>}
+          {isError && <Text c="red">{t('common.error')}</Text>}
+          {!isLoading && !isError && (
+            <SdkPanel
+              sdk={selectedSdk}
+              artifacts={artifactsForSelected}
+              legacyArtifacts={legacyArtifacts}
+            />
+          )}
+
+          <Divider />
+
+          {/* API reference link */}
+          <Group>
+            <Text c="dimmed">{t('integration.apiDocsHint')}</Text>
+            <Link
+              to="/integration/api-docs"
+              style={{ color: '#1e40af', textDecoration: 'none', fontWeight: 500 }}
+            >
+              {t('integration.apiDocsLink')} →
+            </Link>
+          </Group>
+        </Stack>
+      </Container>
     </Box>
   )
 }

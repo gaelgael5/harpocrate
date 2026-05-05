@@ -28,6 +28,7 @@ import {
   deleteSecretTypeVersion,
   validateJsonSchema,
 } from '@/lib/adminApi'
+import { ApiError } from '@/lib/api-client'
 import { JsonEditorMonaco } from '@/components/JsonEditorMonaco'
 type SchemaVersionFullLocal = {
   version_uuid: string
@@ -48,10 +49,11 @@ export function AdminSecretTypeDetailPage() {
   const [selectedVersion, setSelectedVersion] = useState<SchemaVersionFullLocal | null>(null)
   const [deleteVersionTarget, setDeleteVersionTarget] = useState<SchemaVersionFullLocal | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['secret-type', typeUuid],
     queryFn: () => fetchSecretType(typeUuid!),
     enabled: !!typeUuid,
+    retry: false,
   })
 
   const deleteVersionMut = useMutation({
@@ -72,8 +74,44 @@ export function AdminSecretTypeDetailPage() {
     return <Center py="xl"><Loader /></Center>
   }
 
+  if (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 403) {
+        return (
+          <Alert color="red" title={t('errors.forbidden') || 'Accès refusé'}>
+            {error.message || 'admin_role_required'} — vérifie que ton compte
+            Keycloak a bien le rôle <code>harpocrate-admin</code>.
+          </Alert>
+        )
+      }
+      if (error.status === 404) {
+        return (
+          <Stack>
+            <Alert color="orange" title={t('secret_types.notFound') || 'Type introuvable'}>
+              Le type {typeUuid} n'existe pas (ou plus). Il a peut-être été supprimé.
+            </Alert>
+            <Button variant="subtle" onClick={() => navigate('/admin/secret-types')}>
+              ← {t('common.back')}
+            </Button>
+          </Stack>
+        )
+      }
+      return (
+        <Alert color="red" title={`${error.status} ${error.code}`}>
+          {error.message}
+        </Alert>
+      )
+    }
+    return (
+      <Alert color="red" title={t('common.error')}>
+        {(error as Error).message ?? String(error)}
+      </Alert>
+    )
+  }
+
   if (!data) {
-    return <Text c="red">Not found</Text>
+    // Cas résiduel : query disabled (typeUuid manquant dans l'URL)
+    return <Text c="dimmed">{t('common.loading') || '…'}</Text>
   }
 
   const isCurrentVersion = (v: SchemaVersionFullLocal) =>

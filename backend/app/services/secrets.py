@@ -198,6 +198,38 @@ async def create_secret(
             detail={"error": "invalid_base64", "message": "encrypted_value is not valid base64"},
         ) from exc
 
+    # ─── P1.5 : résolution du type ────────────────────────────────────────────
+    from app.db.repositories import secret_types as types_repo
+
+    type_uuid = req.type_uuid
+    schema_version_uuid = req.schema_version_uuid
+
+    if type_uuid is None:
+        # Pas de type fourni → on attache automatiquement RAW
+        raw = await types_repo.get_raw_type_with_current_version_uuid(conn)
+        if raw is None:  # pragma: no cover — RAW est seedé au boot
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"error": "raw_type_unavailable", "message": "System type RAW not seeded"},
+            )
+        type_uuid, schema_version_uuid = raw
+    else:
+        # Type fourni explicitement → vérifier qu'il n'est pas deprecated
+        type_row = await types_repo.get_type(conn, type_uuid)
+        if type_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "type_not_found", "message": f"Type {type_uuid} does not exist"},
+            )
+        if type_row["deprecated_at"] is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "deprecated_type",
+                    "message": f"Type {type_uuid} is deprecated and cannot be used for new secrets",
+                },
+            )
+
     try:
         async with conn.transaction():
             secret_id = await secrets_repo.insert_secret(
@@ -208,8 +240,8 @@ async def create_secret(
                 encrypted_value=enc_value,
                 tags=req.tags,
                 created_by_user_id=caller_user_id,
-                type_uuid=req.type_uuid,
-                schema_version_uuid=req.schema_version_uuid,
+                type_uuid=type_uuid,
+                schema_version_uuid=schema_version_uuid,
             )
             await audit_log_insert(
                 conn,
@@ -218,7 +250,7 @@ async def create_secret(
                 actor_ip=actor_ip,
                 target_wallet_id=wallet_id,
                 target_secret_id=secret_id,
-                metadata={"secret_name": req.name},
+                metadata={"secret_name": req.name, "type_uuid": str(type_uuid)},
             )
     except asyncpg.UniqueViolationError as exc:
         raise HTTPException(

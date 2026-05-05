@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import re
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
@@ -25,6 +26,7 @@ from harpocrate.exceptions import (
     GeneratorError,
     HarpocrateError,
     PlaceholderNotPopulated,
+    SecretRefreshFailed,
     VaultDecryptionError,
 )
 from harpocrate.generators import dispatch as generate_value
@@ -32,6 +34,7 @@ from harpocrate.http import VaultHttpClient
 from harpocrate.models.secret import PopulateResult, SecretInfo, SecretListResponse
 from harpocrate.models.secret_type import SecretType
 from harpocrate.models.wallet import ApiKeyInfo, WalletInfo
+from harpocrate.rotation import GlobalCallback, RotationRegistry, SpecificCallback
 from harpocrate.token import ParsedToken, parse_token
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9_.\\-]+$")
@@ -242,13 +245,19 @@ class SecretsClient:
         result = self._http.post(f"/v1/wallets/{self._wallet_id}/secrets/placeholder", json=body)
         return str(result["secret_id"])
 
-    def get(self, name: str) -> str:
+    def get(self, name: str, force_refresh: bool = False) -> str:
         """Lit et déchiffre la valeur d'un secret.
 
         Retourne la valeur en clair (str UTF-8).
         Lève PlaceholderNotPopulated si le secret n'a pas de valeur.
         Lève VaultDecryptionError si le déchiffrement échoue.
+
+        Avec `force_refresh=True` (LOT_22), invalide le cache wallet_key local
+        avant la lecture pour récupérer une éventuelle nouvelle wallet_key
+        après une rotation côté serveur.
         """
+        if force_refresh:
+            self._cache.invalidate(str(self._wallet_id))
         data = self._http.get(self._path_for_op(name))
         wallet_key = self._wallet_key()
 
@@ -423,6 +432,7 @@ class VaultClient:
         self._http = VaultHttpClient(base_url=base_url, token=token, timeout=timeout)
         self._cache = WalletKeyCache(ttl_seconds=wallet_key_cache_ttl)
         self._wallet_id: UUID | None = None
+        self._rotation = RotationRegistry()
 
         self.secrets = SecretsClient(
             http=self._http,
@@ -457,3 +467,85 @@ class VaultClient:
         wallet_id = self.secrets._wallet_id
         data = self._http.get(f"/v1/wallets/{wallet_id}")
         return WalletInfo.from_dict(data)
+
+    # ─── LOT_22 — détection rotation par auth_error ──────────────────────────
+
+    def on_auth_error(
+        self, secret_name: str
+    ) -> Callable[[SpecificCallback], SpecificCallback]:
+        """Décorateur : enregistre un callback déclenché sur rotation détectée.
+
+        Usage :
+            @client.on_auth_error("anthropic_api_key")
+            async def handle_rotation(new_value: str) -> None:
+                anthropic.api_key = new_value
+
+        Plusieurs callbacks peuvent être enregistrés pour le même secret —
+        ils sont appelés dans l'ordre d'enregistrement, puis les callbacks
+        globaux. Une exception dans un callback est loggée et n'interrompt pas
+        l'enchaînement.
+        """
+        def _decorator(callback: SpecificCallback) -> SpecificCallback:
+            return self._rotation.register_specific(secret_name, callback)
+        return _decorator
+
+    def on_any_auth_error(self, callback: GlobalCallback) -> GlobalCallback:
+        """Enregistre un callback global appelé pour TOUS les secrets en rotation.
+
+        Signature : ``async (secret_name: str, new_value: str) -> None``
+        ou la version sync. Appelé APRÈS les callbacks spécifiques.
+        """
+        return self._rotation.register_global(callback)
+
+    async def notify_auth_error(self, secret_name: str) -> str:
+        """Notifie le SDK qu'un secret a probablement été rotaté côté serveur.
+
+        Le SDK :
+        1. Force un refetch (`get(force_refresh=True)`) — wallet_key invalidée
+        2. Appelle les callbacks `on_auth_error(secret_name)` puis `on_any_auth_error`
+        3. Retourne la nouvelle valeur en clair
+
+        Lève `SecretRefreshFailed` si le refresh échoue (secret supprimé,
+        API key révoquée, etc.).
+        """
+        try:
+            new_value = self.secrets.get(secret_name, force_refresh=True)
+        except Exception as exc:
+            raise SecretRefreshFailed(secret_name, str(exc)) from exc
+        await self._rotation.fire(secret_name, new_value)
+        return new_value
+
+    def using_secret(self, secret_name: str) -> _UsingSecret:
+        """Context manager : auto-retry sur exception d'auth.
+
+        Usage :
+            async with client.using_secret("anthropic_api_key") as get_value:
+                key = get_value()
+                try:
+                    return await call_api(key)
+                except AuthError:
+                    key = await get_value(retry=True)  # force_refresh + callbacks
+                    return await call_api(key)
+
+        Sucre syntaxique optionnel — équivalent à appeler manuellement
+        `notify_auth_error()`.
+        """
+        return _UsingSecret(self, secret_name)
+
+
+class _UsingSecret:
+    """Helper retourné par `client.using_secret(...)`."""
+
+    def __init__(self, client: VaultClient, secret_name: str) -> None:
+        self._client = client
+        self._secret_name = secret_name
+
+    async def __aenter__(self) -> Callable[..., Any]:
+        async def _get(retry: bool = False) -> str:
+            if retry:
+                return await self._client.notify_auth_error(self._secret_name)
+            return self._client.secrets.get(self._secret_name)
+        return _get
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None

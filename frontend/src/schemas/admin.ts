@@ -196,3 +196,33 @@ export const ValidateSchemaResponseSchema = z.union([
 ])
 
 export type ValidateSchemaResponse = z.infer<typeof ValidateSchemaResponseSchema>
+
+// ─── Remote backup connections ───────────────────────────────────────────────
+
+export const RemoteBackupConnectionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  kind: z.enum(['sftp']),
+  config: z.record(z.unknown()),
+  created_at: z.string(),
+  updated_at: z.string(),
+  created_by_user_id: z.string().nullable(),
+  deleted_at: z.string().nullable(),
+})
+
+export type RemoteBackupConnection = z.infer<typeof RemoteBackupConnectionSchema>
+
+export const RemoteBackupConnectionListResponseSchema = z.object({
+  connections: z.array(RemoteBackupConnectionSchema),
+})
+
+export type RemoteBackupConnectionListResponse = z.infer<
+  typeof RemoteBackupConnectionListResponseSchema
+>
+
+export const RemoteBackupTestResponseSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), error: z.string(), message: z.string() }),
+])
+
+export type RemoteBackupTestResponse = z.infer<typeof RemoteBackupTestResponseSchema>

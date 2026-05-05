@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- NuGet metadata -->
+    <PackageId>Harpocrate.Sdk</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Gael Beard</Authors>
+    <Description>Harpocrate SDK — client .NET zero-knowledge pour Vault</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/gaelgael5/harpocrate</RepositoryUrl>
+    <PackageTags>vault;secrets;harpocrate;encryption</PackageTags>
+  </PropertyGroup>
+
+</Project>

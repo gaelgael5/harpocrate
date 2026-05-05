@@ -126,6 +126,7 @@ def _make_type_record(
         "cv_created_at": datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
         "cv_schema_data": json.dumps({"type": "object", "properties": {}}),
         "cv_schema_ui": json.dumps({}),
+        "cv_notes": None,
         "used_count": used_count,
     }[k]
     return r

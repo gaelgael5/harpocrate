@@ -298,11 +298,14 @@
     "apiDocsLink": "Open API docs",
     "chooseSdk": "Choose an SDK",
     "planned": "Coming soon",
-    "plannedDesc": "The {{sdk}} SDK is planned but not yet published. You can follow progress on the GitHub wiki.",
+    "plannedDesc": "The {{sdk}} SDK is planned but not yet published.",
     "followProgress": "Follow progress on the wiki",
     "fullDocs": "Full {{sdk}} docs on the wiki",
-    "latestVersion": "Latest available version:",
-    "noArtifact": "No artifact available. Check the deployment (./scripts/deploy.sh)."
+    "latestVersion": "Latest version:",
+    "noArtifact": "No artifact available. Check the deployment.",
+    "artifactMissing": "File listed in index.json but missing from the deployment.",
+    "docNotAvailable": "Documentation unavailable.",
+    "emptyManifest": "No SDK declared. Check that releases/index.json is deployed."
   },
   "nav": {
     "wallets": "Vaults",

@@ -181,6 +181,7 @@ async def get_type(type_uuid: UUID, admin: AdminJwt) -> JSONResponse:
             "version": row["cv_version"],
             "schema_data": json.loads(sd) if isinstance(sd, str) else dict(sd),
             "schema_ui": json.loads(su) if isinstance(su, str) else dict(su),
+            "notes": row["cv_notes"],
             "created_at": row["cv_created_at"].isoformat() if row["cv_created_at"] else None,
         }
     else:
@@ -363,6 +364,7 @@ async def get_secret_type_public(
             "version": row["cv_version"],
             "schema_data": json.loads(sd) if isinstance(sd, str) else dict(sd),
             "schema_ui": json.loads(su) if isinstance(su, str) else dict(su),
+            "notes": row["cv_notes"],
             "created_at": row["cv_created_at"].isoformat() if row["cv_created_at"] else None,
         }
     else:

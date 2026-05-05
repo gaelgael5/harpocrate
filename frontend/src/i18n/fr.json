@@ -299,11 +299,14 @@
     "apiDocsLink": "Ouvrir la doc API",
     "chooseSdk": "Choisir un SDK",
     "planned": "Bientôt",
-    "plannedDesc": "Le SDK {{sdk}} est prévu mais pas encore publié. Tu peux suivre l'avancement sur le wiki GitHub.",
+    "plannedDesc": "Le SDK {{sdk}} est prévu mais pas encore publié.",
     "followProgress": "Voir le suivi sur le wiki",
     "fullDocs": "Doc complète {{sdk}} sur le wiki",
-    "latestVersion": "Dernière version disponible :",
-    "noArtifact": "Aucun artefact disponible. Vérifie le déploiement (./scripts/deploy.sh)."
+    "latestVersion": "Dernière version :",
+    "noArtifact": "Aucun artefact disponible. Vérifier le déploiement.",
+    "artifactMissing": "Fichier listé dans index.json mais absent du déploiement.",
+    "docNotAvailable": "Documentation indisponible.",
+    "emptyManifest": "Aucun SDK déclaré. Vérifier que releases/index.json est bien déployé."
   },
   "nav": {
     "wallets": "Coffres",

@@ -1,98 +1,170 @@
-"""Tests P-fix — sdk_downloads avec glob discovery."""
+"""Tests sdk_downloads — manifest depuis index.json + endpoint doc + by-filename."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from app.api.v1 import sdk_downloads as sd
+
+# ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def fake_releases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Crée un dossier releases/ avec quelques fichiers fictifs."""
-    (tmp_path / "harpocrate-0.3.0-py3-none-any.whl").write_bytes(b"x")
-    (tmp_path / "harpocrate-0.4.0-py3-none-any.whl").write_bytes(b"x")
-    (tmp_path / "harpocrate-sdk-0.3.0.tar.gz").write_bytes(b"x")
-    (tmp_path / "harpocrate-sdk-0.4.0.tar.gz").write_bytes(b"x")
-    (tmp_path / "harpocrate-cli-0.1.0.tar.gz").write_bytes(b"x")
-    (tmp_path / "README.md").write_text("ignored")  # pas un artefact
-    (tmp_path / "evil.tar.gz").write_text("ignored")  # pas un artefact (pas le préfixe)
+    """Crée un dossier releases/ avec index.json + quelques artefacts + docs."""
+    # Artefacts
+    (tmp_path / "harpocrate-0.4.0-py3-none-any.whl").write_bytes(b"wheel content")
+    (tmp_path / "harpocrate-sdk-0.4.0.tar.gz").write_bytes(b"sdist content")
+    (tmp_path / "harpocrate-cli-0.1.0.tar.gz").write_bytes(b"cli content")
+
+    # Docs
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "python-fr.md").write_text("# Python\n\nDoc FR.", encoding="utf-8")
+    (docs_dir / "bash-fr.md").write_text("# Bash\n\nDoc FR.", encoding="utf-8")
+
+    # index.json
+    index = {
+        "schema_version": "1.0",
+        "sdks": [
+            {
+                "id": "python",
+                "name": "Python",
+                "icon": "🐍",
+                "status": "available",
+                "artifacts": [
+                    {
+                        "kind": "wheel",
+                        "version": "0.4.0",
+                        "filename": "harpocrate-0.4.0-py3-none-any.whl",
+                    },
+                    {
+                        "kind": "sdist",
+                        "version": "0.4.0",
+                        "filename": "harpocrate-sdk-0.4.0.tar.gz",
+                    },
+                ],
+                "docs": {"fr": "python-fr.md"},
+            },
+            {
+                "id": "bash",
+                "name": "CLI Bash",
+                "icon": "🖥️",
+                "status": "available",
+                "artifacts": [
+                    {
+                        "kind": "cli",
+                        "version": "0.1.0",
+                        "filename": "harpocrate-cli-0.1.0.tar.gz",
+                    }
+                ],
+                "docs": {"fr": "bash-fr.md"},
+            },
+            {
+                "id": "rust",
+                "name": "Rust",
+                "icon": "🦀",
+                "status": "planned",
+                "artifacts": [
+                    {
+                        "kind": "wheel",
+                        "version": "0.0.0",
+                        "filename": "harpocrate-rust-9.9.9.tar.gz",
+                    }
+                ],
+                "docs": {"fr": "rust-fr.md"},
+            },
+        ],
+    }
+    (tmp_path / "index.json").write_text(json.dumps(index), encoding="utf-8")
+
     monkeypatch.setattr(sd, "_RELEASES_DIR", tmp_path)
     return tmp_path
 
 
-def test_discover_artifacts_finds_all_versions(fake_releases: Path) -> None:
-    discovered = sd._discover_artifacts()
-    filenames = {d["filename"] for d in discovered}
-    assert filenames == {
-        "harpocrate-0.3.0-py3-none-any.whl",
-        "harpocrate-0.4.0-py3-none-any.whl",
-        "harpocrate-sdk-0.3.0.tar.gz",
-        "harpocrate-sdk-0.4.0.tar.gz",
-        "harpocrate-cli-0.1.0.tar.gz",
-    }
-    # README.md et evil.tar.gz ne doivent pas être listés
-    assert all("evil" not in str(d["filename"]) for d in discovered)
-    assert all("README" not in str(d["filename"]) for d in discovered)
+# ─── _load_index ──────────────────────────────────────────────────────────────
 
 
-def test_discover_extracts_language_kind_version(fake_releases: Path) -> None:
-    discovered = sd._discover_artifacts()
-    by_fn = {d["filename"]: d for d in discovered}
-
-    wheel = by_fn["harpocrate-0.4.0-py3-none-any.whl"]
-    assert wheel["language"] == "python"
-    assert wheel["kind"] == "wheel"
-    assert wheel["version"] == "0.4.0"
-
-    sdist = by_fn["harpocrate-sdk-0.3.0.tar.gz"]
-    assert sdist["language"] == "python"
-    assert sdist["kind"] == "sdist"
-    assert sdist["version"] == "0.3.0"
-
-    cli = by_fn["harpocrate-cli-0.1.0.tar.gz"]
-    assert cli["language"] == "bash"
-    assert cli["kind"] == "cli"
-    assert cli["version"] == "0.1.0"
-
-
-def test_legacy_artifacts_returns_latest_per_kind(fake_releases: Path) -> None:
-    legacy = sd._legacy_artifacts()
-    by_key = {item["key"]: item for item in legacy}
-
-    assert by_key["python-wheel"]["filename"] == "harpocrate-0.4.0-py3-none-any.whl"
-    assert by_key["python-wheel"]["available"] == "true"
-    assert by_key["python-sdist"]["filename"] == "harpocrate-sdk-0.4.0.tar.gz"
-    assert by_key["cli-bash"]["filename"] == "harpocrate-cli-0.1.0.tar.gz"
-
-
-def test_legacy_artifacts_unavailable_when_no_files(
+def test_load_index_returns_empty_when_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(sd, "_RELEASES_DIR", tmp_path)
-    legacy = sd._legacy_artifacts()
-    assert all(item["available"] == "false" for item in legacy)
-    assert {item["key"] for item in legacy} == {"python-wheel", "python-sdist", "cli-bash"}
+    idx = sd._load_index()
+    assert idx == {"schema_version": "1.0", "sdks": []}
 
 
-def test_safe_filename_pattern_accepts_real_artifacts() -> None:
-    assert sd._SAFE_FILENAME.match("harpocrate-0.4.0-py3-none-any.whl")
-    assert sd._SAFE_FILENAME.match("harpocrate-sdk-0.4.0.tar.gz")
-    assert sd._SAFE_FILENAME.match("harpocrate-cli-0.1.0.tar.gz")
+def test_load_index_returns_empty_on_invalid_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "index.json").write_text("not valid json {")
+    monkeypatch.setattr(sd, "_RELEASES_DIR", tmp_path)
+    idx = sd._load_index()
+    assert idx["sdks"] == []
 
 
-def test_safe_filename_pattern_rejects_path_traversal() -> None:
-    assert not sd._SAFE_FILENAME.match("../etc/passwd")
-    assert not sd._SAFE_FILENAME.match("../../something.whl")
-    assert not sd._SAFE_FILENAME.match("/etc/passwd")
-    # Pas de prefix `harpocrate-` → refusé
-    assert not sd._SAFE_FILENAME.match("evil-1.0.0.tar.gz")
+def test_load_index_returns_parsed_content(fake_releases: Path) -> None:
+    idx = sd._load_index()
+    assert idx["schema_version"] == "1.0"
+    assert len(idx["sdks"]) == 3
 
 
-def test_natural_version_key_orders_correctly() -> None:
-    # 0.10.0 doit être > 0.9.0 (et non l'inverse comme avec un tri lexicographique)
-    assert sd._natural_version_key("0.10.0") > sd._natural_version_key("0.9.0")
-    assert sd._natural_version_key("1.0.0") > sd._natural_version_key("0.99.99")
-    assert sd._natural_version_key("0.4.0") > sd._natural_version_key("0.3.99")
+# ─── _annotate_sdks ───────────────────────────────────────────────────────────
+
+
+def test_annotate_marks_present_artifacts_available(fake_releases: Path) -> None:
+    idx = sd._load_index()
+    annotated = sd._annotate_sdks(idx["sdks"])
+    python = next(s for s in annotated if s["id"] == "python")
+    assert all(a["available"] for a in python["artifacts"])
+    assert python["artifacts"][0]["size_bytes"] is not None
+
+
+def test_annotate_marks_missing_artifacts_unavailable(fake_releases: Path) -> None:
+    """Le SDK Rust référence un fichier qui n'existe pas physiquement."""
+    idx = sd._load_index()
+    annotated = sd._annotate_sdks(idx["sdks"])
+    rust = next(s for s in annotated if s["id"] == "rust")
+    assert rust["artifacts"][0]["available"] is False
+    assert rust["artifacts"][0]["size_bytes"] is None
+
+
+def test_annotate_propagates_status(fake_releases: Path) -> None:
+    idx = sd._load_index()
+    annotated = sd._annotate_sdks(idx["sdks"])
+    statuses = {s["id"]: s["status"] for s in annotated}
+    assert statuses == {"python": "available", "bash": "available", "rust": "planned"}
+
+
+def test_annotate_marks_docs_availability(fake_releases: Path) -> None:
+    idx = sd._load_index()
+    annotated = sd._annotate_sdks(idx["sdks"])
+    python = next(s for s in annotated if s["id"] == "python")
+    assert python["docs"]["fr"]["available"] is True
+    rust = next(s for s in annotated if s["id"] == "rust")
+    assert rust["docs"]["fr"]["available"] is False  # rust-fr.md n'existe pas
+
+
+# ─── Validation des filenames (sécurité) ──────────────────────────────────────
+
+
+def test_validate_filename_rejects_path_traversal() -> None:
+    for bad in ["../etc/passwd", "../../x.whl", "foo/bar.whl", "x..whl"]:
+        with pytest.raises(HTTPException) as exc:
+            sd._validate_filename(bad, pattern=sd._SAFE_BINARY_FILENAME)
+        assert exc.value.status_code == 400
+
+
+def test_validate_binary_filename_accepts_real_artifacts() -> None:
+    # Ne lève pas
+    sd._validate_filename("harpocrate-0.4.0-py3-none-any.whl", pattern=sd._SAFE_BINARY_FILENAME)
+    sd._validate_filename("harpocrate-sdk-0.4.0.tar.gz", pattern=sd._SAFE_BINARY_FILENAME)
+
+
+def test_validate_doc_filename_accepts_md_only() -> None:
+    sd._validate_filename("python-fr.md", pattern=sd._SAFE_DOC_FILENAME)
+    with pytest.raises(HTTPException):
+        sd._validate_filename("python-fr.txt", pattern=sd._SAFE_DOC_FILENAME)

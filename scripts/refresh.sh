@@ -37,17 +37,76 @@ echo "==========================================="
 echo "  Refresh harpocrate (TAG=${TAG})"
 echo "==========================================="
 
-# ── 3. Pull + up ─────────────────────────────────────────────────────────────
-echo "[1/4] Pull des images..."
+# ── 3. Sync releases/ depuis le repo Git (index.json + artefacts + docs) ─────
+RAW_BASE="https://raw.githubusercontent.com/gaelgael5/harpocrate/refs/heads/main"
+RELEASES_DIR="$(pwd)/releases"
+DOCS_DIR="${RELEASES_DIR}/docs"
+mkdir -p "${DOCS_DIR}"
+
+echo "[1/6] Sync releases/index.json depuis ${RAW_BASE}..."
+INDEX_PATH="${RELEASES_DIR}/index.json"
+INDEX_TMP="${INDEX_PATH}.tmp"
+if curl -fsSL -o "${INDEX_TMP}" "${RAW_BASE}/releases/index.json"; then
+    mv "${INDEX_TMP}" "${INDEX_PATH}"
+    echo "  -> index.json a jour."
+else
+    rm -f "${INDEX_TMP}"
+    echo "  [!] Telechargement de index.json a echoue."
+    echo "      Le manifest sera vide et les boutons telecharger seront grises."
+fi
+
+if [ -f "${INDEX_PATH}" ] && command -v jq >/dev/null 2>&1; then
+    echo "[2/6] Telechargement des artefacts manquants..."
+    # Extrait toutes les filenames d'artefacts (un par ligne)
+    while IFS= read -r FNAME; do
+        [ -z "${FNAME}" ] && continue
+        DEST="${RELEASES_DIR}/${FNAME}"
+        if [ -f "${DEST}" ]; then
+            echo "  -> ${FNAME} deja present."
+            continue
+        fi
+        echo "  -> Telechargement ${FNAME}..."
+        if curl -fsSL -o "${DEST}.tmp" "${RAW_BASE}/releases/${FNAME}"; then
+            mv "${DEST}.tmp" "${DEST}"
+            echo "     OK"
+        else
+            rm -f "${DEST}.tmp"
+            echo "     [!] Echec download ${FNAME} (pas grave : artefact marque indisponible cote IHM)."
+        fi
+    done < <(jq -r '.sdks[].artifacts[]?.filename // empty' "${INDEX_PATH}")
+
+    echo "[3/6] Telechargement des docs manquantes..."
+    while IFS= read -r FNAME; do
+        [ -z "${FNAME}" ] && continue
+        DEST="${DOCS_DIR}/${FNAME}"
+        if [ -f "${DEST}" ]; then
+            echo "  -> docs/${FNAME} deja present."
+            continue
+        fi
+        echo "  -> Telechargement docs/${FNAME}..."
+        if curl -fsSL -o "${DEST}.tmp" "${RAW_BASE}/releases/docs/${FNAME}"; then
+            mv "${DEST}.tmp" "${DEST}"
+            echo "     OK"
+        else
+            rm -f "${DEST}.tmp"
+            echo "     [!] Echec download docs/${FNAME} (pas grave : doc marquee indisponible)."
+        fi
+    done < <(jq -r '.sdks[].docs | values[]?' "${INDEX_PATH}")
+else
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "  [!] jq absent — installe-le (apt install jq) pour activer le sync auto."
+    fi
+fi
+
+# ── 4. Pull + up ─────────────────────────────────────────────────────────────
+echo "[4/6] Pull des images..."
 docker compose pull
 
-echo "[2/4] Redemarrage des services..."
+echo "[5/6] Redemarrage des services..."
 docker compose up -d --remove-orphans
 
-echo "[3/4] Cleanup des images obsoletes..."
+echo "[6/6] Cleanup + status :"
 docker image prune -f >/dev/null
-
-echo "[4/4] Status :"
 docker compose ps
 
 echo ""

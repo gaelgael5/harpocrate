@@ -158,7 +158,8 @@ export const SchemaVersionFullSchema = z.object({
   version: z.number(),
   schema_data: z.record(z.unknown()),
   schema_ui: z.record(z.unknown()),
-  notes: z.string().nullable(),
+  // notes peut être absent (vieille version backend) ou null/string
+  notes: z.string().nullable().optional(),
   created_at: z.string(),
 })
 

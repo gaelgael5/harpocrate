@@ -51,6 +51,7 @@ async def get_type(conn: asyncpg.Connection, type_uuid: UUID) -> asyncpg.Record 
                cv.version        AS cv_version,
                cv.schema_data    AS cv_schema_data,
                cv.schema_ui      AS cv_schema_ui,
+               cv.notes          AS cv_notes,
                cv.created_at     AS cv_created_at,
                (SELECT COUNT(*) FROM secrets s WHERE s.type_uuid = t.type_uuid)
                                  AS used_count

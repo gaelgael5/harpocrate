@@ -360,11 +360,36 @@
     },
     "env": {
       "title": "Configuration serveur",
-      "subtitle": "Variables d'environnement actives (champs sensibles masqués)",
+      "subtitle": "Variables d'environnement actives (préfixe HARPOCRATE_ masqué pour la lisibilité ; champs sensibles redactés)",
       "variable": "Variable",
       "value": "Valeur",
       "redacted": "[MASQUÉ]",
-      "sensitiveNote": "Les variables suivantes sont masquées : {{keys}}"
+      "sensitiveNote": "Les variables suivantes sont masquées : {{keys}}",
+      "editHint": "Pour modifier une variable : éditer /opt/harpocrate/.env sur le serveur puis relancer le backend (docker compose restart backend). L'édition inline arrivera dans un futur lot.",
+      "theme": {
+        "core": "Application",
+        "auth": "Authentification",
+        "crypto": "Crypto & Sécurité",
+        "backups": "Sauvegardes",
+        "cluster": "Cluster Postgres",
+        "sync": "Réplication MQTT",
+        "governance": "Identité & Audit",
+        "devmode": "Mode développement",
+        "other": "Autres"
+      },
+      "age": {
+        "cardTitle": "Clé AGE pour les sauvegardes",
+        "cardSubtitle": "Génère une nouvelle paire de clés AGE. La clé publique est à mettre dans HARPOCRATE_AGE_PUBLIC_KEY ; la clé privée doit être stockée dans un endroit sûr (gestionnaire de mots de passe).",
+        "generateButton": "Générer une paire AGE",
+        "modalTitle": "Nouvelle paire de clés AGE générée",
+        "warning": "La clé privée est affichée UNE SEULE FOIS. Copie-la maintenant dans ton gestionnaire de mots de passe — sans elle, AUCUNE sauvegarde ne peut être restaurée.",
+        "publicKeyLabel": "Clé publique (à coller dans le serveur)",
+        "publicKeyHint": "À ajouter au fichier /opt/harpocrate/.env du serveur, puis relancer le backend.",
+        "envSnippet": "Snippet à coller dans .env :",
+        "privateKeyLabel": "Clé privée (à conserver hors serveur)",
+        "privateKeyHint": "⚠️ NE JAMAIS la stocker sur le serveur. Range-la dans Bitwarden/1Password/coffre. C'est la SEULE façon de restaurer un backup si tu perds tout.",
+        "savedItDone": "C'est fait, j'ai sauvegardé la clé privée"
+      }
     },
     "users": {
       "title": "Utilisateurs",

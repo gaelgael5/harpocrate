@@ -295,6 +295,18 @@ export async function testRemoteBackupConnection(id: string): Promise<RemoteBack
   }
 }
 
+// ─── Age keygen (LOT_56) ─────────────────────────────────────────────────────
+
+export interface AgeKeypair {
+  public_key: string
+  private_key: string
+  warning: string
+}
+
+export async function generateAgeKeypair(): Promise<AgeKeypair> {
+  return api.post<AgeKeypair>('/admin/system/age-keygen', {})
+}
+
 // ─── Replication strategies (LOT_20) ─────────────────────────────────────────
 
 export async function fetchReplicationStrategies(): Promise<ReplicationStrategyListResponse> {

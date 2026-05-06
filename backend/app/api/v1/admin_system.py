@@ -1,9 +1,10 @@
-"""Endpoints /v1/admin/system/* — LOT_12C/12E.
+"""Endpoints /v1/admin/system/* — LOT_12C/12E + LOT_56 (age-keygen).
 
-GET /v1/admin/system/info     — stats système (users, wallets, secrets, backups)
-GET /v1/admin/system/env      — config env (sensibles redactés)
-GET /v1/admin/users           — liste tous les utilisateurs
-GET /v1/admin/audit-log       — journal d'audit global (sans filtrage par user)
+GET  /v1/admin/system/info       — stats système (users, wallets, secrets, backups)
+GET  /v1/admin/system/env        — config env (sensibles redactés)
+POST /v1/admin/system/age-keygen — génère une paire AGE pour les backups
+GET  /v1/admin/users             — liste tous les utilisateurs
+GET  /v1/admin/audit-log         — journal d'audit global (sans filtrage par user)
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from app.core.admin_auth import AdminJwt
 from app.core.config import settings
 from app.db.pool import get_pool
 from app.db.repositories import audit_log as audit_log_repo
+from app.services.age_keygen import AgeKeygenError, generate_age_keypair
 
 router = APIRouter(prefix="/admin", tags=["admin-system"])
 
@@ -75,6 +77,47 @@ async def get_env_config(admin: AdminJwt) -> JSONResponse:
         {
             "env": dict(sorted(env_vars.items())),
             "sensitive_keys": sorted(sensitive_names),
+        }
+    )
+
+
+# ─── POST /v1/admin/system/age-keygen ────────────────────────────────────────
+
+
+@router.post("/system/age-keygen")
+async def age_keygen(admin: AdminJwt) -> JSONResponse:
+    """Génère une paire AGE pour les backups (LOT_56).
+
+    Sécurité : la clé privée est retournée UNE SEULE FOIS dans la réponse,
+    JAMAIS persistée côté serveur. L'admin doit :
+    1. Copier la clé publique dans HARPOCRATE_AGE_PUBLIC_KEY (.env) puis
+       redémarrer le backend.
+    2. Stocker la clé privée dans un endroit sûr (gestionnaire de mdp,
+       coffre, USB chiffré). Sans elle, AUCUN backup ne peut être restauré.
+    """
+    try:
+        public_key, private_key = await generate_age_keypair()
+    except AgeKeygenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "age_keygen_failed", "message": str(exc)},
+        ) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "error": "age_binary_missing",
+                "message": "The 'age' binary is not installed on the backend container",
+            },
+        ) from exc
+    return JSONResponse(
+        {
+            "public_key": public_key,
+            "private_key": private_key,
+            "warning": (
+                "The private key is shown ONLY ONCE. Save it in a password "
+                "manager NOW — without it, no backup can be restored."
+            ),
         }
     )
 

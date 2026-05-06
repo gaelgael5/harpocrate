@@ -50,6 +50,8 @@ import type { RemoteBackupConnection } from '@/schemas/admin'
 
 type Kind = 'sftp' | 's3' | 'ftps'
 
+type S3Provider = 'aws' | 'r2' | 'b2' | 'scaleway' | 'ovh' | 'custom'
+
 interface FormValues {
   name: string
   kind: Kind
@@ -67,11 +69,13 @@ interface FormValues {
   // FTPS only
   use_tls: boolean
   // S3 only
+  s3_provider: S3Provider
+  s3_r2_account_id: string  // pour R2 uniquement, sert à construire l'endpoint
   s3_bucket: string
   s3_region: string
-  s3_endpoint_url: string
+  s3_endpoint_url: string  // édité directement uniquement si provider=custom
   s3_prefix: string
-  s3_path_style: boolean
+  s3_path_style: boolean   // édité directement uniquement si provider=custom
   s3_access_key_id: string
   s3_secret_access_key: string
 }
@@ -89,6 +93,8 @@ const DEFAULT_FORM: FormValues = {
   private_key: '',
   private_key_passphrase: '',
   use_tls: true,
+  s3_provider: 'aws',
+  s3_r2_account_id: '',
   s3_bucket: '',
   s3_region: 'us-east-1',
   s3_endpoint_url: '',
@@ -96,6 +102,99 @@ const DEFAULT_FORM: FormValues = {
   s3_path_style: false,
   s3_access_key_id: '',
   s3_secret_access_key: '',
+}
+
+// ─── Mapping providers S3 → endpoint + path-style ────────────────────────────
+
+interface S3ProviderSpec {
+  label: string
+  /** true si l'utilisateur doit saisir l'endpoint à la main (custom uniquement). */
+  endpointEditable: boolean
+  /** Construit l'URL d'endpoint à partir des inputs utilisateur. Vide pour AWS. */
+  buildEndpoint: (region: string, accountId: string) => string
+  defaultRegion: string
+  regionPlaceholder: string
+  pathStyle: boolean
+  /** true si on doit afficher le champ Account ID (R2 uniquement). */
+  needsAccountId: boolean
+}
+
+const S3_PROVIDERS: Record<S3Provider, S3ProviderSpec> = {
+  aws: {
+    label: 'AWS S3',
+    endpointEditable: false,
+    buildEndpoint: () => '',  // AWS utilise l'endpoint par défaut du SDK
+    defaultRegion: 'us-east-1',
+    regionPlaceholder: 'ex: eu-west-3, us-east-1, ap-southeast-1',
+    pathStyle: false,
+    needsAccountId: false,
+  },
+  r2: {
+    label: 'Cloudflare R2',
+    endpointEditable: false,
+    buildEndpoint: (_region, accountId) =>
+      accountId.trim() ? `https://${accountId.trim()}.r2.cloudflarestorage.com` : '',
+    defaultRegion: 'auto',
+    regionPlaceholder: 'auto',
+    pathStyle: true,
+    needsAccountId: true,
+  },
+  b2: {
+    label: 'Backblaze B2',
+    endpointEditable: false,
+    buildEndpoint: (region) =>
+      region.trim() ? `https://s3.${region.trim()}.backblazeb2.com` : '',
+    defaultRegion: 'eu-central-003',
+    regionPlaceholder: 'ex: us-west-001, eu-central-003',
+    pathStyle: true,
+    needsAccountId: false,
+  },
+  scaleway: {
+    label: 'Scaleway Object Storage',
+    endpointEditable: false,
+    buildEndpoint: (region) =>
+      region.trim() ? `https://s3.${region.trim()}.scw.cloud` : '',
+    defaultRegion: 'fr-par',
+    regionPlaceholder: 'fr-par, nl-ams, pl-waw',
+    pathStyle: false,
+    needsAccountId: false,
+  },
+  ovh: {
+    label: 'OVH Object Storage',
+    endpointEditable: false,
+    buildEndpoint: (region) =>
+      region.trim() ? `https://s3.${region.trim()}.io.cloud.ovh.net` : '',
+    defaultRegion: 'gra',
+    regionPlaceholder: 'gra, sbg, bhs, waw, de',
+    pathStyle: false,
+    needsAccountId: false,
+  },
+  custom: {
+    label: 'Autre (S3-compatible custom)',
+    endpointEditable: true,
+    buildEndpoint: () => '',  // saisi à la main
+    defaultRegion: 'us-east-1',
+    regionPlaceholder: 'région de ton service',
+    pathStyle: true,
+    needsAccountId: false,
+  },
+}
+
+/** Détecte le provider S3 depuis un endpoint connu (pour reload d'une connexion existante). */
+function detectS3Provider(endpoint: string): S3Provider {
+  const e = endpoint.toLowerCase().trim()
+  if (!e || e.endsWith('.amazonaws.com')) return 'aws'
+  if (e.includes('.r2.cloudflarestorage.com')) return 'r2'
+  if (e.includes('.backblazeb2.com')) return 'b2'
+  if (e.includes('.scw.cloud')) return 'scaleway'
+  if (e.includes('.io.cloud.ovh.net')) return 'ovh'
+  return 'custom'
+}
+
+/** Extrait l'account_id depuis une endpoint R2 (https://<id>.r2.cloudflarestorage.com). */
+function extractR2AccountId(endpoint: string): string {
+  const m = endpoint.match(/^https?:\/\/([^.]+)\.r2\.cloudflarestorage\.com\/?$/i)
+  return m?.[1] ?? ''
 }
 
 function buildPayload(values: FormValues): RemoteBackupCreatePayload {
@@ -140,14 +239,18 @@ function buildPayload(values: FormValues): RemoteBackupCreatePayload {
       },
     }
   }
-  // s3
+  // s3 — l'endpoint et le path-style sont dérivés du provider sélectionné
+  const spec = S3_PROVIDERS[values.s3_provider]
+  const endpoint = spec.endpointEditable
+    ? values.s3_endpoint_url.trim()
+    : spec.buildEndpoint(values.s3_region, values.s3_r2_account_id)
   const config: Record<string, unknown> = {
     bucket: values.s3_bucket.trim(),
     region: values.s3_region.trim(),
-    path_style: values.s3_path_style,
+    path_style: spec.endpointEditable ? values.s3_path_style : spec.pathStyle,
   }
-  if (values.s3_endpoint_url.trim()) {
-    config.endpoint_url = values.s3_endpoint_url.trim()
+  if (endpoint) {
+    config.endpoint_url = endpoint
   }
   if (values.s3_prefix.trim()) {
     config.prefix = values.s3_prefix.trim()
@@ -408,7 +511,9 @@ function ConnectionFormModal({
             typeof editTarget.config.use_tls === 'boolean'
               ? editTarget.config.use_tls
               : true,
-          // Champs S3
+          // Champs S3 — détecte le provider depuis l'endpoint stocké
+          s3_provider: detectS3Provider(String(editTarget.config.endpoint_url ?? '')),
+          s3_r2_account_id: extractR2AccountId(String(editTarget.config.endpoint_url ?? '')),
           s3_bucket: String(editTarget.config.bucket ?? ''),
           s3_region: String(editTarget.config.region ?? 'us-east-1'),
           s3_endpoint_url: String(editTarget.config.endpoint_url ?? ''),
@@ -443,6 +548,10 @@ function ConnectionFormModal({
         values.kind === 's3' && !editTarget && !v.trim() ? t('common.required') : null,
       s3_secret_access_key: (v, values) =>
         values.kind === 's3' && !editTarget && !v ? t('common.required') : null,
+      s3_r2_account_id: (v, values) =>
+        values.kind === 's3' && values.s3_provider === 'r2' && !v.trim()
+          ? t('common.required')
+          : null,
     },
   })
 
@@ -621,16 +730,51 @@ function S3Fields({
   editing: boolean
 }) {
   const { t } = useTranslation()
+  const provider: S3Provider = form.values.s3_provider
+  const spec = S3_PROVIDERS[provider]
+
   return (
     <>
+      <Select
+        label={t('admin.remoteBackups.fieldS3Provider')}
+        description={t('admin.remoteBackups.fieldS3ProviderHint')}
+        data={Object.entries(S3_PROVIDERS).map(([value, s]) => ({
+          value,
+          label: s.label,
+        }))}
+        allowDeselect={false}
+        {...form.getInputProps('s3_provider')}
+        onChange={(v) => {
+          if (!v) return
+          const next = v as S3Provider
+          const nextSpec = S3_PROVIDERS[next]
+          form.setFieldValue('s3_provider', next)
+          // Préfille la région avec le défaut du provider sélectionné
+          // sauf si l'utilisateur a déjà saisi quelque chose de pertinent
+          form.setFieldValue('s3_region', nextSpec.defaultRegion)
+        }}
+      />
+
+      {spec.needsAccountId && (
+        <TextInput
+          label={t('admin.remoteBackups.fieldS3R2AccountId')}
+          description={t('admin.remoteBackups.fieldS3R2AccountIdHint')}
+          placeholder="abc123def456..."
+          required
+          {...form.getInputProps('s3_r2_account_id')}
+        />
+      )}
+
       <TextInput
         label={t('admin.remoteBackups.fieldS3Bucket')}
         required
         {...form.getInputProps('s3_bucket')}
       />
+
       <Group grow>
         <TextInput
           label={t('admin.remoteBackups.fieldS3Region')}
+          placeholder={spec.regionPlaceholder}
           required
           {...form.getInputProps('s3_region')}
         />
@@ -640,17 +784,24 @@ function S3Fields({
           {...form.getInputProps('s3_prefix')}
         />
       </Group>
-      <TextInput
-        label={t('admin.remoteBackups.fieldS3Endpoint')}
-        description={t('admin.remoteBackups.fieldS3EndpointHint')}
-        placeholder="https://abc123.r2.cloudflarestorage.com"
-        {...form.getInputProps('s3_endpoint_url')}
-      />
-      <Switch
-        label={t('admin.remoteBackups.fieldS3PathStyle')}
-        description={t('admin.remoteBackups.fieldS3PathStyleHint')}
-        {...form.getInputProps('s3_path_style', { type: 'checkbox' })}
-      />
+
+      {spec.endpointEditable && (
+        <>
+          <TextInput
+            label={t('admin.remoteBackups.fieldS3Endpoint')}
+            description={t('admin.remoteBackups.fieldS3EndpointHint')}
+            placeholder="https://s3.example.com"
+            required
+            {...form.getInputProps('s3_endpoint_url')}
+          />
+          <Switch
+            label={t('admin.remoteBackups.fieldS3PathStyle')}
+            description={t('admin.remoteBackups.fieldS3PathStyleHint')}
+            {...form.getInputProps('s3_path_style', { type: 'checkbox' })}
+          />
+        </>
+      )}
+
       <TextInput
         label={t('admin.remoteBackups.fieldS3AccessKeyId')}
         required

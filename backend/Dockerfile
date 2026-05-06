@@ -5,6 +5,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# `age` (binaire) est utilisé pour chiffrer/déchiffrer les .tar.age (LOT_12A
+# backup) et pour générer une paire de clés via /v1/admin/system/age-keygen.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends age \
+ && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir \
     "fastapi>=0.110,<0.116" \

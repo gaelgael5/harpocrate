@@ -359,11 +359,36 @@
     },
     "env": {
       "title": "Server configuration",
-      "subtitle": "Active environment variables (sensitive fields hidden)",
+      "subtitle": "Active environment variables (HARPOCRATE_ prefix hidden for readability; sensitive fields redacted)",
       "variable": "Variable",
       "value": "Value",
       "redacted": "[HIDDEN]",
-      "sensitiveNote": "The following variables are hidden: {{keys}}"
+      "sensitiveNote": "The following variables are hidden: {{keys}}",
+      "editHint": "To change a variable: edit /opt/harpocrate/.env on the server then restart the backend (docker compose restart backend). Inline editing will come in a future LOT.",
+      "theme": {
+        "core": "Application",
+        "auth": "Authentication",
+        "crypto": "Crypto & Security",
+        "backups": "Backups",
+        "cluster": "Postgres cluster",
+        "sync": "MQTT replication",
+        "governance": "Identity & Audit",
+        "devmode": "Development mode",
+        "other": "Other"
+      },
+      "age": {
+        "cardTitle": "AGE key for backups",
+        "cardSubtitle": "Generate a new AGE keypair. The public key goes into HARPOCRATE_AGE_PUBLIC_KEY ; the private key must be stored somewhere safe (password manager).",
+        "generateButton": "Generate AGE keypair",
+        "modalTitle": "New AGE keypair generated",
+        "warning": "The private key is shown ONLY ONCE. Copy it to your password manager NOW — without it, NO backup can ever be restored.",
+        "publicKeyLabel": "Public key (paste on server)",
+        "publicKeyHint": "Add this to /opt/harpocrate/.env on the server, then restart the backend.",
+        "envSnippet": "Snippet to paste in .env:",
+        "privateKeyLabel": "Private key (keep OFF the server)",
+        "privateKeyHint": "⚠️ NEVER store on the server. Save in Bitwarden/1Password/safe. This is the ONLY way to restore a backup if you lose everything.",
+        "savedItDone": "Done, I've saved the private key"
+      }
     },
     "users": {
       "title": "Users",

@@ -631,5 +631,87 @@
     "solution": "Bascule vers HTTPS pour continuer :",
     "switch_button": "Ouvrir en HTTPS",
     "cert_warning": "Le certificat est auto-signé en mode dev — le navigateur affichera un avertissement. Accepte-le une fois (\"Paramètres avancés → Continuer\")."
+  },
+  "landing": {
+    "nav": {
+      "features": "Fonctionnalités",
+      "howItWorks": "Comment ça marche",
+      "docs": "Documentation",
+      "openVault": "Ouvrir le coffre →"
+    },
+    "hero": {
+      "badge": "Zero-knowledge de bout en bout",
+      "titleLine1": "Vos secrets,",
+      "titleAccent": "mathématiquement",
+      "titleLine3": "hors de portée.",
+      "subtitle": "Un gestionnaire de secrets où même l'opérateur du serveur ne peut pas lire vos données. La cryptographie tourne intégralement dans votre navigateur — le serveur ne stocke que des blobs chiffrés.",
+      "btnPrimary": "Ouvrir votre coffre",
+      "btnSecondary": "Voir comment ça marche",
+      "metaRsa": "bits clé RSA",
+      "metaAes": "bits clé AES",
+      "metaPlaintext": "Donnée en clair sur le serveur"
+    },
+    "features": {
+      "label": "Garanties fondamentales",
+      "titleLine1": "Conçu pour les équipes qui",
+      "titleAccent": "ne peuvent pas se permettre de faire confiance",
+      "titleLine3": "au serveur.",
+      "sdkLink": "SDK & doc API →",
+      "zeroKnowledge": {
+        "name": "Zero Knowledge",
+        "desc": "Le chiffrement se fait dans votre navigateur via la WebCrypto API et Argon2id. Le serveur ne stocke que du ciphertext — vos secrets nous sont mathématiquement inaccessibles.",
+        "tag": "AES-256-GCM · RSA-OAEP · Argon2id"
+      },
+      "devFirst": {
+        "name": "Pensé pour les développeurs",
+        "desc": "CLI native, SDK Python et API REST avec bearer tokens. Récupérez vos secrets directement dans vos pipelines CI sans les stocker dans des fichiers d'environnement.",
+        "tag": "tokens hrpv_* · Python · bash"
+      },
+      "audit": {
+        "name": "Tout est audité",
+        "desc": "Le journal d'audit immuable streame chaque lecture, écriture, partage et révocation vers Loki. Sachez exactement qui a accédé à quoi, depuis quelle IP, à quelle heure.",
+        "tag": "Loki · Grafana · logs structurés"
+      }
+    },
+    "howItWorks": {
+      "label": "Le protocole",
+      "title": "Trois étapes, zéro confiance."
+    },
+    "steps": {
+      "s1": {
+        "title": "Générez votre paire de clés",
+        "desc": "À la première connexion, une paire de clés RSA 4096 bits est générée intégralement dans votre navigateur. Votre clé privée est chiffrée avec votre passphrase via Argon2id — elle ne quitte jamais votre appareil en clair.",
+        "code": "Argon2id → enveloppe AES-GCM → RSA-4096"
+      },
+      "s2": {
+        "title": "Chiffrez les secrets en local",
+        "desc": "Chaque coffre détient une clé symétrique AES-256, elle-même chiffrée avec votre clé publique. Les valeurs des secrets sont chiffrées côté client avant l'envoi. Le serveur ne reçoit que des blobs opaques.",
+        "code": "clair → AES-GCM(wallet_key) → serveur"
+      },
+      "s3": {
+        "title": "Partagez avec précision",
+        "desc": "Donnez accès à vos collègues via un bitmap de cinq permissions : LIRE, ÉCRIRE, AJOUTER, SUPPRIMER, INIT. Leur clé publique chiffre la clé du coffre — l'accès est cryptographiquement délimité.",
+        "code": "wallet_key → RSA-OAEP(destinataire.pub)"
+      }
+    },
+    "terminal": {
+      "label": "Workflow développeur",
+      "titleLine1": "Vos secrets dans votre pipeline,",
+      "titleAccent": "pas dans vos fichiers de config.",
+      "installSuccess": "Successfully installed harpocrate-0.1.0",
+      "unlocking": "🔑 Déverrouillage du coffre… déchiffrement local…",
+      "envComment": "# Ou les injecter dans l'environnement de votre process",
+      "execSuccess": "✓ 12 secrets injectés · serveur en écoute sur :3000"
+    },
+    "cta": {
+      "titleLine1": "Prêt à garder vos",
+      "titleAccent": "secrets secrets",
+      "desc": "Auto-hébergé en quelques minutes. Pas d'abonnement. Pas de télémétrie. Vos données ne touchent jamais nos serveurs — parce qu'on n'en a pas.",
+      "button": "Ouvrir votre coffre",
+      "meta": "Open source · Auto-hébergé · Zero knowledge"
+    },
+    "footer": {
+      "tagline": "Le dieu du silence garde vos secrets."
+    }
   }
 }

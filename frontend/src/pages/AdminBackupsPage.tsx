@@ -33,9 +33,6 @@ import {
   enableMaintenance,
   disableMaintenance,
   backupDownloadUrl,
-  fetchS3Backups,
-  pushBackupToS3,
-  pullBackupFromS3,
   fetchRemoteBackupConnections,
   pushBackupToRemote,
 } from '@/lib/adminApi'
@@ -216,82 +213,6 @@ function MaintenancePanel() {
   )
 }
 
-function S3Section() {
-  const { t } = useTranslation()
-  const qc = useQueryClient()
-
-  const { data: s3Data, error: s3Error } = useQuery({
-    queryKey: ['admin-s3-backups'],
-    queryFn: fetchS3Backups,
-    retry: false,
-  })
-
-  const pullMut = useMutation({
-    mutationFn: (s3Key: string) => pullBackupFromS3(s3Key),
-    onSuccess: () => {
-      notifications.show({ color: 'green', message: t('admin.backups.s3PullSuccess') })
-      void qc.invalidateQueries({ queryKey: ['admin-backups'] })
-      void qc.invalidateQueries({ queryKey: ['admin-s3-backups'] })
-    },
-    onError: () => {
-      notifications.show({ color: 'red', message: t('admin.backups.s3PullError') })
-    },
-  })
-
-  return (
-    <Card withBorder>
-      <Stack>
-        <Title order={4}>{t('admin.backups.s3Section')}</Title>
-        {s3Error ? (
-          <Alert color="orange">{t('admin.backups.s3NotConfigured')}</Alert>
-        ) : s3Data?.backups.length === 0 ? (
-          <Text c="dimmed">{t('admin.backups.noBackups')}</Text>
-        ) : (
-          <Table highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>{t('admin.backups.s3Key')}</Table.Th>
-                <Table.Th>{t('admin.backups.s3Size')}</Table.Th>
-                <Table.Th>{t('admin.backups.s3Date')}</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {s3Data?.backups.map((item) => (
-                <Table.Tr key={item.key}>
-                  <Table.Td>
-                    <Text size="xs" ff="monospace">
-                      {item.key}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{formatBytes(item.size_bytes)}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs" c="dimmed">
-                      {dayjs(item.last_modified).format('YYYY-MM-DD HH:mm')}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      loading={pullMut.isPending}
-                      onClick={() => pullMut.mutate(item.key)}
-                    >
-                      {pullMut.isPending ? t('admin.backups.s3Pulling') : t('admin.backups.s3Pull')}
-                    </Button>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Stack>
-    </Card>
-  )
-}
-
 export function AdminBackupsPage() {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -301,20 +222,6 @@ export function AdminBackupsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin-backups'],
     queryFn: fetchBackups,
-  })
-
-  const pushS3Mut = useMutation({
-    mutationFn: (id: string) => pushBackupToS3(id),
-    onSuccess: (result) => {
-      notifications.show({
-        color: 'green',
-        message: t('admin.backups.pushS3Success', { key: result.s3_key }),
-      })
-      void qc.invalidateQueries({ queryKey: ['admin-s3-backups'] })
-    },
-    onError: () => {
-      notifications.show({ color: 'red', message: t('admin.backups.pushS3Error') })
-    },
   })
 
   // Connexions backup distantes (LOT L3) — partagé avec AdminRemoteBackupsPage
@@ -449,15 +356,6 @@ export function AdminBackupsPage() {
                     >
                       {t('admin.backups.download')}
                     </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      color="brand"
-                      loading={pushS3Mut.isPending}
-                      onClick={() => pushS3Mut.mutate(b.id)}
-                    >
-                      {pushS3Mut.isPending ? t('admin.backups.pushingS3') : t('admin.backups.pushS3')}
-                    </Button>
                     <Menu position="bottom-end" withinPortal>
                       <Menu.Target>
                         <Button
@@ -524,10 +422,6 @@ export function AdminBackupsPage() {
           </Table.Tbody>
         </Table>
       )}
-
-      <Divider />
-
-      <S3Section />
 
       {restoreTarget && (
         <RestoreModal

@@ -26,6 +26,10 @@ services:
     image: harpocrate-backend:dev
     container_name: harpocrate-backend
     restart: unless-stopped
+    # Drain de 30s respecté par uvicorn (LOT 21A graceful shutdown) +
+    # marge de 5s pour les fermetures pool DB / cluster sync stop.
+    stop_grace_period: 35s
+    stop_signal: SIGTERM
     environment:
       HARPOCRATE_DB_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       HARPOCRATE_KEYCLOAK_URL: ${HARPOCRATE_KEYCLOAK_URL}
@@ -53,6 +57,19 @@ services:
       # Cross-app launcher menu — éditable côté CT sans rebuild
       - ./releases:/app/releases:ro
       # Artefacts SDK Python + CLI bash — exposes via /v1/sdk/*
+    healthcheck:
+      # Python est garanti dans l'image (pas curl). urllib renvoie le status :
+      # 200 → OK, autre → exit 1 → Docker marque unhealthy.
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import urllib.request,sys;
+          r=urllib.request.urlopen('http://127.0.0.1:8000/v1/health',timeout=3);
+          sys.exit(0 if r.status==200 else 1)" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   frontend:
     build:
@@ -61,8 +78,21 @@ services:
     image: harpocrate-frontend:test
     container_name: harpocrate-frontend
     restart: unless-stopped
+    # nginx flush rapide, pas de longue requête en cours.
+    stop_grace_period: 10s
     depends_on:
-      - backend
+      backend:
+        # Attente du healthcheck backend → frontend ne sert PAS de 502
+        # pendant le démarrage du backend (migrations + JWKS prefetch).
+        condition: service_healthy
     ports:
       - "127.0.0.1:8080:80"
       - "0.0.0.0:8443:443"
+    healthcheck:
+      # nginx:alpine fournit wget. Port 80 redirige 301 → wget --spider
+      # considère 301 comme succès → suffit à valider que nginx écoute.
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:80/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

@@ -179,12 +179,20 @@ function AgeKeyResultModal({
           {t('admin.env.age.warning')}
         </Alert>
 
+        {result.applied && (
+          <Alert color="green" title="✓">
+            {t('admin.env.age.appliedNotice')}
+          </Alert>
+        )}
+
         <Stack gap={4}>
           <Text fw={600} size="sm">
             {t('admin.env.age.publicKeyLabel')}
           </Text>
           <Text size="xs" c="dimmed">
-            {t('admin.env.age.publicKeyHint')}
+            {result.applied
+              ? t('admin.env.age.publicKeyHintApplied')
+              : t('admin.env.age.publicKeyHint')}
           </Text>
           <Group gap="xs" wrap="nowrap" align="center">
             <ScrollArea style={{ flex: 1 }} type="auto">
@@ -202,12 +210,6 @@ function AgeKeyResultModal({
               )}
             </CopyButton>
           </Group>
-          <Text size="xs" c="dimmed" mt={4}>
-            {t('admin.env.age.envSnippet')}
-          </Text>
-          <Code block>
-            {`HARPOCRATE_AGE_PUBLIC_KEY=${result.public_key}`}
-          </Code>
         </Stack>
 
         <Divider />

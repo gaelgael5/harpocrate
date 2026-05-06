@@ -1,9 +1,13 @@
-"""Génération d'une paire de clés AGE pour les backups (LOT_56).
+"""Génération + stockage de la clé publique AGE pour les backups (LOT_56).
 
 Utilise le binaire `age-keygen` (paquet age, installé dans le Dockerfile).
-La clé privée est retournée UNE SEULE FOIS au caller — JAMAIS persistée
-côté serveur (zero-knowledge : seul l'admin la possède pour pouvoir
-restaurer les backups).
+La clé PRIVÉE est retournée UNE SEULE FOIS au caller — JAMAIS persistée
+côté serveur (zero-knowledge : seul l'admin la possède pour restaurer).
+
+La clé PUBLIQUE est stockée dans `system_metadata` (clé `age_public_key`)
+et applicable immédiatement par `create_backup` sans redémarrage. La valeur
+DB prend le pas sur `HARPOCRATE_AGE_PUBLIC_KEY` (l'admin a explicitement
+régénéré → intention nouvelle).
 """
 
 from __future__ import annotations
@@ -11,7 +15,13 @@ from __future__ import annotations
 import asyncio
 import re
 
+import asyncpg
+
+from app.core.config import settings
 from app.core.logging import logger
+from app.db.repositories import system_metadata as meta_repo
+
+_DB_KEY = "age_public_key"
 
 
 class AgeKeygenError(Exception):
@@ -67,3 +77,27 @@ async def generate_age_keypair() -> tuple[str, str]:
     private_key = private_match.group(0)
     logger.info("age_keypair_generated", public_key_prefix=public_key[:12])
     return public_key, private_key
+
+
+async def store_age_public_key(
+    conn: asyncpg.Connection[asyncpg.Record],
+    public_key: str,
+) -> None:
+    """Persiste la clé publique AGE en DB pour application immédiate."""
+    await meta_repo.set_value(conn, _DB_KEY, public_key)
+    logger.info("age_public_key_stored", public_key_prefix=public_key[:12])
+
+
+async def get_active_age_public_key(
+    conn: asyncpg.Connection[asyncpg.Record],
+) -> str:
+    """Retourne la clé publique active : DB d'abord, env en fallback.
+
+    Si l'admin a régénéré une paire via l'UI, la valeur DB prend le pas sur
+    `HARPOCRATE_AGE_PUBLIC_KEY` (intention explicite). Sinon on tombe sur
+    la valeur env historique.
+    """
+    raw = await meta_repo.get_value(conn, _DB_KEY)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return settings.age_public_key

@@ -300,6 +300,8 @@ export async function testRemoteBackupConnection(id: string): Promise<RemoteBack
 export interface AgeKeypair {
   public_key: string
   private_key: string
+  /** True si la clé publique a été persistée en DB et est active immédiatement. */
+  applied: boolean
   warning: string
 }
 

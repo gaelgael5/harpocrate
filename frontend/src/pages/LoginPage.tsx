@@ -21,6 +21,7 @@ import { useLocalLoginAvailable } from '@/hooks/useLocalLoginAvailable'
 import { MeResponseSchema } from '@/schemas/auth'
 import { useSessionStore } from '@/stores/session'
 import { useCryptoStore } from '@/stores/crypto'
+import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 
 type State = 'loading' | 'show-login' | 'redirecting'
 
@@ -129,6 +130,9 @@ export function LoginPage() {
 
   return (
     <Center h="100vh" style={{ background: 'var(--mantine-color-body)' }}>
+      <Box style={{ position: 'fixed', top: 16, right: 16, zIndex: 10 }}>
+        <LocaleSwitcher />
+      </Box>
       <Stack w={380} gap={0}>
         {/* Header */}
         <Box style={{ borderBottom: '1px solid #dedad2', paddingBottom: '1.75rem', marginBottom: '1.75rem', textAlign: 'center' }}>

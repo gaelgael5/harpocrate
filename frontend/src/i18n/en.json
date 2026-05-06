@@ -630,5 +630,87 @@
     "solution": "Switch to HTTPS to continue:",
     "switch_button": "Open over HTTPS",
     "cert_warning": "The certificate is self-signed in dev — your browser will show a warning. Accept it once (\"Advanced → Continue\")."
+  },
+  "landing": {
+    "nav": {
+      "features": "Features",
+      "howItWorks": "How it works",
+      "docs": "Docs",
+      "openVault": "Open vault →"
+    },
+    "hero": {
+      "badge": "End-to-end zero-knowledge",
+      "titleLine1": "Your secrets,",
+      "titleAccent": "mathematically",
+      "titleLine3": "out of reach.",
+      "subtitle": "A secrets manager where even the server operator cannot read your data. Cryptography runs entirely in your browser — the server stores only encrypted blobs.",
+      "btnPrimary": "Open your vault",
+      "btnSecondary": "See how it works",
+      "metaRsa": "RSA key bits",
+      "metaAes": "AES key bits",
+      "metaPlaintext": "Plaintext on server"
+    },
+    "features": {
+      "label": "Core guarantees",
+      "titleLine1": "Built for teams who",
+      "titleAccent": "cannot afford to trust",
+      "titleLine3": "the server.",
+      "sdkLink": "SDK & API docs →",
+      "zeroKnowledge": {
+        "name": "Zero Knowledge",
+        "desc": "Encryption happens in your browser via WebCrypto API and Argon2id. The server stores only ciphertext — your secrets are mathematically inaccessible to us.",
+        "tag": "AES-256-GCM · RSA-OAEP · Argon2id"
+      },
+      "devFirst": {
+        "name": "Developer First",
+        "desc": "Native CLI, Python SDK, and REST API with bearer tokens. Pull secrets directly into CI pipelines without storing credentials in environment files.",
+        "tag": "hrpv_* tokens · Python · bash"
+      },
+      "audit": {
+        "name": "Audit Everything",
+        "desc": "Immutable audit log streams every read, write, grant, and revocation to Loki. Know exactly who accessed what, from which IP, at what time.",
+        "tag": "Loki · Grafana · structured logs"
+      }
+    },
+    "howItWorks": {
+      "label": "The protocol",
+      "title": "Three steps, zero trust."
+    },
+    "steps": {
+      "s1": {
+        "title": "Generate your keypair",
+        "desc": "On first login, a 4096-bit RSA keypair is generated entirely in your browser. Your private key is encrypted with your passphrase via Argon2id — it never leaves your device in cleartext.",
+        "code": "Argon2id → AES-GCM wrapping → RSA-4096"
+      },
+      "s2": {
+        "title": "Encrypt secrets locally",
+        "desc": "Each wallet holds a symmetric AES-256 key, itself encrypted with your public key. Secret values are encrypted client-side before upload. The server receives only opaque blobs.",
+        "code": "plaintext → AES-GCM(wallet_key) → server"
+      },
+      "s3": {
+        "title": "Share with precision",
+        "desc": "Grant colleagues access using a five-bit permission bitmap: READ, WRITE, ADD, REMOVE, INIT. Their public key encrypts the wallet key — access is cryptographically scoped.",
+        "code": "wallet_key → RSA-OAEP(recipient.pub)"
+      }
+    },
+    "terminal": {
+      "label": "Developer workflow",
+      "titleLine1": "Secrets in your pipeline,",
+      "titleAccent": "not in your config files.",
+      "installSuccess": "Successfully installed harpocrate-0.1.0",
+      "unlocking": "🔑 Unlocking wallet… decrypting locally…",
+      "envComment": "# Or inject into your process environment",
+      "execSuccess": "✓ 12 secrets injected · server listening on :3000"
+    },
+    "cta": {
+      "titleLine1": "Ready to keep your",
+      "titleAccent": "secrets secret",
+      "desc": "Self-host in minutes. No subscription. No telemetry. Your data never touches our servers — because we don't have any.",
+      "button": "Open your vault",
+      "meta": "Open source · Self-hosted · Zero knowledge"
+    },
+    "footer": {
+      "tagline": "The god of silence keeps your secrets."
+    }
   }
 }

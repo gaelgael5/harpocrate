@@ -18,7 +18,11 @@ from app.core.admin_auth import AdminJwt
 from app.core.config import settings
 from app.db.pool import get_pool
 from app.db.repositories import audit_log as audit_log_repo
-from app.services.age_keygen import AgeKeygenError, generate_age_keypair
+from app.services.age_keygen import (
+    AgeKeygenError,
+    generate_age_keypair,
+    store_age_public_key,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin-system"])
 
@@ -88,12 +92,13 @@ async def get_env_config(admin: AdminJwt) -> JSONResponse:
 async def age_keygen(admin: AdminJwt) -> JSONResponse:
     """Génère une paire AGE pour les backups (LOT_56).
 
-    Sécurité : la clé privée est retournée UNE SEULE FOIS dans la réponse,
-    JAMAIS persistée côté serveur. L'admin doit :
-    1. Copier la clé publique dans HARPOCRATE_AGE_PUBLIC_KEY (.env) puis
-       redémarrer le backend.
-    2. Stocker la clé privée dans un endroit sûr (gestionnaire de mdp,
-       coffre, USB chiffré). Sans elle, AUCUN backup ne peut être restauré.
+    La clé PUBLIQUE est immédiatement stockée en DB (system_metadata) et
+    utilisée par les prochains create_backup — pas besoin de redémarrer.
+
+    La clé PRIVÉE est retournée UNE SEULE FOIS dans la réponse, JAMAIS
+    persistée côté serveur (zero-knowledge). L'admin DOIT la stocker dans
+    un endroit sûr (gestionnaire de mdp, coffre). Sans elle, AUCUN backup
+    ne peut être restauré.
     """
     try:
         public_key, private_key = await generate_age_keypair()
@@ -110,10 +115,17 @@ async def age_keygen(admin: AdminJwt) -> JSONResponse:
                 "message": "The 'age' binary is not installed on the backend container",
             },
         ) from exc
+
+    # Persiste immédiatement la clé publique en DB → applicable sans restart.
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await store_age_public_key(conn, public_key)
+
     return JSONResponse(
         {
             "public_key": public_key,
             "private_key": private_key,
+            "applied": True,
             "warning": (
                 "The private key is shown ONLY ONCE. Save it in a password "
                 "manager NOW — without it, no backup can be restored."

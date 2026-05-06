@@ -383,9 +383,10 @@
         "generateButton": "Générer une paire AGE",
         "modalTitle": "Nouvelle paire de clés AGE générée",
         "warning": "La clé privée est affichée UNE SEULE FOIS. Copie-la maintenant dans ton gestionnaire de mots de passe — sans elle, AUCUNE sauvegarde ne peut être restaurée.",
-        "publicKeyLabel": "Clé publique (à coller dans le serveur)",
+        "appliedNotice": "Clé publique enregistrée automatiquement en base — les prochaines sauvegardes l'utiliseront immédiatement, aucun redémarrage requis. Tu peux toutefois la copier dans /opt/harpocrate/.env (HARPOCRATE_AGE_PUBLIC_KEY=…) si tu veux la persister en cas de restore complet de la DB.",
+        "publicKeyLabel": "Clé publique",
         "publicKeyHint": "À ajouter au fichier /opt/harpocrate/.env du serveur, puis relancer le backend.",
-        "envSnippet": "Snippet à coller dans .env :",
+        "publicKeyHintApplied": "Cette clé est maintenant active. Conserve-la quelque part au cas où tu doives la remettre dans .env après un restore.",
         "privateKeyLabel": "Clé privée (à conserver hors serveur)",
         "privateKeyHint": "⚠️ NE JAMAIS la stocker sur le serveur. Range-la dans Bitwarden/1Password/coffre. C'est la SEULE façon de restaurer un backup si tu perds tout.",
         "savedItDone": "C'est fait, j'ai sauvegardé la clé privée"

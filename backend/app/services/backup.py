@@ -118,8 +118,15 @@ async def create_backup(
     created_by_user_id: UUID | None,
     created_by_email: str,
 ) -> backups_repo.BackupRecord:
-    """Crée un backup chiffré avec age et l'enregistre en DB."""
-    if not settings.age_public_key:
+    """Crée un backup chiffré avec age et l'enregistre en DB.
+
+    La clé publique AGE est lue via `get_active_age_public_key(conn)` :
+    DB d'abord (si l'admin a régénéré via UI), env en fallback. Permet
+    une rotation de clé sans redémarrer le backend.
+    """
+    from app.services.age_keygen import get_active_age_public_key
+    age_recipient = await get_active_age_public_key(conn)
+    if not age_recipient:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"error": "age_key_not_configured", "message": "HARPOCRATE_AGE_PUBLIC_KEY not set"},
@@ -171,7 +178,7 @@ async def create_backup(
                 "env_non_sensitive_json": f"sha256:{env_sha}",
             },
             "stats": stats,
-            "age_recipient": settings.age_public_key,
+            "age_recipient": age_recipient,
             "schema_version": "001",
             "session_epoch_at_backup": epoch,
         }
@@ -188,7 +195,7 @@ async def create_backup(
         # Age encrypt
         tar_age_path = tmp / "backup.tar.age"
         proc2 = await asyncio.create_subprocess_exec(
-            "age", "-r", settings.age_public_key,
+            "age", "-r", age_recipient,
             "-o", str(tar_age_path),
             str(tar_path),
             stderr=asyncio.subprocess.PIPE,
@@ -207,7 +214,7 @@ async def create_backup(
         filename=filename,
         size_bytes=size,
         checksum_sha256=final_checksum,
-        age_recipient=settings.age_public_key,
+        age_recipient=age_recipient,
         manifest=manifest,
         description=description,
         created_by_user_id=created_by_user_id,

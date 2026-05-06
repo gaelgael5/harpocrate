@@ -196,3 +196,82 @@ export const ValidateSchemaResponseSchema = z.union([
 ])
 
 export type ValidateSchemaResponse = z.infer<typeof ValidateSchemaResponseSchema>
+
+// ─── Remote backup connections ───────────────────────────────────────────────
+
+export const RemoteBackupConnectionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  kind: z.enum(['sftp', 's3', 'ftps']),
+  config: z.record(z.unknown()),
+  created_at: z.string(),
+  updated_at: z.string(),
+  created_by_user_id: z.string().nullable(),
+  deleted_at: z.string().nullable(),
+})
+
+export type RemoteBackupConnection = z.infer<typeof RemoteBackupConnectionSchema>
+
+export const RemoteBackupConnectionListResponseSchema = z.object({
+  connections: z.array(RemoteBackupConnectionSchema),
+})
+
+export type RemoteBackupConnectionListResponse = z.infer<
+  typeof RemoteBackupConnectionListResponseSchema
+>
+
+export const RemoteBackupTestResponseSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), error: z.string(), message: z.string() }),
+])
+
+export type RemoteBackupTestResponse = z.infer<typeof RemoteBackupTestResponseSchema>
+
+export const RemoteBackupPushResultSchema = z.object({
+  remote_id: z.string().uuid(),
+  remote_name: z.string(),
+  remote_filename: z.string(),
+  bytes_sent: z.number(),
+})
+
+export type RemoteBackupPushResult = z.infer<typeof RemoteBackupPushResultSchema>
+
+// ─── Replication strategies (LOT_20) ─────────────────────────────────────────
+
+export const ReplicationStrategySchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(['none', 'patroni', 'harpocrate_sync', 's3_wal']),
+  label: z.string(),
+  description: z.string().nullable(),
+  config: z.record(z.unknown()),
+  enabled: z.boolean(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+export type ReplicationStrategy = z.infer<typeof ReplicationStrategySchema>
+
+export const ReplicationStrategyListResponseSchema = z.object({
+  strategies: z.array(ReplicationStrategySchema),
+})
+
+export type ReplicationStrategyListResponse = z.infer<
+  typeof ReplicationStrategyListResponseSchema
+>
+
+export const ReplicationStatusResponseSchema = z.object({
+  strategy: ReplicationStrategySchema.nullable(),
+  status: z.string().optional(),
+  live: z
+    .object({
+      type: z.string(),
+      status: z.string(),
+      primary: z.unknown().nullable(),
+      replicas: z.array(z.record(z.unknown())),
+      nodes: z.array(z.record(z.unknown())).optional(),
+    })
+    .optional(),
+})
+
+export type ReplicationStatusResponse = z.infer<typeof ReplicationStatusResponseSchema>

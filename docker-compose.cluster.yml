@@ -1,0 +1,45 @@
+# docker-compose.cluster.yml — Override pour activer la réplication MQTT (LOT_21B).
+#
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.cluster.yml up -d
+#
+# Ce fichier ajoute un broker Mosquitto local et configure le backend Harpocrate
+# pour utiliser la réplication MQTT inter-instances.
+#
+# Pour un cluster multi-hôtes : héberger Mosquitto sur un service dédié et
+# pointer HARPOCRATE_SYNC_MQTT_HOST vers ce service.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: harpocrate-mosquitto
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/mosquitto/passwords:/mosquitto/config/passwords:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    environment:
+      HARPOCRATE_SYNC_ENABLED: "true"
+      HARPOCRATE_SYNC_CLUSTER_ID: "${HARPOCRATE_SYNC_CLUSTER_ID:-harpocrate}"
+      HARPOCRATE_SYNC_MQTT_HOST: mosquitto
+      HARPOCRATE_SYNC_MQTT_PORT: "1883"
+      HARPOCRATE_SYNC_MQTT_USERNAME: "${HARPOCRATE_SYNC_MQTT_USERNAME:-harpocrate}"
+      HARPOCRATE_SYNC_MQTT_PASSWORD: "${HARPOCRATE_SYNC_MQTT_PASSWORD:?password required}"
+      HARPOCRATE_INSTANCE_ID: "${HARPOCRATE_INSTANCE_ID:?instance id required for cluster}"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:

@@ -15,6 +15,7 @@ import {
   Select,
   Loader,
   Center,
+  TypographyStylesProvider,
 } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -207,16 +208,13 @@ function MarkdownDoc({ filename }: { filename: string }) {
   }
   if (!data) return null
 
+  // TypographyStylesProvider applique les styles Mantine sur les balises HTML
+  // brutes (h1..h6, p, ul, ol, code, pre, blockquote, table...). Cela rend le
+  // markdown lisible sans avoir à styler chaque balise individuellement.
   return (
-    <Box
-      className="markdown-doc"
-      style={{
-        fontSize: '0.95rem',
-        lineHeight: 1.6,
-      }}
-    >
+    <TypographyStylesProvider>
       <ReactMarkdown>{data}</ReactMarkdown>
-    </Box>
+    </TypographyStylesProvider>
   )
 }
 

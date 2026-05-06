@@ -28,6 +28,8 @@ def configure_logging() -> None:
         wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, settings.log_level)),
         cache_logger_on_first_use=True,
     )
+    # LOT_21A — chaque log de ce process porte l'instance_id du nœud.
+    structlog.contextvars.bind_contextvars(instance=settings.instance_id)
 
 
 logger = structlog.get_logger()

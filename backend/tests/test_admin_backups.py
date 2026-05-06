@@ -367,3 +367,191 @@ async def test_pull_s3_success(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     assert r.status_code == 201
     assert r.json()["imported"] is True
+
+
+# ─── LOT L3 — Push to remote (SFTP) ──────────────────────────────────────────
+
+
+_REMOTE_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
+
+
+def _fake_remote_dto() -> Any:
+    """DTO RemoteBackupConnection mocké (ne contient JAMAIS les credentials)."""
+    dto = MagicMock()
+    dto.id = _REMOTE_ID
+    dto.name = "OVH backup"
+    dto.kind = "sftp"
+    dto.config = {"host": "sftp.test", "port": 22, "remote_path": "/backups"}
+    return dto
+
+
+@pytest.mark.asyncio
+async def test_push_remote_requires_admin() -> None:
+    """POST /v1/admin/backups/{id}/push-to-remote/{rid} → 403 si pas admin."""
+    conn = _make_conn()
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
+            headers=_user_header(),
+        )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_push_remote_backup_not_found() -> None:
+    """POST .../push-to-remote/... → 404 si backup absent."""
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=None)
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 404
+    assert r.json()["detail"]["error"] == "backup_not_found"
+
+
+@pytest.mark.asyncio
+async def test_push_remote_remote_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST .../push-to-remote/... → 404 si la connexion remote est absente."""
+    from app.services import remote_backup_connections as remote_svc
+
+    async def _no_conn(c: Any, cid: uuid.UUID) -> Any:
+        return None
+
+    monkeypatch.setattr(remote_svc, "get_connection", _no_conn)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=_fake_backup_row())
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 404
+    assert r.json()["detail"]["error"] == "remote_not_found"
+
+
+@pytest.mark.asyncio
+async def test_push_remote_file_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """POST .../push-to-remote/... → 404 si le fichier backup n'existe plus sur disque."""
+    from app.core import config as cfg
+    from app.services import remote_backup_connections as remote_svc
+
+    monkeypatch.setattr(cfg.settings, "backup_local_path", str(tmp_path))
+
+    async def _ok_conn(c: Any, cid: uuid.UUID) -> Any:
+        return _fake_remote_dto()
+
+    async def _ok_creds(c: Any, cid: uuid.UUID) -> dict[str, Any]:
+        return {"username": "u", "password": "p"}
+
+    monkeypatch.setattr(remote_svc, "get_connection", _ok_conn)
+    monkeypatch.setattr(remote_svc, "get_decrypted_credentials", _ok_creds)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=_fake_backup_row())
+    # le tmp_path est vide → file_missing
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 404
+    assert r.json()["detail"]["error"] == "file_missing"
+
+
+@pytest.mark.asyncio
+async def test_push_remote_provider_error_returns_502(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """POST .../push-to-remote/... → 502 si le provider lève RemoteBackupProviderError."""
+    from app.api.v1 import admin_backups as ab
+    from app.core import config as cfg
+    from app.services import remote_backup_connections as remote_svc
+    from app.services.remote_backup_providers import RemoteBackupProviderError
+
+    monkeypatch.setattr(cfg.settings, "backup_local_path", str(tmp_path))
+    fake = _fake_backup_row()
+    (tmp_path / fake["filename"]).write_bytes(b"backup-bytes")
+
+    async def _ok_conn(c: Any, cid: uuid.UUID) -> Any:
+        return _fake_remote_dto()
+
+    async def _ok_creds(c: Any, cid: uuid.UUID) -> dict[str, Any]:
+        return {"username": "u", "password": "p"}
+
+    monkeypatch.setattr(remote_svc, "get_connection", _ok_conn)
+    monkeypatch.setattr(remote_svc, "get_decrypted_credentials", _ok_creds)
+
+    fake_provider = MagicMock()
+    fake_provider.upload_stream = AsyncMock(
+        side_effect=RemoteBackupProviderError("connection refused")
+    )
+    monkeypatch.setattr(ab, "get_provider", lambda *_a, **_kw: fake_provider)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=fake)
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 502
+    body = r.json()
+    assert body["detail"]["error"] == "remote_push_failed"
+    assert "connection refused" in body["detail"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_push_remote_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """POST .../push-to-remote/... → 202 avec bytes_sent + remote_filename."""
+    from app.api.v1 import admin_backups as ab
+    from app.core import config as cfg
+    from app.services import remote_backup_connections as remote_svc
+
+    monkeypatch.setattr(cfg.settings, "backup_local_path", str(tmp_path))
+    fake = _fake_backup_row()
+    payload = b"x" * (128 * 1024 + 7)  # > 1 chunk pour exercer le streaming
+    (tmp_path / fake["filename"]).write_bytes(payload)
+
+    async def _ok_conn(c: Any, cid: uuid.UUID) -> Any:
+        return _fake_remote_dto()
+
+    async def _ok_creds(c: Any, cid: uuid.UUID) -> dict[str, Any]:
+        return {"username": "u", "password": "p"}
+
+    monkeypatch.setattr(remote_svc, "get_connection", _ok_conn)
+    monkeypatch.setattr(remote_svc, "get_decrypted_credentials", _ok_creds)
+
+    captured: dict[str, Any] = {}
+
+    async def _consume(remote_filename: str, source: Any) -> int:
+        captured["filename"] = remote_filename
+        total = 0
+        async for chunk in source:
+            total += len(chunk)
+        return total
+
+    fake_provider = MagicMock()
+    fake_provider.upload_stream = AsyncMock(side_effect=_consume)
+    monkeypatch.setattr(ab, "get_provider", lambda *_a, **_kw: fake_provider)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=fake)
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["remote_id"] == str(_REMOTE_ID)
+    assert body["remote_name"] == "OVH backup"
+    assert body["remote_filename"] == fake["filename"]
+    assert body["bytes_sent"] == len(payload)
+    assert captured["filename"] == fake["filename"]

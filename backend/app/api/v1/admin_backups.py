@@ -1,6 +1,8 @@
-"""Endpoints /v1/admin/backups/* — LOT_12A / LOT_13 (S3)."""
+"""Endpoints /v1/admin/backups/* — LOT_12A / LOT_13 (S3) / LOT_L3 (push remote)."""
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 from uuid import UUID
 
@@ -14,7 +16,32 @@ from app.db.pool import get_pool
 from app.db.repositories import backups as backups_repo
 from app.services import backup as backup_svc
 from app.services import backup_s3 as backup_s3_svc
+from app.services import remote_backup_connections as remote_svc
 from app.services.audit import audit_log_insert
+from app.services.remote_backup_providers import (
+    RemoteBackupProviderError,
+    get_provider,
+)
+
+# Taille des chunks pour le streaming vers SFTP. 64 KiB = bon compromis
+# débit/mémoire ; chaque chunk est lu en thread pool pour ne pas bloquer le loop.
+_PUSH_REMOTE_CHUNK_SIZE = 64 * 1024
+
+
+async def _stream_file_chunks(path: Path) -> AsyncIterator[bytes]:
+    """Yield le contenu de `path` par blocs de _PUSH_REMOTE_CHUNK_SIZE octets.
+
+    Lit dans un thread pool pour ne pas bloquer la boucle asyncio.
+    """
+    f = await asyncio.to_thread(path.open, "rb")
+    try:
+        while True:
+            chunk = await asyncio.to_thread(f.read, _PUSH_REMOTE_CHUNK_SIZE)
+            if not chunk:
+                return
+            yield chunk
+    finally:
+        await asyncio.to_thread(f.close)
 
 router = APIRouter(prefix="/admin/backups", tags=["admin-backups"])
 
@@ -247,6 +274,85 @@ async def push_backup_to_s3(backup_id: UUID, admin: AdminJwt) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={"s3_key": s3_key},
+    )
+
+
+@router.post(
+    "/{backup_id}/push-to-remote/{remote_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def push_backup_to_remote(
+    backup_id: UUID, remote_id: UUID, admin: AdminJwt
+) -> JSONResponse:
+    """Pousse un backup local vers une connexion remote (SFTP, etc.) en streaming.
+
+    Le fichier n'est jamais chargé entièrement en mémoire : on lit par chunks de
+    64 KiB et on streame vers le provider distant via `upload_stream`.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        record = await backups_repo.get_backup(conn, backup_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "backup_not_found", "message": "Backup not found"},
+            )
+        remote = await remote_svc.get_connection(conn, remote_id)
+        if remote is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "remote_not_found", "message": "Remote connection not found"},
+            )
+        creds = await remote_svc.get_decrypted_credentials(conn, remote_id)
+        if creds is None:  # pragma: no cover — déjà filtré par get_connection
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "remote_not_found", "message": "Remote connection not found"},
+            )
+
+    file_path = Path(settings.backup_local_path) / record.filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "file_missing", "message": "Backup file not found on disk"},
+        )
+
+    provider = get_provider(remote.kind, remote.config, creds)
+    try:
+        bytes_sent = await provider.upload_stream(
+            record.filename, _stream_file_chunks(file_path)
+        )
+    except RemoteBackupProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": "remote_push_failed", "message": str(exc)},
+        ) from exc
+
+    async with pool.acquire() as conn:
+        await audit_log_insert(
+            conn,
+            "admin.backup_pushed_remote",
+            actor_user_id=None,
+            actor_ip=None,
+            target_wallet_id=None,
+            target_secret_id=None,
+            metadata={
+                "backup_id": str(backup_id),
+                "remote_id": str(remote_id),
+                "remote_name": remote.name,
+                "remote_filename": record.filename,
+                "bytes_sent": bytes_sent,
+            },
+        )
+
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={
+            "remote_id": str(remote_id),
+            "remote_name": remote.name,
+            "remote_filename": record.filename,
+            "bytes_sent": bytes_sent,
+        },
     )
 
 

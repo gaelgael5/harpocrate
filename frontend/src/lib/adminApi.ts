@@ -15,6 +15,12 @@ import {
   SecretTypeListResponseSchema,
   SecretTypeDetailSchema,
   ValidateSchemaResponseSchema,
+  RemoteBackupConnectionListResponseSchema,
+  RemoteBackupConnectionSchema,
+  RemoteBackupTestResponseSchema,
+  RemoteBackupPushResultSchema,
+  ReplicationStrategyListResponseSchema,
+  ReplicationStatusResponseSchema,
   type MaintenanceStatus,
   type BackupListResponse,
   type Backup,
@@ -30,6 +36,12 @@ import {
   type SecretTypeListResponse,
   type SecretTypeDetail,
   type ValidateSchemaResponse,
+  type RemoteBackupConnection,
+  type RemoteBackupConnectionListResponse,
+  type RemoteBackupTestResponse,
+  type RemoteBackupPushResult,
+  type ReplicationStrategyListResponse,
+  type ReplicationStatusResponse,
 } from '@/schemas/admin'
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
@@ -212,3 +224,95 @@ export async function validateJsonSchema(
   })
   return ValidateSchemaResponseSchema.parse(raw)
 }
+
+// ─── Remote backup connections (LOT remote backups) ──────────────────────────
+
+export async function fetchRemoteBackupConnections(): Promise<RemoteBackupConnectionListResponse> {
+  const raw = await api.get<unknown>('/admin/backup-remotes')
+  return RemoteBackupConnectionListResponseSchema.parse(raw)
+}
+
+export async function fetchRemoteBackupConnection(id: string): Promise<RemoteBackupConnection> {
+  const raw = await api.get<unknown>(`/admin/backup-remotes/${id}`)
+  return RemoteBackupConnectionSchema.parse(raw)
+}
+
+export interface RemoteBackupCreatePayload {
+  name: string
+  kind: 'sftp' | 's3' | 'ftps'
+  config: Record<string, unknown>
+  credentials: Record<string, unknown>
+}
+
+export async function createRemoteBackupConnection(
+  body: RemoteBackupCreatePayload,
+): Promise<{ id: string }> {
+  return api.post<{ id: string }>('/admin/backup-remotes', body)
+}
+
+export interface RemoteBackupUpdatePayload {
+  name?: string
+  config?: Record<string, unknown>
+  credentials?: Record<string, unknown>
+}
+
+export async function updateRemoteBackupConnection(
+  id: string,
+  body: RemoteBackupUpdatePayload,
+): Promise<{ updated: number }> {
+  return api.patch<{ updated: number }>(`/admin/backup-remotes/${id}`, body)
+}
+
+export async function deleteRemoteBackupConnection(id: string): Promise<void> {
+  await api.delete<void>(`/admin/backup-remotes/${id}`)
+}
+
+export async function pushBackupToRemote(
+  backupId: string,
+  remoteId: string,
+): Promise<RemoteBackupPushResult> {
+  const raw = await api.post<unknown>(
+    `/admin/backups/${backupId}/push-to-remote/${remoteId}`,
+    {},
+  )
+  return RemoteBackupPushResultSchema.parse(raw)
+}
+
+export async function testRemoteBackupConnection(id: string): Promise<RemoteBackupTestResponse> {
+  // Le backend renvoie 200 si OK, 502 si KO. api-client throw sur 502 → on catch ici
+  // pour récupérer le body et exposer le message d'erreur lisible côté UI.
+  try {
+    const raw = await api.post<unknown>(`/admin/backup-remotes/${id}/test`, {})
+    return RemoteBackupTestResponseSchema.parse(raw)
+  } catch (err) {
+    // ApiError contient le code/message — on les remappe en RemoteBackupTestResponse
+    const e = err as { code?: string; message?: string }
+    return {
+      ok: false,
+      error: e.code ?? 'test_failed',
+      message: e.message ?? 'Connection test failed',
+    }
+  }
+}
+
+// ─── Replication strategies (LOT_20) ─────────────────────────────────────────
+
+export async function fetchReplicationStrategies(): Promise<ReplicationStrategyListResponse> {
+  const raw = await api.get<unknown>('/admin/replication/strategies')
+  return ReplicationStrategyListResponseSchema.parse(raw)
+}
+
+export async function fetchReplicationStatus(): Promise<ReplicationStatusResponse> {
+  const raw = await api.get<unknown>('/admin/replication/status')
+  return ReplicationStatusResponseSchema.parse(raw)
+}
+
+export async function activateReplicationStrategy(
+  strategyId: string,
+): Promise<{ activated: boolean; strategy_id: string }> {
+  return api.post<{ activated: boolean; strategy_id: string }>(
+    `/admin/replication/strategies/${strategyId}/activate`,
+    {},
+  )
+}
+

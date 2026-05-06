@@ -36,6 +36,8 @@ import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { IntegrationPage } from '@/pages/IntegrationPage'
 import { AdminBackupsPage } from '@/pages/AdminBackupsPage'
+import { AdminRemoteBackupsPage } from '@/pages/AdminRemoteBackupsPage'
+import { AdminReplicationPage } from '@/pages/AdminReplicationPage'
 import { AdminUsersPage } from '@/pages/AdminUsersPage'
 import { AdminSystemPage } from '@/pages/AdminSystemPage'
 import { AdminSnapshotsPage } from '@/pages/AdminSnapshotsPage'
@@ -166,6 +168,8 @@ export default function App() {
             <Route path="/audit" element={<AuditLogPage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/admin/backups" element={<AdminBackupsPage />} />
+            <Route path="/admin/backup-remotes" element={<AdminRemoteBackupsPage />} />
+            <Route path="/admin/replication" element={<AdminReplicationPage />} />
             <Route path="/admin/snapshots" element={<AdminSnapshotsPage />} />
             <Route path="/admin/secret-types" element={<AdminSecretTypesPage />} />
             <Route path="/admin/secret-types/new" element={<AdminSecretTypeCreatePage />} />

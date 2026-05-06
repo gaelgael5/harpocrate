@@ -36,6 +36,58 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     apps_file: str = Field(default="/app/apps.json")
 
+    # ─── Clustering (LOT_21A) ─────────────────────────────────────────────────
+    # Identifiant unique du nœud dans les logs cluster. Auto-généré si vide
+    # (hostname-pid). Injecter manuellement en prod pour avoir des IDs stables.
+    instance_id: str = Field(default="")
+
+    # ─── Stratégie de réplication (LOT_20) ────────────────────────────────────
+    # Postgres standalone par défaut. Bascule possible en runtime via UI admin.
+    replication_strategy: str = Field(
+        default="none",
+        description="none | patroni | harpocrate_sync | s3_wal",
+    )
+    patroni_api_urls: str = Field(
+        default="",
+        description="CSV des URLs API REST Patroni (ex http://10.0.0.1:8008,http://10.0.0.2:8008)",
+    )
+    postgres_replica_dsn: str = Field(
+        default="",
+        description="DSN du replica Postgres pour les lectures non critiques (LOT_20)",
+        json_schema_extra={"is_secret": True},
+    )
+
+    # ─── Réplication MQTT (LOT_21B) ──────────────────────────────────────────
+    sync_enabled: bool = Field(
+        default=False,
+        description="Active la réplication applicative MQTT inter-instances",
+    )
+    sync_cluster_id: str = Field(
+        default="harpocrate",
+        description="Identifiant logique du cluster (isolation broker MQTT mutualisé)",
+    )
+    sync_mqtt_host: str = Field(default="")
+    sync_mqtt_port: int = Field(default=1883)
+    sync_mqtt_username: str = Field(default="")
+    sync_mqtt_password: str = Field(
+        default="",
+        json_schema_extra={"is_secret": True},
+    )
+    sync_log_retention_days: int = Field(
+        default=7,
+        ge=1,
+        description="Rétention sync_log avant purge (futur lot de cron)",
+    )
+
+    @field_validator("instance_id")
+    @classmethod
+    def _auto_instance_id(cls, v: str) -> str:
+        if v:
+            return v
+        import os
+        import socket
+        return f"{socket.gethostname()}-{os.getpid()}"
+
     # ─── Auth locale (alternative à Keycloak OIDC) ────────────────────────────
     # WARNING : mot de passe stocké en clair dans .env — le fichier doit être en 600.
     # Activer uniquement pour dev / break-glass.

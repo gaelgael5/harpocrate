@@ -18,6 +18,7 @@ import {
   Switch,
   Divider,
   Card,
+  Menu,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
@@ -35,6 +36,8 @@ import {
   fetchS3Backups,
   pushBackupToS3,
   pullBackupFromS3,
+  fetchRemoteBackupConnections,
+  pushBackupToRemote,
 } from '@/lib/adminApi'
 import type { Backup } from '@/schemas/admin'
 
@@ -314,6 +317,31 @@ export function AdminBackupsPage() {
     },
   })
 
+  // Connexions backup distantes (LOT L3) — partagé avec AdminRemoteBackupsPage
+  const { data: remotesData } = useQuery({
+    queryKey: ['admin-remote-backups'],
+    queryFn: fetchRemoteBackupConnections,
+  })
+  const remotes = remotesData?.connections ?? []
+
+  const pushRemoteMut = useMutation({
+    mutationFn: (args: { backupId: string; remoteId: string }) =>
+      pushBackupToRemote(args.backupId, args.remoteId),
+    onSuccess: (result) => {
+      notifications.show({
+        color: 'green',
+        message: t('admin.backups.pushRemoteSuccess', {
+          name: result.remote_name,
+          size: formatBytes(result.bytes_sent),
+        }),
+      })
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : t('admin.backups.pushRemoteError')
+      notifications.show({ color: 'red', message: msg, autoClose: 8000 })
+    },
+  })
+
   const createMut = useMutation({
     mutationFn: () => createBackup({ description: description || undefined }),
     onSuccess: () => {
@@ -430,6 +458,42 @@ export function AdminBackupsPage() {
                     >
                       {pushS3Mut.isPending ? t('admin.backups.pushingS3') : t('admin.backups.pushS3')}
                     </Button>
+                    <Menu position="bottom-end" withinPortal>
+                      <Menu.Target>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          color="brand"
+                          loading={
+                            pushRemoteMut.isPending && pushRemoteMut.variables?.backupId === b.id
+                          }
+                          disabled={remotes.length === 0}
+                          title={
+                            remotes.length === 0
+                              ? t('admin.backups.pushRemoteEmpty')
+                              : undefined
+                          }
+                        >
+                          {t('admin.backups.pushRemote')}
+                        </Button>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Label>{t('admin.backups.pushRemotePick')}</Menu.Label>
+                        {remotes.map((r) => (
+                          <Menu.Item
+                            key={r.id}
+                            onClick={() =>
+                              pushRemoteMut.mutate({ backupId: b.id, remoteId: r.id })
+                            }
+                          >
+                            {r.name}{' '}
+                            <Text span c="dimmed" size="xs">
+                              ({r.kind})
+                            </Text>
+                          </Menu.Item>
+                        ))}
+                      </Menu.Dropdown>
+                    </Menu>
                     <Button
                       size="xs"
                       variant="outline"

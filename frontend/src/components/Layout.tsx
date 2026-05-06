@@ -116,8 +116,10 @@ export function Layout() {
           <>
             <div className={styles.divider} />
             <Text className={styles.sectionLabel}>Administration</Text>
-            <NavLink component={RouterNavLink} to="/admin/backups"      label={t('admin.nav_backups')} />
-            <NavLink component={RouterNavLink} to="/admin/snapshots"    label={t('admin.nav_snapshots')} />
+            <NavLink component={RouterNavLink} to="/admin/backups"        label={t('admin.nav_backups')} />
+            <NavLink component={RouterNavLink} to="/admin/backup-remotes" label={t('admin.nav_remote_backups')} />
+            <NavLink component={RouterNavLink} to="/admin/replication"    label={t('admin.nav_replication')} />
+            <NavLink component={RouterNavLink} to="/admin/snapshots"      label={t('admin.nav_snapshots')} />
             <NavLink component={RouterNavLink} to="/admin/secret-types" label={t('admin.nav_secret_types')} />
             <NavLink component={RouterNavLink} to="/admin/users"        label={t('admin.nav_users')} />
             <NavLink component={RouterNavLink} to="/admin/system"       label={t('admin.nav_system')} />

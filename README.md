@@ -184,3 +184,29 @@ docker compose -f /opt/harpocrate/docker-compose.yml logs -f frontend
 docker compose -f /opt/harpocrate/docker-compose.yml logs -f backend
 
 ```
+
+---
+
+## Sauvegardes
+
+Trois mécanismes complémentaires, accessibles via **Administration → Sauvegardes** :
+
+- **Sauvegardes locales** — création d'un `.tar.age` chiffré avec la clé publique AGE configurée dans `HARPOCRATE_AGE_PUBLIC_KEY`. Restauration via la clé privée saisie côté UI uniquement, jamais persistée serveur.
+- **Snapshots automatiques** — politique GFS (hourly/daily/weekly/monthly/yearly) configurable depuis l'écran Snapshots auto.
+- **Backups distants** — connexions SFTP gérées dans **Backups distants**, push manuel d'une sauvegarde locale vers la connexion choisie. Les credentials sont chiffrés serveur via AES-GCM (clé dérivée HKDF de `HARPOCRATE_HMAC_KEY`) et ne sont jamais retournés en clair par l'API. Stream chunk-par-chunk vers le serveur distant — le fichier n'est jamais chargé entièrement en RAM.
+- **Push S3** — alternative S3 compatible (`HARPOCRATE_S3_*`).
+
+---
+
+## Documentation
+
+Documentation détaillée (architecture, modèle de menace, intégration SDK) :  
+👉 [Wiki Harpocrate](https://github.com/gaelgael5/harpocrate/wiki)
+
+SDK clients officiels (Python, …) téléchargeables depuis l'écran **Intégration** de l'application.
+
+---
+
+## Licence
+
+Voir [LICENSE](./LICENSE).

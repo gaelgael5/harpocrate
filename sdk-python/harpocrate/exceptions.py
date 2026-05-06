@@ -54,3 +54,16 @@ class PlaceholderNotPopulated(HarpocrateError):
 
 class GeneratorError(HarpocrateError):
     """Erreur dans l'un des 9 générateurs."""
+
+
+class SecretRefreshFailed(HarpocrateError):
+    """Le refresh forcé d'un secret a échoué (LOT_22).
+
+    Levée par `notify_auth_error()` ou `using_secret()` quand un retry de
+    refresh est impossible (secret supprimé, API key révoquée, etc.).
+    """
+
+    def __init__(self, secret_name: str, reason: str) -> None:
+        super().__init__(f"Failed to refresh secret '{secret_name}': {reason}")
+        self.secret_name = secret_name
+        self.reason = reason

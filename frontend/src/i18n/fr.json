@@ -144,6 +144,14 @@
     "editValue": "Modifier la valeur",
     "generating": "Génération...",
     "placeholder": "Placeholder (sans valeur)",
+    "generate": {
+      "hint": "Tu peux générer une nouvelle paire de clés directement dans ton navigateur (la clé privée ne quitte pas ton appareil avant chiffrement). Tu peux aussi remplir les champs manuellement pour importer une paire existante.",
+      "wireguardButton": "Générer une paire WireGuard",
+      "sshButton": "Générer une paire SSH Ed25519",
+      "wireguardSuccess": "Paire WireGuard générée — vérifie/complète les autres champs avant de créer.",
+      "sshSuccess": "Paire SSH Ed25519 générée — vérifie/complète les autres champs avant de créer.",
+      "failed": "Échec de la génération"
+    },
     "populate": "Générer la valeur maintenant",
     "valueCopied": "Valeur copiée dans le presse-papiers",
     "decrypting": "Déchiffrement...",

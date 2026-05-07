@@ -24,6 +24,10 @@ import { api, ApiError } from '@/lib/api-client'
 import { aesGcmEncrypt } from '@/crypto/aes-gcm'
 import { rsaOaepDecrypt } from '@/crypto/rsa-oaep'
 import { fromBase64, toBase64, textToBytes } from '@/crypto/helpers'
+import {
+  generateSshEd25519Keypair,
+  generateWireguardKeypair,
+} from '@/crypto/keypair-gen'
 import { useCryptoStore } from '@/stores/crypto'
 import { SecretCreateResponseSchema } from '@/schemas/secrets'
 import { MyGrantResponseSchema } from '@/schemas/grants'
@@ -189,6 +193,52 @@ export function SecretNewPage() {
     (v) => v.version_uuid === selectedVersionUuid,
   )
 
+  // Sous-type courant — sert à proposer la génération côté navigateur pour
+  // les types qui le permettent (LOT certificats, étape 2-3).
+  const currentSousType = selectedTypeDetail?.sous_type ?? null
+  const supportsClientGen =
+    currentSousType === 'wireguard_peer' || currentSousType === 'ssh_user'
+
+  async function handleGenerateKeypair() {
+    try {
+      if (currentSousType === 'wireguard_peer') {
+        const kp = await generateWireguardKeypair()
+        setTypedFormData({
+          ...(typedFormData as Record<string, unknown>),
+          private_key: kp.privateKey,
+          public_key: kp.publicKey,
+        })
+        notifications.show({
+          color: 'green',
+          message: t('secrets.generate.wireguardSuccess'),
+        })
+      } else if (currentSousType === 'ssh_user') {
+        const existingComment =
+          ((typedFormData as Record<string, unknown>).comment as string) ?? ''
+        const kp = await generateSshEd25519Keypair(existingComment)
+        setTypedFormData({
+          ...(typedFormData as Record<string, unknown>),
+          key_type: 'ed25519',
+          private_key: kp.privateKey,
+          public_key: kp.publicKey,
+          fingerprint: kp.fingerprint,
+        })
+        notifications.show({
+          color: 'green',
+          message: t('secrets.generate.sshSuccess'),
+        })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      notifications.show({
+        color: 'red',
+        title: t('secrets.generate.failed'),
+        message: msg,
+        autoClose: 8000,
+      })
+    }
+  }
+
   return (
     <Stack maw={600}>
       <Title order={2}>{t('secrets.create')}</Title>
@@ -250,12 +300,32 @@ export function SecretNewPage() {
           <Divider />
 
           {activeSchema ? (
-            <TypedSecretForm
-              schemaData={activeSchema.schema_data}
-              schemaUi={activeSchema.schema_ui}
-              initialValue={typedFormData}
-              onChange={setTypedFormData}
-            />
+            <Stack>
+              {supportsClientGen && (
+                <Alert color="blue" variant="light">
+                  <Stack gap="xs">
+                    <Text size="sm">{t('secrets.generate.hint')}</Text>
+                    <Group>
+                      <Button
+                        variant="filled"
+                        size="sm"
+                        onClick={() => void handleGenerateKeypair()}
+                      >
+                        {currentSousType === 'wireguard_peer'
+                          ? t('secrets.generate.wireguardButton')
+                          : t('secrets.generate.sshButton')}
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Alert>
+              )}
+              <TypedSecretForm
+                schemaData={activeSchema.schema_data}
+                schemaUi={activeSchema.schema_ui}
+                initialValue={typedFormData}
+                onChange={setTypedFormData}
+              />
+            </Stack>
           ) : (
             <Textarea
               label={t('secrets.value')}

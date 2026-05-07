@@ -143,6 +143,14 @@
     "editValue": "Edit value",
     "generating": "Generating...",
     "placeholder": "Placeholder (no value)",
+    "generate": {
+      "hint": "Generate a fresh keypair directly in your browser (the private key never leaves your device unencrypted). You can also fill the fields manually to import an existing pair.",
+      "wireguardButton": "Generate WireGuard keypair",
+      "sshButton": "Generate SSH Ed25519 keypair",
+      "wireguardSuccess": "WireGuard keypair generated — check/complete the other fields before creating.",
+      "sshSuccess": "SSH Ed25519 keypair generated — check/complete the other fields before creating.",
+      "failed": "Generation failed"
+    },
     "populate": "Generate value now",
     "valueCopied": "Value copied to clipboard",
     "decrypting": "Decrypting...",

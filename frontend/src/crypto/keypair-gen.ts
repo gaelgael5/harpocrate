@@ -8,9 +8,13 @@
  * Compat navigateurs (au 2026-05-07) :
  * - X25519 (WireGuard) : Chrome 134+, Firefox 130+, Safari 17.4+
  * - Ed25519 (SSH)      : Chrome 137+, Firefox 129+, Safari 17+
+ * - RSA-PSS / RSA-OAEP : universellement supporté
  *
  * Sur navigateur trop ancien : exception explicite avec message clair.
  */
+
+import * as asn1js from 'asn1js'
+import * as pkijs from 'pkijs'
 
 import { toBase64 } from './helpers'
 
@@ -211,4 +215,211 @@ export async function generateSshEd25519Keypair(
   const privateKeyText = `-----BEGIN OPENSSH PRIVATE KEY-----\n${wrapped}\n-----END OPENSSH PRIVATE KEY-----\n`
 
   return { privateKey: privateKeyText, publicKey: publicKeyText, fingerprint }
+}
+
+// ─── TLS server (auto-signé via pkijs) ───────────────────────────────────────
+
+export interface TlsServerKeypair {
+  /** Certificat X.509 PEM (-----BEGIN CERTIFICATE-----...). */
+  certificate: string
+  /** Clé privée PEM PKCS#8 (-----BEGIN PRIVATE KEY-----...). */
+  privateKey: string
+  /** Empreinte SHA-256 du DER (64 chars hex). */
+  fingerprintSha256: string
+  notBefore: string  // ISO date YYYY-MM-DD
+  notAfter: string   // ISO date YYYY-MM-DD
+}
+
+export interface TlsGenerationOptions {
+  commonName: string
+  /** Liste de DNS et/ou IPs (les IPs sont auto-détectées par regex IPv4/IPv6). */
+  subjectAlternativeNames?: string[]
+  /** Validité en jours (défaut 365). */
+  validityDays?: number
+  /** Taille de clé RSA en bits (2048, 3072 ou 4096 — défaut 4096). */
+  keySize?: 2048 | 3072 | 4096
+}
+
+const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/
+const IPV6_RE = /^[0-9a-fA-F:]+$/
+
+function pemWrap(label: string, derBuffer: ArrayBuffer): string {
+  let s = ''
+  const view = new Uint8Array(derBuffer)
+  for (const b of view) s += String.fromCharCode(b)
+  const b64 = btoa(s)
+  const wrapped = b64.match(/.{1,64}/g)?.join('\n') ?? b64
+  return `-----BEGIN ${label}-----\n${wrapped}\n-----END ${label}-----\n`
+}
+
+async function fingerprintHex(buf: ArrayBuffer): Promise<string> {
+  const sha = await globalThis.crypto.subtle.digest('SHA-256', buf)
+  return Array.from(new Uint8Array(sha))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
+ * Génère un certificat TLS serveur RSA auto-signé via pkijs + WebCrypto.
+ *
+ * Usage type : certificat "lab" / dev / mTLS interne. Pour la prod publique,
+ * utiliser Let's Encrypt et uploader le résultat ici.
+ */
+export async function generateTlsServerKeypair(
+  options: TlsGenerationOptions,
+): Promise<TlsServerKeypair> {
+  if (typeof globalThis.crypto?.subtle === 'undefined') {
+    throw new Error('Web Crypto API unavailable in this browser')
+  }
+  const cn = options.commonName.trim()
+  if (!cn) throw new Error('commonName is required')
+  const sans = (options.subjectAlternativeNames ?? []).map((s) => s.trim()).filter(Boolean)
+  const validityDays = options.validityDays ?? 365
+  const keySize = options.keySize ?? 4096
+
+  // 1. Génère la paire RSA-PSS via WebCrypto (signature SHA-256)
+  const kp = (await globalThis.crypto.subtle.generateKey(
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      modulusLength: keySize,
+      publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+      hash: 'SHA-256',
+    },
+    true,
+    ['sign', 'verify'],
+  )) as CryptoKeyPair
+
+  // 2. Construit le certificat via pkijs
+  const cert = new pkijs.Certificate()
+  cert.version = 2  // X.509 v3
+
+  // Numéro de série aléatoire 16 bytes (positive integer)
+  const serialBytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
+  // Forcer positif (high bit à 0). serialBytes[0] est toujours défini ici (taille 16).
+  serialBytes[0] = (serialBytes[0] ?? 0) & 0x7f
+  cert.serialNumber = new asn1js.Integer({ valueHex: serialBytes })
+
+  // Subject + Issuer (auto-signé : identiques)
+  const cnAttr = new pkijs.AttributeTypeAndValue({
+    type: '2.5.4.3',  // commonName
+    value: new asn1js.Utf8String({ value: cn }),
+  })
+  cert.subject.typesAndValues.push(cnAttr)
+  cert.issuer.typesAndValues.push(
+    new pkijs.AttributeTypeAndValue({
+      type: '2.5.4.3',
+      value: new asn1js.Utf8String({ value: cn }),
+    }),
+  )
+
+  // Validité
+  const now = new Date()
+  const notAfter = new Date(now.getTime() + validityDays * 24 * 60 * 60 * 1000)
+  cert.notBefore.value = now
+  cert.notAfter.value = notAfter
+
+  // Charge la clé publique dans le SubjectPublicKeyInfo
+  await cert.subjectPublicKeyInfo.importKey(kp.publicKey)
+
+  // ── Extensions ─────────────────────────────────────────────────────────
+  cert.extensions = []
+
+  // Basic constraints : pas une CA
+  const basicConstr = new pkijs.BasicConstraints({ cA: false })
+  cert.extensions.push(
+    new pkijs.Extension({
+      extnID: '2.5.29.19',
+      critical: true,
+      extnValue: basicConstr.toSchema().toBER(false),
+      parsedValue: basicConstr,
+    }),
+  )
+
+  // Key usage : digitalSignature + keyEncipherment
+  const keyUsageBits = new Uint8Array([0]) // 1 byte
+  // bit 0 (digitalSignature) + bit 2 (keyEncipherment) = 0xA0 (DER bit string)
+  keyUsageBits[0] = 0b10100000
+  const keyUsage = new asn1js.BitString({ valueHex: keyUsageBits })
+  cert.extensions.push(
+    new pkijs.Extension({
+      extnID: '2.5.29.15',
+      critical: true,
+      extnValue: keyUsage.toBER(false),
+      parsedValue: keyUsage,
+    }),
+  )
+
+  // Extended key usage : serverAuth + clientAuth
+  const extKeyUsage = new pkijs.ExtKeyUsage({
+    keyPurposes: ['1.3.6.1.5.5.7.3.1', '1.3.6.1.5.5.7.3.2'],
+  })
+  cert.extensions.push(
+    new pkijs.Extension({
+      extnID: '2.5.29.37',
+      critical: false,
+      extnValue: extKeyUsage.toSchema().toBER(false),
+      parsedValue: extKeyUsage,
+    }),
+  )
+
+  // Subject Alternative Names — ajoute le CN comme DNS si pas déjà présent
+  const sansFinal = sans.length > 0 ? sans : [cn]
+  const altNames = new pkijs.GeneralNames({
+    names: sansFinal.map((value) => {
+      if (IPV4_RE.test(value)) {
+        const octets = value.split('.').map((o) => parseInt(o, 10))
+        return new pkijs.GeneralName({
+          type: 7,
+          value: new asn1js.OctetString({ valueHex: new Uint8Array(octets) }),
+        })
+      }
+      if (IPV6_RE.test(value) && value.includes(':')) {
+        // Implementation IPv6 simple : on n'expand pas, on rejette les formes complexes
+        // pour éviter une lib supplémentaire — l'admin peut fallback en DNS.
+        const groups = value.split(':')
+        if (groups.length !== 8 || groups.some((g) => !/^[0-9a-fA-F]{1,4}$/.test(g))) {
+          throw new Error(`IPv6 must be in fully-expanded form (got ${value})`)
+        }
+        const bytes = new Uint8Array(16)
+        groups.forEach((g, i) => {
+          const n = parseInt(g, 16)
+          bytes[i * 2] = (n >> 8) & 0xff
+          bytes[i * 2 + 1] = n & 0xff
+        })
+        return new pkijs.GeneralName({
+          type: 7,
+          value: new asn1js.OctetString({ valueHex: bytes }),
+        })
+      }
+      // dNSName par défaut
+      return new pkijs.GeneralName({ type: 2, value })
+    }),
+  })
+  cert.extensions.push(
+    new pkijs.Extension({
+      extnID: '2.5.29.17',
+      critical: false,
+      extnValue: altNames.toSchema().toBER(false),
+      parsedValue: altNames,
+    }),
+  )
+
+  // 3. Signe le certificat
+  await cert.sign(kp.privateKey, 'SHA-256')
+
+  // 4. Encode certificat (DER → PEM) et clé privée (PKCS#8 → PEM)
+  const certDer = cert.toSchema(true).toBER(false)
+  const certPem = pemWrap('CERTIFICATE', certDer)
+  const fingerprintHexStr = await fingerprintHex(certDer)
+
+  const pkcs8 = await globalThis.crypto.subtle.exportKey('pkcs8', kp.privateKey)
+  const keyPem = pemWrap('PRIVATE KEY', pkcs8)
+
+  return {
+    certificate: certPem,
+    privateKey: keyPem,
+    fingerprintSha256: fingerprintHexStr,
+    notBefore: now.toISOString().slice(0, 10),
+    notAfter: notAfter.toISOString().slice(0, 10),
+  }
 }

@@ -1,0 +1,22 @@
+{
+  "ui:order": [
+    "subject",
+    "issuer",
+    "not_before",
+    "not_after",
+    "thumbprint",
+    "pfx_base64",
+    "password"
+  ],
+  "thumbprint": {
+    "ui:options": { "copyable": true }
+  },
+  "pfx_base64": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true, "rows": 12 }
+  },
+  "password": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true }
+  }
+}

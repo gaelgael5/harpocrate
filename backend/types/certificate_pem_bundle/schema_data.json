@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Bundle PEM/JSON générique",
+  "description": "Fourre-tout pour les artefacts crypto qui n'ont pas de type dédié : CA isolée, JSON service account, .p8 Apple, etc. Upload only.",
+  "properties": {
+    "format": {
+      "type": "string",
+      "title": "Format",
+      "enum": ["PEM", "DER", "JSON", "BASE64", "TEXT", "OTHER"],
+      "default": "PEM"
+    },
+    "label": {
+      "type": "string",
+      "title": "Étiquette",
+      "description": "Description courte du contenu (ex : CA root yoops, Apple APNs key, Google service account)"
+    },
+    "content": {
+      "type": "string",
+      "title": "Contenu",
+      "description": "Le bundle brut, tel que stocké sur disque",
+      "minLength": 1
+    },
+    "password": {
+      "type": "string",
+      "title": "Mot de passe (optionnel)",
+      "description": "Si le bundle est chiffré (rare en PEM, fréquent en PFX)"
+    },
+    "note": {
+      "type": "string",
+      "title": "Note libre"
+    }
+  },
+  "required": ["content"],
+  "additionalProperties": false
+}

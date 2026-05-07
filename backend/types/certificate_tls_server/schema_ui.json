@@ -1,0 +1,34 @@
+{
+  "ui:order": [
+    "common_name",
+    "subject_alt_names",
+    "issuer",
+    "not_before",
+    "not_after",
+    "fingerprint_sha256",
+    "certificate",
+    "private_key",
+    "chain"
+  ],
+  "common_name": {
+    "ui:options": { "copyable": true }
+  },
+  "subject_alt_names": {
+    "ui:options": { "orderable": false }
+  },
+  "fingerprint_sha256": {
+    "ui:options": { "copyable": true }
+  },
+  "certificate": {
+    "ui:widget": "textarea",
+    "ui:options": { "rows": 10, "copyable": true }
+  },
+  "private_key": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true, "rows": 10 }
+  },
+  "chain": {
+    "ui:widget": "textarea",
+    "ui:options": { "rows": 6, "copyable": true }
+  }
+}

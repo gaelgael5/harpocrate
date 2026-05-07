@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Pair WireGuard",
+  "description": "Paire de clés Curve25519 d'un peer WireGuard + paramètres de connexion.",
+  "properties": {
+    "peer_name": {
+      "type": "string",
+      "title": "Nom du peer",
+      "description": "Identifiant lisible (ex : laptop-alice, server-paris)"
+    },
+    "endpoint": {
+      "type": "string",
+      "title": "Endpoint",
+      "description": "host:port du peer (ex : vpn.example.com:51820), optionnel pour les clients"
+    },
+    "allowed_ips": {
+      "type": "array",
+      "title": "Allowed IPs",
+      "items": { "type": "string" },
+      "description": "Plages routées via ce tunnel (ex : 10.0.0.0/24, 0.0.0.0/0)"
+    },
+    "dns": {
+      "type": "array",
+      "title": "DNS (optionnel)",
+      "items": { "type": "string" },
+      "description": "Serveurs DNS poussés au client"
+    },
+    "persistent_keepalive": {
+      "type": "integer",
+      "title": "Persistent keepalive (secondes)",
+      "description": "Typiquement 25 derrière NAT, 0 pour désactiver",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Clé privée (base64)",
+      "description": "32 bytes Curve25519 encodés en base64",
+      "minLength": 1
+    },
+    "public_key": {
+      "type": "string",
+      "title": "Clé publique (base64)",
+      "minLength": 1
+    },
+    "preshared_key": {
+      "type": "string",
+      "title": "Pre-shared key (optionnel, base64)",
+      "description": "Couche supplémentaire de symmetric crypto"
+    }
+  },
+  "required": ["private_key", "public_key"],
+  "additionalProperties": false
+}

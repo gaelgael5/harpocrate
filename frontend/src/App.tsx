@@ -60,6 +60,21 @@ function ContentWithBannerOffset({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * Route /integration : accessible publiquement (pas d'auth requise) MAIS
+ * rendue dans le Layout admin si l'utilisateur est connecté + déverrouillé,
+ * pour ne pas faire disparaître la sidebar quand on navigue vers
+ * Intégration depuis l'app authentifiée.
+ */
+function IntegrationRoute({ children }: { children: ReactNode }) {
+  const user = useSessionStore((s) => s.user)
+  const isUnlocked = useCryptoStore((s) => s.isUnlocked)
+  if (user && isUnlocked) {
+    return <Layout>{children}</Layout>
+  }
+  return <>{children}</>
+}
+
 export default function App() {
   const { t } = useTranslation()
   // null = config fetch en cours, true = prêt, false = échec ou Keycloak indispo
@@ -134,8 +149,22 @@ export default function App() {
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
           <Route path="/first-login" element={<FirstLoginPage />} />
           <Route path="/unlock" element={<UnlockPage />} />
-          <Route path="/integration" element={<IntegrationPage />} />
-          <Route path="/integration/api-docs" element={<ApiDocsPage />} />
+          <Route
+            path="/integration"
+            element={
+              <IntegrationRoute>
+                <IntegrationPage />
+              </IntegrationRoute>
+            }
+          />
+          <Route
+            path="/integration/api-docs"
+            element={
+              <IntegrationRoute>
+                <ApiDocsPage />
+              </IntegrationRoute>
+            }
+          />
 
           {/* Protected routes — require OIDC + vault unlocked */}
           <Route

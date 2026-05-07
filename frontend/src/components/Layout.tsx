@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react'
 import {
   AppShell,
   Burger,
@@ -21,7 +22,17 @@ import { useDevMode, DEV_BANNER_HEIGHT } from '@/hooks/useDevMode'
 import { useAdminRole } from '@/hooks/useAdminRole'
 import styles from './Layout.module.css'
 
-export function Layout() {
+/**
+ * Layout principal de l'app authentifiée.
+ *
+ * Utilisable en deux modes :
+ * - Comme parent-route : `<Route element={<Layout />}>...<Route .../></Route>` —
+ *   les sub-routes sont rendues via `<Outlet />`.
+ * - Avec children explicites : `<Layout><MaPage /></Layout>` — utile pour
+ *   rendre des pages publiques avec la sidebar quand l'utilisateur est
+ *   authentifié (ex : /integration accessible avant ET après login).
+ */
+export function Layout({ children }: { children?: ReactNode }) {
   const { t } = useTranslation()
   const [opened, { toggle }] = useDisclosure()
   const lock = useCryptoStore((s) => s.lock)
@@ -129,7 +140,7 @@ export function Layout() {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Outlet />
+        {children ?? <Outlet />}
       </AppShell.Main>
     </AppShell>
   )

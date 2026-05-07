@@ -27,7 +27,7 @@ import {
   Alert,
   TextInput,
   Textarea,
-  NumberInput,
+  Select,
   Collapse,
   Table,
 } from '@mantine/core'
@@ -73,7 +73,9 @@ export function ApiKeysPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [permissions, setPermissions] = useState(0)
-  const [expiresInDays, setExpiresInDays] = useState<number | string>('')
+  // 'never' = pas d'expiration, sinon string nombre de jours ('30', '60', '90', '120', '365').
+  // Default à 90 jours pour pousser les bonnes pratiques (rotation régulière).
+  const [expiresInDays, setExpiresInDays] = useState<string>('90')
   const [isCreating, setIsCreating] = useState(false)
   const [shownToken, setShownToken] = useState<string | null>(null)
 
@@ -81,7 +83,7 @@ export function ApiKeysPage() {
     setName('')
     setDescription('')
     setPermissions(0)
-    setExpiresInDays('')
+    setExpiresInDays('90')
   }
 
   async function getWalletKey(): Promise<Uint8Array> {
@@ -136,13 +138,15 @@ export function ApiKeysPage() {
       // 5. encrypted_decryption_key_for_owner = RSA-OAEP(decryption_key, rsa_pub_owner)
       const encryptedDecryptionKey = await rsaOaepEncrypt(decryptionKeyBytes, rsaPublicKey)
 
-      // 6. expires_at
+      // 6. expires_at — valeur 'never' = pas d'expiration, sinon nombre de jours
       let expiresAt: string | null = null
-      const days = typeof expiresInDays === 'number' ? expiresInDays : null
-      if (days !== null && days > 0) {
-        const d = new Date()
-        d.setDate(d.getDate() + days)
-        expiresAt = d.toISOString()
+      if (expiresInDays !== 'never') {
+        const days = parseInt(expiresInDays, 10)
+        if (!Number.isNaN(days) && days > 0) {
+          const d = new Date()
+          d.setDate(d.getDate() + days)
+          expiresAt = d.toISOString()
+        }
       }
 
       const result = await createMutation.mutateAsync({
@@ -245,14 +249,21 @@ export function ApiKeysPage() {
             </Text>
             <PermissionsCheckboxes value={permissions} onChange={setPermissions} />
 
-            <NumberInput
+            <Select
               label={t('apiKeys.expiresInDays')}
               description={t('apiKeys.expiresInDaysHint')}
+              data={[
+                { value: '30', label: t('apiKeys.expirationOption', { count: 30 }) },
+                { value: '60', label: t('apiKeys.expirationOption', { count: 60 }) },
+                { value: '90', label: t('apiKeys.expirationOption', { count: 90 }) },
+                { value: '120', label: t('apiKeys.expirationOption', { count: 120 }) },
+                { value: '365', label: t('apiKeys.expirationOption', { count: 365 }) },
+                { value: 'never', label: t('apiKeys.expirationNever') },
+              ]}
               value={expiresInDays}
-              onChange={setExpiresInDays}
-              min={1}
-              step={1}
-              allowDecimal={false}
+              onChange={(v) => setExpiresInDays(v ?? '90')}
+              allowDeselect={false}
+              required
             />
 
             <Group>

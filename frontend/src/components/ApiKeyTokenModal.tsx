@@ -4,7 +4,7 @@
  * Le token n'est jamais re-montré après fermeture de ce modal.
  * L'utilisateur doit confirmer qu'il a sauvegardé le token avant de pouvoir fermer.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Modal,
   Code,
@@ -28,6 +28,16 @@ export function ApiKeyTokenModal({ token, onClose }: Props) {
   const [copied, setCopied] = useState(false)
 
   const isOpen = token !== null
+
+  // Reset l'état local à chaque changement de token (création d'une 2e API key
+  // après en avoir copié une 1re : sans ça, `copied=true` persistait et le
+  // bouton affichait directement « Copié ! » sans avoir cliqué).
+  useEffect(() => {
+    if (token !== null) {
+      setConfirmed(false)
+      setCopied(false)
+    }
+  }, [token])
 
   async function handleCopy() {
     if (!token) return

@@ -13,8 +13,10 @@
  * Sur navigateur trop ancien : exception explicite avec message clair.
  */
 
-import * as asn1js from 'asn1js'
-import * as pkijs from 'pkijs'
+// Note : pkijs + asn1js (~80 KB) sont importés dynamiquement à l'intérieur
+// de generateTlsServerKeypair() — ils ne sont chargés QUE lors de la
+// génération TLS, pas au boot de l'app ni pour WireGuard/SSH (qui n'utilisent
+// que WebCrypto natif). Vite émet un chunk JS séparé.
 
 import { toBase64 } from './helpers'
 
@@ -276,6 +278,10 @@ export async function generateTlsServerKeypair(
   const sans = (options.subjectAlternativeNames ?? []).map((s) => s.trim()).filter(Boolean)
   const validityDays = options.validityDays ?? 365
   const keySize = options.keySize ?? 4096
+
+  // Imports dynamiques — chargent ~80 KB de JS uniquement quand on génère
+  // un TLS, pas au démarrage. Vite/esbuild émet automatiquement un chunk.
+  const [pkijs, asn1js] = await Promise.all([import('pkijs'), import('asn1js')])
 
   // 1. Génère la paire RSA-PSS via WebCrypto (signature SHA-256)
   const kp = (await globalThis.crypto.subtle.generateKey(

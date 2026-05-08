@@ -112,6 +112,7 @@ async def start_session(
     *,
     email: str,
     ip: str | None,
+    user_agent: str | None = None,
     public_url: str | None = None,
 ) -> None:
     """Crée une session et déclenche la notification.
@@ -126,7 +127,6 @@ async def start_session(
 
     user_row = await users_repo.get_id_and_is_system_by_email(conn, email)
     user_id: UUID | None = None
-    user_display_name: str | None = None
     if user_row is not None:
         user_id, is_system = user_row
         # On ne déclenche pas de recovery pour un system user (admin local) :
@@ -138,11 +138,6 @@ async def start_session(
                 user_id=str(user_id),
             )
             user_id = None
-        else:
-            display = await conn.fetchval(
-                "SELECT display_name FROM users WHERE id = $1", user_id
-            )
-            user_display_name = display
 
     session_id = await repo.insert(
         conn,
@@ -161,6 +156,19 @@ async def start_session(
         # La fonction trigger_event swallow déjà ses erreurs.
         link_base = (public_url or settings.public_url).rstrip("/")
         recovery_link = f"{link_base}/recover/{session_id}"
+        # Payload aligné sur le schéma JSON-Schema déclaré côté workflow Novu.
+        # Tous les champs sont des strings — Novu valide strictement les types.
+        # `appName`, `year`, `requestedAt` sont calculés ici ; `requestIp` et
+        # `requestUserAgent` viennent du request HTTP côté endpoint /start.
+        novu_payload = {
+            "appName": "Harpocrate",
+            "expiresInMinutes": str(int(ttl.total_seconds() / 60)),
+            "recoveryLink": recovery_link,
+            "requestIp": ip or "",
+            "requestUserAgent": user_agent or "",
+            "requestedAt": now.isoformat(),
+            "year": str(now.year),
+        }
         # On garde une référence dans `_BACKGROUND_TASKS` pour empêcher
         # le garbage-collector de tuer le task avant qu'il ne se termine
         # (cf. RUF006 / docs Python 3.12 asyncio).
@@ -169,12 +177,7 @@ async def start_session(
                 settings.recovery_novu_event_name,
                 subscriber_id=str(user_id),
                 email=email,
-                payload={
-                    "firstName": user_display_name or "",
-                    "resetLink": recovery_link,
-                    "expiresInMinutes": int(ttl.total_seconds() / 60),
-                    "attemptsAllowed": _max_attempts(),
-                },
+                payload=novu_payload,
             )
         )
         _BACKGROUND_TASKS.add(task)

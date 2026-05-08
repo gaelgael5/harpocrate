@@ -73,9 +73,16 @@ async def test_start_lowercases_email_before_passing_to_service() -> None:
 
     captured: dict[str, Any] = {}
 
-    async def fake_start(_conn: Any, *, email: str, ip: str | None) -> None:
+    async def fake_start(
+        _conn: Any,
+        *,
+        email: str,
+        ip: str | None,
+        user_agent: str | None = None,
+    ) -> None:
         captured["email"] = email
         captured["ip"] = ip
+        captured["user_agent"] = user_agent
 
     with patch.object(svc, "start_session", AsyncMock(side_effect=fake_start)):
         async with _client(pool) as cli:

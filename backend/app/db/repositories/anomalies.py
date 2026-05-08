@@ -86,3 +86,45 @@ async def acknowledge(
         by_user_id,
     )
     return str(result) != "UPDATE 0"
+
+
+async def list_all(
+    conn: asyncpg.Connection,
+    *,
+    only_unacknowledged: bool = False,
+    limit: int = 200,
+) -> list[AnomalyEventRow]:
+    """Liste toutes les anomalies, tous users confondus (vue admin)."""
+    if only_unacknowledged:
+        rows = await conn.fetch(
+            "SELECT * FROM identity_anomaly_events "
+            "WHERE acknowledged_at IS NULL "
+            "ORDER BY detected_at DESC LIMIT $1",
+            limit,
+        )
+    else:
+        rows = await conn.fetch(
+            "SELECT * FROM identity_anomaly_events "
+            "ORDER BY detected_at DESC LIMIT $1",
+            limit,
+        )
+    return [_row_to_model(r) for r in rows]
+
+
+async def acknowledge_admin(
+    conn: asyncpg.Connection,
+    anomaly_id: int,
+    by_user_id: UUID,
+) -> bool:
+    """Acknowledge admin — sans contrainte sur user_id (l'admin agit pour
+    n'importe quel user). Retourne False si pas trouvée ou déjà acquittée."""
+    result = await conn.execute(
+        """
+        UPDATE identity_anomaly_events
+        SET acknowledged_at = NOW(), acknowledged_by_user_id = $2
+        WHERE id = $1 AND acknowledged_at IS NULL
+        """,
+        anomaly_id,
+        by_user_id,
+    )
+    return str(result) != "UPDATE 0"

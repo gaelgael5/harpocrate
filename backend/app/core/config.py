@@ -122,6 +122,17 @@ class Settings(BaseSettings):
     s3_region: str = Field(default="us-east-1")
     s3_key_prefix: str = Field(default="harpocrate-backups/")
 
+    # ─── Notifications externes via Novu (LOT_57) ─────────────────────────────
+    # Harpocrate ne gère pas l'envoi de mail directement : il déclenche un
+    # workflow Novu qui s'occupe du templating + provider mail. Si la clé
+    # n'est pas configurée, le service retombe en no-op (logge à warning).
+    novu_api_url: str = Field(default="https://api.novu.co/v1")
+    novu_api_key: str = Field(default="", json_schema_extra={"is_secret": True})
+
+    @property
+    def novu_configured(self) -> bool:
+        return bool(self.novu_api_key)
+
     @property
     def s3_configured(self) -> bool:
         return bool(self.s3_bucket and self.s3_access_key_id and self.s3_secret_access_key)

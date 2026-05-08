@@ -83,6 +83,20 @@
     "wordsTitle": "Enter your 24 recovery words",
     "wordsSubtitle": "Type the 24 words in the exact order they were originally shown to you.",
     "verifyWords": "Verify",
+    "pasteWords": "Paste 24 words",
+    "pasteTitle": "Paste recovery list",
+    "pasteHelp": "Paste your saved numbered list of 24 words (e.g. \"01. fatal\", \"02. outdoor\", …). Digits and punctuation are ignored.",
+    "pasteApply": "Import",
+    "pasteParseError": "Could not extract 24 words from the pasted text. Make sure the list contains all 24 words.",
+    "destroyHint": "Lost your 24 words? You can recreate a blank account — all your encrypted data will be LOST.",
+    "destroyButton": "Recreate account (wipes everything)",
+    "destroyModalTitle": "Permanently delete account",
+    "destroyWarningTitle": "⚠️ This action is irreversible",
+    "destroyWarningBody": "All your vaults, secrets, stored passwords and API keys will be PERMANENTLY DELETED. No backup can restore this data — it is encrypted with a key nobody holds anymore. If you find your 24 words after confirming, it will be too late.",
+    "destroyTypeInstruction": "To confirm, retype the following exactly:",
+    "destroyConfirm": "Delete permanently",
+    "destroyTypeMismatch": "The typed text does not match. Retype the exact literal.",
+    "destroyDoneNotice": "Account deleted. You can now log in and create a new account.",
     "attemptsLeft_one": "You have {{count}} attempt left",
     "attemptsLeft_other": "You have {{count}} attempts left",
     "newPassTitle": "New passphrase",
@@ -104,7 +118,8 @@
       "missing_words": "Please fill in all 24 words.",
       "invalid_words": "Incorrect recovery words.",
       "passphrase_too_short": "The passphrase must be at least 12 characters.",
-      "passphrase_mismatch": "The two passphrases do not match."
+      "passphrase_mismatch": "The two passphrases do not match.",
+      "confirmation_mismatch": "Confirmation rejected by the server."
     }
   },
   "wallets": {

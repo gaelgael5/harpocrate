@@ -29,6 +29,9 @@ import {
   SimpleGrid,
   Loader,
   Anchor,
+  Modal,
+  Textarea,
+  Group,
 } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 
@@ -50,6 +53,18 @@ interface RecoveryBlobs {
 
 type Step = 'loading' | 'words' | 'newPass' | 'submitting' | 'done' | 'error'
 
+/**
+ * Extrait jusqu'à 24 mots alphabétiques d'un texte collé. Tolère les formats
+ * `01. fatal` / `1) fatal` / `fatal\noutdoor` / `fatal, outdoor`. Renvoie
+ * `null` si moins de 24 mots trouvés. La validité BIP-39 n'est PAS vérifiée
+ * ici (elle l'est à la vérification finale via decodeBip39).
+ */
+function parseRecoveryWords(text: string): string[] | null {
+  const matches = text.toLowerCase().match(/[a-z]+/g) ?? []
+  if (matches.length < 24) return null
+  return matches.slice(0, 24)
+}
+
 export function RecoverPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -63,6 +78,62 @@ export function RecoverPage() {
   const [decryptedRsaPriv, setDecryptedRsaPriv] = useState<Uint8Array | null>(null)
   const [newPass, setNewPass] = useState('')
   const [newPassConfirm, setNewPassConfirm] = useState('')
+
+  // Modal "Coller mes 24 mots"
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
+  const [pasteError, setPasteError] = useState<string | null>(null)
+
+  // Modal "Refaire un compte" — destruction définitive du compte
+  const [destroyOpen, setDestroyOpen] = useState(false)
+  const [destroyTyped, setDestroyTyped] = useState('')
+  const [destroying, setDestroying] = useState(false)
+  const [destroyError, setDestroyError] = useState<string | null>(null)
+
+  // Le user doit taper EXACTEMENT cette chaîne pour que le bouton se débloque.
+  // Cohérent avec le contrat backend (body.confirm == DELETE_ACCOUNT_AND_LOSE_ALL_DATA).
+  const DESTROY_CONFIRM_LITERAL = 'DELETE_ACCOUNT_AND_LOSE_ALL_DATA'
+
+  function handleApplyPaste() {
+    const parsed = parseRecoveryWords(pasteText)
+    if (parsed === null) {
+      setPasteError(t('recover.pasteParseError'))
+      return
+    }
+    setWords(parsed)
+    setPasteOpen(false)
+    setPasteText('')
+    setPasteError(null)
+  }
+
+  async function handleAbandonAccount() {
+    if (destroyTyped !== DESTROY_CONFIRM_LITERAL) {
+      setDestroyError(t('recover.destroyTypeMismatch'))
+      return
+    }
+    setDestroyError(null)
+    setDestroying(true)
+    try {
+      const r = await fetch(`/v1/auth/recovery/${sessionId}/abandon-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ confirm: DESTROY_CONFIRM_LITERAL }),
+      })
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}))
+        const code = body?.detail?.error ?? 'server_error'
+        setDestroyError(t(`recover.errors.${code}`, t('errors.serverError')))
+        setDestroying(false)
+        return
+      }
+      setDestroyOpen(false)
+      setStep('done')
+      setErrorMsg(t('recover.destroyDoneNotice'))
+    } catch {
+      setDestroyError(t('errors.serverError'))
+      setDestroying(false)
+    }
+  }
 
   // Charge les blobs au montage.
   useEffect(() => {
@@ -247,7 +318,7 @@ export function RecoverPage() {
   if (step === 'error') {
     return (
       <Center h="100vh" style={{ background: 'var(--mantine-color-body)' }}>
-        <Stack w={420} gap="md" align="center">
+        <Stack w={460} gap="md" align="center">
           <Title order={3}>{t('recover.errorTitle')}</Title>
           <Alert color="red" variant="light" w="100%">
             {errorMsg ?? t('errors.serverError')}
@@ -258,6 +329,80 @@ export function RecoverPage() {
           <Anchor onClick={() => navigate('/login')} style={{ cursor: 'pointer' }}>
             {t('recover.backToLogin')}
           </Anchor>
+
+          {/* Option de dernier recours : recréer un compte de zéro après
+              avoir épuisé toutes les tentatives de récupération. */}
+          <Box w="100%" mt="lg" pt="md" style={{ borderTop: '1px solid #eee' }}>
+            <Text size="sm" c="dimmed" mb="xs">
+              {t('recover.destroyHint')}
+            </Text>
+            <Button
+              variant="outline"
+              color="red"
+              fullWidth
+              onClick={() => setDestroyOpen(true)}
+            >
+              {t('recover.destroyButton')}
+            </Button>
+          </Box>
+
+          <Modal
+            opened={destroyOpen}
+            onClose={() => {
+              setDestroyOpen(false)
+              setDestroyTyped('')
+              setDestroyError(null)
+            }}
+            title={t('recover.destroyModalTitle')}
+            size="md"
+          >
+            <Stack gap="sm">
+              <Alert color="red" variant="light" title={t('recover.destroyWarningTitle')}>
+                {t('recover.destroyWarningBody')}
+              </Alert>
+              <Text size="sm">
+                {t('recover.destroyTypeInstruction')}{' '}
+                <Text span fw={700} ff="monospace">
+                  {DESTROY_CONFIRM_LITERAL}
+                </Text>
+              </Text>
+              <TextInput
+                value={destroyTyped}
+                onChange={(e) => setDestroyTyped(e.currentTarget.value)}
+                placeholder={DESTROY_CONFIRM_LITERAL}
+                data-testid="recover-destroy-confirm"
+                disabled={destroying}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {destroyError && (
+                <Alert color="red" variant="light">
+                  {destroyError}
+                </Alert>
+              )}
+              <Group justify="flex-end">
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    setDestroyOpen(false)
+                    setDestroyTyped('')
+                    setDestroyError(null)
+                  }}
+                  disabled={destroying}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  color="red"
+                  onClick={() => void handleAbandonAccount()}
+                  loading={destroying}
+                  disabled={destroyTyped !== DESTROY_CONFIRM_LITERAL}
+                >
+                  {t('recover.destroyConfirm')}
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
         </Stack>
       </Center>
     )
@@ -345,6 +490,50 @@ export function RecoverPage() {
             {errorMsg}
           </Alert>
         )}
+
+        <Group justify="flex-end">
+          <Button variant="subtle" size="xs" onClick={() => setPasteOpen(true)}>
+            {t('recover.pasteWords')}
+          </Button>
+        </Group>
+
+        <Modal
+          opened={pasteOpen}
+          onClose={() => {
+            setPasteOpen(false)
+            setPasteError(null)
+          }}
+          title={t('recover.pasteTitle')}
+          size="md"
+        >
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">
+              {t('recover.pasteHelp')}
+            </Text>
+            <Textarea
+              autosize
+              minRows={6}
+              maxRows={12}
+              placeholder={'01. fatal\n02. outdoor\n...'}
+              value={pasteText}
+              onChange={(e) => setPasteText(e.currentTarget.value)}
+              data-testid="recover-paste-area"
+            />
+            {pasteError && (
+              <Alert color="red" variant="light">
+                {pasteError}
+              </Alert>
+            )}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setPasteOpen(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button color="brand" onClick={handleApplyPaste}>
+                {t('recover.pasteApply')}
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
           {words.map((w, i) => (

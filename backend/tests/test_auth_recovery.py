@@ -398,6 +398,135 @@ async def test_record_failed_attempt_logs_audit_at_three(
 
 
 @pytest.mark.asyncio
+async def test_abandon_account_rejects_wrong_confirm() -> None:
+    """Sans le littéral exact, le endpoint refuse."""
+    pool = _make_pool(MagicMock())
+    async with _client(pool) as cli:
+        r = await cli.post(
+            f"/v1/auth/recovery/{uuid4()}/abandon-account",
+            json={"confirm": "yes"},
+        )
+    assert r.status_code == 400
+    assert r.json()["detail"]["error"] == "confirmation_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_abandon_account_calls_service_with_exact_confirm() -> None:
+    """Le littéral exact `DELETE_ACCOUNT_AND_LOSE_ALL_DATA` débloque l'appel."""
+    from app.services import recovery as svc
+
+    pool = _make_pool(MagicMock())
+
+    with patch.object(svc, "abandon_account", AsyncMock(return_value=None)) as m:
+        async with _client(pool) as cli:
+            r = await cli.post(
+                f"/v1/auth/recovery/{uuid4()}/abandon-account",
+                json={"confirm": "DELETE_ACCOUNT_AND_LOSE_ALL_DATA"},
+            )
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+    m.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_abandon_account_410_when_session_already_consumed() -> None:
+    from app.services import recovery as svc
+
+    pool = _make_pool(MagicMock())
+
+    with patch.object(
+        svc,
+        "abandon_account",
+        AsyncMock(side_effect=svc.SessionInvalidError("session_consumed")),
+    ):
+        async with _client(pool) as cli:
+            r = await cli.post(
+                f"/v1/auth/recovery/{uuid4()}/abandon-account",
+                json={"confirm": "DELETE_ACCOUNT_AND_LOSE_ALL_DATA"},
+            )
+    assert r.status_code == 410
+
+
+@pytest.mark.asyncio
+async def test_service_abandon_account_deletes_wallets_then_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vérifie l'ordre des DELETE (wallets avant users, FK RESTRICT)."""
+    from app.db.repositories import recovery_sessions as repo
+    from app.services import recovery as svc
+
+    user_id = uuid4()
+    session_id = uuid4()
+    future = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=20)
+
+    executed: list[str] = []
+
+    async def fake_execute(sql: str, *args: Any) -> str:
+        executed.append(sql)
+        return "DELETE 1"
+
+    class FakeTxCtx:
+        async def __aenter__(self) -> Any:
+            return None
+
+        async def __aexit__(self, *_a: Any) -> None:
+            return None
+
+    conn = MagicMock()
+    conn.execute = AsyncMock(side_effect=fake_execute)
+    conn.transaction = MagicMock(return_value=FakeTxCtx())
+
+    with patch.object(
+        repo,
+        "get_by_id",
+        AsyncMock(return_value={
+            "id": session_id,
+            "user_id": user_id,
+            "email": "g@y",
+            "created_at": datetime.datetime.now(datetime.UTC),
+            "expires_at": future,
+            "status": "failed",
+            "attempts": 3,
+            "ip_started": None,
+            "ip_consumed": None,
+            "consumed_at": None,
+        }),
+    ), patch.object(repo, "mark_consumed", AsyncMock()):
+        await svc.abandon_account(conn, session_id=session_id, ip="1.2.3.4")
+
+    # Le DELETE wallets doit précéder le DELETE users (FK RESTRICT)
+    assert len(executed) >= 2
+    assert "DELETE FROM wallets" in executed[0]
+    assert "DELETE FROM users" in executed[1]
+
+
+@pytest.mark.asyncio
+async def test_service_abandon_account_rejects_consumed_session() -> None:
+    from app.db.repositories import recovery_sessions as repo
+    from app.services import recovery as svc
+
+    conn = MagicMock()
+    with patch.object(
+        repo,
+        "get_by_id",
+        AsyncMock(return_value={
+            "id": uuid4(),
+            "user_id": uuid4(),
+            "email": "g@y",
+            "created_at": datetime.datetime.now(datetime.UTC),
+            "expires_at": datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=1),
+            "status": "consumed",
+            "attempts": 0,
+            "ip_started": None,
+            "ip_consumed": None,
+            "consumed_at": None,
+        }),
+    ), pytest.raises(svc.SessionInvalidError) as exc:
+        await svc.abandon_account(conn, session_id=uuid4(), ip=None)
+    assert exc.value.reason == "session_consumed"
+
+
+@pytest.mark.asyncio
 async def test_complete_session_inserts_audit_log(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -84,6 +84,20 @@
     "wordsTitle": "Saisissez vos 24 mots de récupération",
     "wordsSubtitle": "Entrez les 24 mots dans l'ordre exact où ils vous ont été présentés.",
     "verifyWords": "Vérifier",
+    "pasteWords": "Coller les 24 mots",
+    "pasteTitle": "Coller la liste de récupération",
+    "pasteHelp": "Collez ici la liste numérotée des 24 mots, dans le format que vous aviez sauvegardé (ex: « 01. fatal », « 02. outdoor », …). Les chiffres et la ponctuation sont ignorés.",
+    "pasteApply": "Importer",
+    "pasteParseError": "Impossible d'extraire 24 mots du texte collé. Vérifiez que la liste contient bien les 24 mots.",
+    "destroyHint": "Vous avez perdu vos 24 mots ? Vous pouvez recréer un compte vierge — toutes vos données chiffrées seront PERDUES.",
+    "destroyButton": "Recréer un compte (efface tout)",
+    "destroyModalTitle": "Effacer définitivement le compte",
+    "destroyWarningTitle": "⚠️ Cette action est irréversible",
+    "destroyWarningBody": "Tous vos coffres, secrets, mots de passe stockés et clés API seront SUPPRIMÉS définitivement. Aucune sauvegarde ne pourra restaurer ces données — elles sont chiffrées avec une clé que personne ne possède plus. Si vous retrouvez vos 24 mots après avoir confirmé, il sera trop tard.",
+    "destroyTypeInstruction": "Pour confirmer, recopiez exactement le texte suivant :",
+    "destroyConfirm": "Effacer définitivement",
+    "destroyTypeMismatch": "Le texte saisi ne correspond pas. Recopiez exactement le littéral demandé.",
+    "destroyDoneNotice": "Compte effacé. Vous pouvez maintenant vous reconnecter et créer un nouveau compte.",
     "attemptsLeft_one": "Il vous reste {{count}} tentative",
     "attemptsLeft_other": "Il vous reste {{count}} tentatives",
     "newPassTitle": "Nouvelle passphrase",
@@ -105,7 +119,8 @@
       "missing_words": "Veuillez remplir les 24 mots.",
       "invalid_words": "Mots de récupération incorrects.",
       "passphrase_too_short": "La passphrase doit faire au moins 12 caractères.",
-      "passphrase_mismatch": "Les deux passphrases ne correspondent pas."
+      "passphrase_mismatch": "Les deux passphrases ne correspondent pas.",
+      "confirmation_mismatch": "Confirmation incorrecte côté serveur."
     }
   },
   "wallets": {

@@ -25,6 +25,7 @@ from app.db.repositories import users as users_repo
 from app.services import notify_novu
 from app.services.audit import audit_log_insert
 
+
 # Les seuils ci-dessous sont LU dynamiquement depuis settings — pas de cache
 # module-level. Si l'admin change `HARPOCRATE_RECOVERY_MAX_ATTEMPTS=10` puis
 # redémarre le container, la nouvelle valeur prend effet immédiatement.
@@ -312,6 +313,55 @@ async def record_failed_attempt(
 
 
 # ─── Complete ─────────────────────────────────────────────────────────────────
+
+
+async def abandon_account(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    session_id: UUID,
+    ip: str | None,
+) -> None:
+    """Détruit le compte de l'utilisateur lié à la session : DELETE wallets
+    (cascade secrets) puis DELETE users. Marque la session 'consumed' pour
+    empêcher la réutilisation.
+
+    Sécurité : le caller doit avoir prouvé l'accès à l'email (via le lien
+    Novu reçu dans la boîte mail), ce qui est suffisant pour autoriser la
+    DESTRUCTION (pas le vol — sans les recovery words il ne peut pas
+    récupérer les données chiffrées). Audit + identity_anomaly_event tracé.
+    """
+    row = await repo.get_by_id(conn, session_id)
+    if row is None:
+        raise SessionNotFoundError("session not found")
+    # On accepte 'pending' OU 'failed' OU 'expired' : tous les cas où l'user
+    # est en train d'essayer de récupérer son accès. Pas 'consumed' (déjà
+    # fait quelque chose avec).
+    if row["status"] == "consumed":
+        raise SessionInvalidError("session_consumed")
+    if row["user_id"] is None:
+        raise SessionInvalidError("session_unrecoverable")
+
+    user_id: UUID = row["user_id"]
+    email: str = row["email"]
+
+    async with conn.transaction():
+        # Cascade explicite : wallets a ON DELETE RESTRICT vers users, donc
+        # on doit les détruire avant. Les secrets cascadent automatiquement
+        # via wallets.id.
+        await conn.execute("DELETE FROM wallets WHERE owner_user_id = $1", user_id)
+        await conn.execute("DELETE FROM users WHERE id = $1", user_id)
+        # NB : on ne peut PAS audit_log_insert ici (FK actor_user_id pointe
+        # sur la row qu'on vient de DELETE — violerait audit_log_one_actor).
+        # On trace via structlog uniquement (visible côté Loki).
+
+    await repo.mark_consumed(conn, session_id=session_id, ip_consumed=ip)
+    logger.warning(
+        "recovery_account_abandoned",
+        session_id=str(session_id),
+        deleted_user_id=str(user_id),
+        email=email,
+        ip=ip,
+    )
 
 
 async def complete_session(

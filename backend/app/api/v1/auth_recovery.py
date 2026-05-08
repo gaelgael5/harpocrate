@@ -132,6 +132,66 @@ async def attempt_failed(session_id: UUID) -> JSONResponse:
     return JSONResponse({"attempts_left": attempts_left})
 
 
+# ─── POST /{id}/abandon-account ───────────────────────────────────────────────
+
+
+_DESTROY_CONFIRMATION = "DELETE_ACCOUNT_AND_LOSE_ALL_DATA"
+
+
+class AbandonBody(BaseModel):
+    confirm: str = Field(min_length=1)
+
+
+@router.post("/{session_id}/abandon-account")
+async def abandon_account(
+    session_id: UUID,
+    body: AbandonBody,
+    request: Request,
+) -> JSONResponse:
+    """Détruit définitivement le compte associé à la session de recovery.
+
+    Pour empêcher tout déclenchement accidentel ou par injection, on exige
+    un littéral exact dans le body :
+        {"confirm": "DELETE_ACCOUNT_AND_LOSE_ALL_DATA"}
+
+    Pas d'auth JWT : la possession du `session_id` (envoyé par mail à
+    l'utilisateur) suffit comme preuve d'accès à la boîte mail. Sans les
+    24 mots de récupération, l'attaquant ne peut PAS lire les données — il
+    ne peut que les détruire, ce qui est un risque accepté pour permettre
+    à l'utilisateur légitime de "redémarrer à zéro" après oubli.
+    """
+    if body.confirm != _DESTROY_CONFIRMATION:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "confirmation_mismatch",
+                "message": (
+                    f"Body must contain confirm='{_DESTROY_CONFIRMATION}'"
+                ),
+            },
+        )
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            await svc.abandon_account(
+                conn,
+                session_id=session_id,
+                ip=_client_ip(request),
+            )
+        except svc.SessionNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "session_not_found"},
+            ) from exc
+        except svc.SessionInvalidError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail={"error": exc.reason},
+            ) from exc
+    return JSONResponse({"ok": True})
+
+
 # ─── POST /{id}/complete ──────────────────────────────────────────────────────
 
 

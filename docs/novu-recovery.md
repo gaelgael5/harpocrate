@@ -7,12 +7,12 @@ réinitialisation de passphrase. Côté Harpocrate, aucun template, aucun SMTP.
 ## Variables d'environnement Harpocrate
 
 ```
-HARPOCRATE_NOVU_API_URL=https://api.novu.co/v1
-HARPOCRATE_NOVU_API_KEY=<ApiKey de l'organisation Novu, sans le préfixe>
+NOVU_API_URL=https://api.novu.co/v1
+NOVU_API_KEY=<ApiKey de l'organisation Novu, sans le préfixe>
 HARPOCRATE_PUBLIC_URL=https://vault.yoops.org   # déjà configuré ailleurs
 ```
 
-Si `HARPOCRATE_NOVU_API_KEY` est vide, le service log `novu_not_configured`
+Si `NOVU_API_KEY` est vide, le service log `novu_not_configured`
 et passe en no-op silencieux. Le flow recovery reste fonctionnel côté UI
 (l'admin reçoit toujours `202` après POST `/start`), mais aucun email ne
 part — utile pour dev local.
@@ -21,7 +21,7 @@ part — utile pour dev local.
 
 ```http
 POST {NOVU_API_URL}/events/trigger
-Authorization: ApiKey {HARPOCRATE_NOVU_API_KEY}
+Authorization: ApiKey {NOVU_API_KEY}
 Content-Type: application/json
 
 {

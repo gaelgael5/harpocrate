@@ -126,8 +126,19 @@ class Settings(BaseSettings):
     # Harpocrate ne gère pas l'envoi de mail directement : il déclenche un
     # workflow Novu qui s'occupe du templating + provider mail. Si la clé
     # n'est pas configurée, le service retombe en no-op (logge à warning).
-    novu_api_url: str = Field(default="https://api.novu.co/v1")
-    novu_api_key: str = Field(default="", json_schema_extra={"is_secret": True})
+    #
+    # `validation_alias` court-circuite le préfixe global `HARPOCRATE_` —
+    # ces variables sont nommées `NOVU_API_*` (convention Novu standard,
+    # plus facile à lier à la doc Novu).
+    novu_api_url: str = Field(
+        default="https://api.novu.co/v1",
+        validation_alias="NOVU_API_URL",
+    )
+    novu_api_key: str = Field(
+        default="",
+        json_schema_extra={"is_secret": True},
+        validation_alias="NOVU_API_KEY",
+    )
 
     @property
     def novu_configured(self) -> bool:

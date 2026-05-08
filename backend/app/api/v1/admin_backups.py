@@ -95,7 +95,7 @@ async def create_backup(body: CreateBackupBody, admin: AdminJwt) -> JSONResponse
             ) from e
         await audit_log_insert(
             conn, "admin.backup_created",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -150,7 +150,7 @@ async def pull_backup_from_s3(body: S3PullBody, admin: AdminJwt) -> JSONResponse
             ) from e
         await audit_log_insert(
             conn, "admin.backup_pulled_s3",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -205,7 +205,7 @@ async def download_backup(backup_id: UUID, admin: AdminJwt) -> FileResponse:
             )
         await audit_log_insert(
             conn, "admin.backup_downloaded",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -237,7 +237,7 @@ async def verify_backup(backup_id: UUID, body: VerifyBody, admin: AdminJwt) -> J
         result = await backup_svc.verify_backup(backup_id, body.age_private_key, conn)
         await audit_log_insert(
             conn, "admin.backup_verified",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -265,7 +265,7 @@ async def push_backup_to_s3(backup_id: UUID, admin: AdminJwt) -> JSONResponse:
             ) from e
         await audit_log_insert(
             conn, "admin.backup_pushed_s3",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -332,7 +332,7 @@ async def push_backup_to_remote(
         await audit_log_insert(
             conn,
             "admin.backup_pushed_remote",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -373,7 +373,7 @@ async def delete_backup(backup_id: UUID, admin: AdminJwt) -> Response:
         await backups_repo.delete_backup(conn, backup_id)
         await audit_log_insert(
             conn, "admin.backup_deleted",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -421,7 +421,7 @@ async def restore_backup(backup_id: UUID, body: RestoreBody, admin: AdminJwt) ->
             ) from e
         await audit_log_insert(
             conn, "admin.restore_executed",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,

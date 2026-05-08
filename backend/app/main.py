@@ -41,6 +41,7 @@ from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
 from app.db.pool import close_pool, get_pool, init_pool
 from app.middleware.cluster_coherence import cluster_coherence_middleware
+from app.services import local_admin_bootstrap
 from app.services import replication as replication_svc
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
@@ -69,6 +70,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await seed_svc.seed_system_types(conn)
         # LOT_20 — s'assurer que la stratégie de réplication env est active.
         await replication_svc.ensure_env_strategy_active(conn)
+
+    # LOT_56 — provisionne la row `users` du local-admin (is_system=TRUE) pour
+    # qu'il puisse être référencé dans `audit_log.actor_user_id`. No-op si
+    # admin_local_enabled=False.
+    if settings.admin_local_enabled:
+        await local_admin_bootstrap.ensure_local_admin_user(pool)
 
     # LOT_21A — démarre la sync cluster (LISTEN/NOTIFY + refresh 5s).
     # Le start() effectue un refresh initial AVANT de retourner, donc l'app

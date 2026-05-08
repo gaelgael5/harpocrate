@@ -314,16 +314,18 @@ async def test_bootstrap_invalid_salt_size() -> None:
 
 @pytest.mark.asyncio
 async def test_bootstrap_already_done() -> None:
-    """POST /v1/me/bootstrap lève 409 si UniqueViolationError (déjà bootstrappé)."""
-    import asyncpg
+    """POST /v1/me/bootstrap lève 409 si l'user existe déjà avec is_system=False
+    (vrai user déjà bootstrappé). Cf. flow `bootstrap_user`:
+        1. get_id_by_keycloak_sub  → UUID existant
+        2. _is_system_row          → False (vrai user)
+        → raise 409 already_bootstrapped
+    """
+    from uuid import uuid4
 
+    existing_id = uuid4()
     conn = _make_conn_mock()
-    # Simule la contrainte UNIQUE keycloak_sub
-    conn.fetchval = AsyncMock(
-        side_effect=asyncpg.UniqueViolationError(
-            "duplicate key value violates unique constraint"
-        )
-    )
+    # fetchval enchaîne deux SELECTs : d'abord l'id, puis is_system.
+    conn.fetchval = AsyncMock(side_effect=[existing_id, False])
     pool = _make_pool_with_conn(conn)
 
     async with _make_client(pool) as client:

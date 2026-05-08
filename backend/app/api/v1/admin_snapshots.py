@@ -85,7 +85,7 @@ async def update_policy(body: PolicyBody, admin: AdminJwt) -> JSONResponse:
         await sched_svc.set_policy(conn, policy)
         await audit_log_insert(
             conn, "admin.snapshot_policy_updated",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,
@@ -129,7 +129,7 @@ async def trigger_snapshot(body: TriggerBody, admin: AdminJwt) -> JSONResponse:
     async with pool.acquire() as conn:
         await audit_log_insert(
             conn, "admin.snapshot_triggered",
-            actor_user_id=None,
+            actor_user_id=admin.user_id,
             actor_ip=None,
             target_wallet_id=None,
             target_secret_id=None,

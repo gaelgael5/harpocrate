@@ -1,0 +1,29 @@
+{
+  "ui:order": [
+    "peer_name",
+    "endpoint",
+    "allowed_ips",
+    "dns",
+    "persistent_keepalive",
+    "private_key",
+    "public_key",
+    "preshared_key"
+  ],
+  "peer_name": {
+    "ui:options": { "copyable": true }
+  },
+  "endpoint": {
+    "ui:options": { "copyable": true }
+  },
+  "private_key": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true }
+  },
+  "public_key": {
+    "ui:options": { "copyable": true }
+  },
+  "preshared_key": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true }
+  }
+}

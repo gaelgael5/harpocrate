@@ -14,6 +14,8 @@ import {
   Select,
   Text,
   Divider,
+  Modal,
+  NumberInput,
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
@@ -24,6 +26,11 @@ import { api, ApiError } from '@/lib/api-client'
 import { aesGcmEncrypt } from '@/crypto/aes-gcm'
 import { rsaOaepDecrypt } from '@/crypto/rsa-oaep'
 import { fromBase64, toBase64, textToBytes } from '@/crypto/helpers'
+import {
+  generateSshEd25519Keypair,
+  generateTlsServerKeypair,
+  generateWireguardKeypair,
+} from '@/crypto/keypair-gen'
 import { useCryptoStore } from '@/stores/crypto'
 import { SecretCreateResponseSchema } from '@/schemas/secrets'
 import { MyGrantResponseSchema } from '@/schemas/grants'
@@ -71,6 +78,12 @@ export function SecretNewPage() {
   const [selectedTypeUuid, setSelectedTypeUuid] = useState<string | null>(null)
   const [selectedVersionUuid, setSelectedVersionUuid] = useState<string | null>(null)
   const [typedFormData, setTypedFormData] = useState<object>({})
+  const [tlsModalOpen, setTlsModalOpen] = useState(false)
+  const [tlsCommonName, setTlsCommonName] = useState('')
+  const [tlsSans, setTlsSans] = useState('')
+  const [tlsValidityDays, setTlsValidityDays] = useState<number | string>(365)
+  const [tlsKeySize, setTlsKeySize] = useState<'2048' | '3072' | '4096'>('4096')
+  const [tlsGenerating, setTlsGenerating] = useState(false)
 
   const { data: typesData } = useQuery({
     queryKey: ['secret-types-public'],
@@ -189,6 +202,104 @@ export function SecretNewPage() {
     (v) => v.version_uuid === selectedVersionUuid,
   )
 
+  // Sous-type courant — sert à proposer la génération côté navigateur pour
+  // les types qui le permettent (LOT certificats).
+  const currentSousType = selectedTypeDetail?.sous_type ?? null
+  const supportsClientGen =
+    currentSousType === 'wireguard_peer' || currentSousType === 'ssh_user'
+  const supportsTlsGen = currentSousType === 'tls_server'
+
+  async function handleGenerateKeypair() {
+    try {
+      if (currentSousType === 'wireguard_peer') {
+        const kp = await generateWireguardKeypair()
+        setTypedFormData({
+          ...(typedFormData as Record<string, unknown>),
+          private_key: kp.privateKey,
+          public_key: kp.publicKey,
+        })
+        notifications.show({
+          color: 'green',
+          message: t('secrets.generate.wireguardSuccess'),
+        })
+      } else if (currentSousType === 'ssh_user') {
+        const existingComment =
+          ((typedFormData as Record<string, unknown>).comment as string) ?? ''
+        const kp = await generateSshEd25519Keypair(existingComment)
+        setTypedFormData({
+          ...(typedFormData as Record<string, unknown>),
+          key_type: 'ed25519',
+          private_key: kp.privateKey,
+          public_key: kp.publicKey,
+          fingerprint: kp.fingerprint,
+        })
+        notifications.show({
+          color: 'green',
+          message: t('secrets.generate.sshSuccess'),
+        })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      notifications.show({
+        color: 'red',
+        title: t('secrets.generate.failed'),
+        message: msg,
+        autoClose: 8000,
+      })
+    }
+  }
+
+  async function handleGenerateTls() {
+    if (!tlsCommonName.trim()) {
+      notifications.show({ color: 'red', message: t('common.required') })
+      return
+    }
+    setTlsGenerating(true)
+    try {
+      const sansList = tlsSans
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const validity =
+        typeof tlsValidityDays === 'number'
+          ? tlsValidityDays
+          : parseInt(String(tlsValidityDays), 10) || 365
+      const cert = await generateTlsServerKeypair({
+        commonName: tlsCommonName.trim(),
+        subjectAlternativeNames: sansList,
+        validityDays: validity,
+        keySize: parseInt(tlsKeySize, 10) as 2048 | 3072 | 4096,
+      })
+      setTypedFormData({
+        ...(typedFormData as Record<string, unknown>),
+        common_name: tlsCommonName.trim(),
+        subject_alt_names: sansList,
+        issuer: tlsCommonName.trim(),  // auto-signé : issuer = subject
+        not_before: cert.notBefore,
+        not_after: cert.notAfter,
+        fingerprint_sha256: cert.fingerprintSha256,
+        certificate: cert.certificate,
+        private_key: cert.privateKey,
+      })
+      setTlsModalOpen(false)
+      notifications.show({
+        color: 'green',
+        message: t('secrets.generate.tlsSuccess'),
+        autoClose: 6000,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      notifications.show({
+        color: 'red',
+        title: t('secrets.generate.failed'),
+        message: msg,
+        autoClose: 10000,
+      })
+    } finally {
+      setTlsGenerating(false)
+    }
+  }
+
   return (
     <Stack maw={600}>
       <Title order={2}>{t('secrets.create')}</Title>
@@ -250,12 +361,48 @@ export function SecretNewPage() {
           <Divider />
 
           {activeSchema ? (
-            <TypedSecretForm
-              schemaData={activeSchema.schema_data}
-              schemaUi={activeSchema.schema_ui}
-              initialValue={typedFormData}
-              onChange={setTypedFormData}
-            />
+            <Stack>
+              {supportsClientGen && (
+                <Alert color="blue" variant="light">
+                  <Stack gap="xs">
+                    <Text size="sm">{t('secrets.generate.hint')}</Text>
+                    <Group>
+                      <Button
+                        variant="filled"
+                        size="sm"
+                        onClick={() => void handleGenerateKeypair()}
+                      >
+                        {currentSousType === 'wireguard_peer'
+                          ? t('secrets.generate.wireguardButton')
+                          : t('secrets.generate.sshButton')}
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Alert>
+              )}
+              {supportsTlsGen && (
+                <Alert color="blue" variant="light">
+                  <Stack gap="xs">
+                    <Text size="sm">{t('secrets.generate.tlsHint')}</Text>
+                    <Group>
+                      <Button
+                        variant="filled"
+                        size="sm"
+                        onClick={() => setTlsModalOpen(true)}
+                      >
+                        {t('secrets.generate.tlsButton')}
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Alert>
+              )}
+              <TypedSecretForm
+                schemaData={activeSchema.schema_data}
+                schemaUi={activeSchema.schema_ui}
+                initialValue={typedFormData}
+                onChange={setTypedFormData}
+              />
+            </Stack>
           ) : (
             <Textarea
               label={t('secrets.value')}
@@ -276,6 +423,69 @@ export function SecretNewPage() {
           </Group>
         </Stack>
       </form>
+
+      {/* Modal génération TLS auto-signé */}
+      <Modal
+        opened={tlsModalOpen}
+        onClose={() => setTlsModalOpen(false)}
+        title={t('secrets.generate.tlsModalTitle')}
+        size="lg"
+      >
+        <Stack>
+          <Alert color="orange" variant="light">
+            {t('secrets.generate.tlsModalWarning')}
+          </Alert>
+          <TextInput
+            label={t('secrets.generate.tlsCn')}
+            description={t('secrets.generate.tlsCnHint')}
+            placeholder="api.example.com"
+            required
+            value={tlsCommonName}
+            onChange={(e) => setTlsCommonName(e.currentTarget.value)}
+          />
+          <Textarea
+            label={t('secrets.generate.tlsSans')}
+            description={t('secrets.generate.tlsSansHint')}
+            placeholder={'api.example.com\nadmin.example.com\n10.0.0.1'}
+            value={tlsSans}
+            onChange={(e) => setTlsSans(e.currentTarget.value)}
+            minRows={3}
+          />
+          <Group grow>
+            <NumberInput
+              label={t('secrets.generate.tlsValidity')}
+              description={t('secrets.generate.tlsValidityHint')}
+              min={1}
+              max={3650}
+              value={tlsValidityDays}
+              onChange={setTlsValidityDays}
+            />
+            <Select
+              label={t('secrets.generate.tlsKeySize')}
+              description={t('secrets.generate.tlsKeySizeHint')}
+              data={[
+                { value: '2048', label: '2048 bits' },
+                { value: '3072', label: '3072 bits' },
+                { value: '4096', label: '4096 bits (recommandé)' },
+              ]}
+              allowDeselect={false}
+              value={tlsKeySize}
+              onChange={(v) => setTlsKeySize((v as '2048' | '3072' | '4096') ?? '4096')}
+            />
+          </Group>
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => setTlsModalOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              loading={tlsGenerating}
+              onClick={() => void handleGenerateTls()}
+            >
+              {t('secrets.generate.tlsButton')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   )
 }

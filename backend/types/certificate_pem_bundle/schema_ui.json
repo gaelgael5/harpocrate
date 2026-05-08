@@ -1,0 +1,18 @@
+{
+  "ui:order": ["format", "label", "content", "password", "note"],
+  "label": {
+    "ui:options": { "copyable": true }
+  },
+  "content": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true, "rows": 14 }
+  },
+  "password": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true }
+  },
+  "note": {
+    "ui:widget": "textarea",
+    "ui:options": { "rows": 4 }
+  }
+}

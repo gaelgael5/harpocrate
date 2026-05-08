@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Clé SSH utilisateur",
+  "description": "Paire de clés SSH au format OpenSSH (privée + publique).",
+  "properties": {
+    "key_type": {
+      "type": "string",
+      "title": "Type de clé",
+      "enum": ["ed25519", "rsa", "ecdsa"],
+      "default": "ed25519"
+    },
+    "comment": {
+      "type": "string",
+      "title": "Commentaire",
+      "description": "Typiquement user@host (ex : alice@laptop)"
+    },
+    "fingerprint": {
+      "type": "string",
+      "title": "Empreinte (SHA256)",
+      "description": "Format SHA256:base64 — identifie la clé sans la révéler"
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Clé privée OpenSSH",
+      "description": "Bloc -----BEGIN OPENSSH PRIVATE KEY----- ... -----END OPENSSH PRIVATE KEY-----",
+      "minLength": 1
+    },
+    "public_key": {
+      "type": "string",
+      "title": "Clé publique",
+      "description": "Format `ssh-ed25519 AAAA... user@host` (ligne unique)",
+      "minLength": 1
+    },
+    "passphrase": {
+      "type": "string",
+      "title": "Passphrase (optionnel)",
+      "description": "Si la clé privée est chiffrée localement"
+    }
+  },
+  "required": ["private_key", "public_key"],
+  "additionalProperties": false
+}

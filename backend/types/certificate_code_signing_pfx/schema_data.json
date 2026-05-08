@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Certificat de signature de code (PFX/P12)",
+  "description": "Certificat de signature Authenticode/codesign au format PFX/P12 avec mot de passe. Upload only — la génération PKCS#12 n'est pas faisable côté navigateur.",
+  "properties": {
+    "subject": {
+      "type": "string",
+      "title": "Subject",
+      "description": "DN du certificat (ex : CN=Acme Corp, O=Acme, C=FR)"
+    },
+    "issuer": {
+      "type": "string",
+      "title": "Émetteur (issuer)",
+      "description": "CA de signature de code (ex : DigiCert, Sectigo)"
+    },
+    "not_before": {
+      "type": "string",
+      "title": "Valide à partir de",
+      "format": "date"
+    },
+    "not_after": {
+      "type": "string",
+      "title": "Expire le",
+      "format": "date"
+    },
+    "thumbprint": {
+      "type": "string",
+      "title": "Thumbprint (SHA-1 ou SHA-256)",
+      "description": "Empreinte affichée par signtool / certutil"
+    },
+    "pfx_base64": {
+      "type": "string",
+      "title": "Fichier PFX (base64)",
+      "description": "Contenu binaire du fichier .pfx ou .p12 encodé en base64",
+      "minLength": 1
+    },
+    "password": {
+      "type": "string",
+      "title": "Mot de passe du PFX",
+      "description": "Mot de passe qui chiffre la clé privée à l'intérieur du PFX",
+      "minLength": 1
+    }
+  },
+  "required": ["pfx_base64", "password"],
+  "additionalProperties": false
+}

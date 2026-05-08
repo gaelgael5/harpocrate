@@ -1,0 +1,28 @@
+{
+  "ui:order": [
+    "key_type",
+    "comment",
+    "fingerprint",
+    "private_key",
+    "public_key",
+    "passphrase"
+  ],
+  "comment": {
+    "ui:options": { "copyable": true }
+  },
+  "fingerprint": {
+    "ui:options": { "copyable": true }
+  },
+  "private_key": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true, "rows": 10 }
+  },
+  "public_key": {
+    "ui:widget": "textarea",
+    "ui:options": { "rows": 3, "copyable": true }
+  },
+  "passphrase": {
+    "ui:widget": "password",
+    "ui:options": { "reveal": true, "copyable": true }
+  }
+}

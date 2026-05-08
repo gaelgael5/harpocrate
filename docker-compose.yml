@@ -57,6 +57,10 @@ services:
       # Cross-app launcher menu — éditable côté CT sans rebuild
       - ./releases:/app/releases:ro
       # Artefacts SDK Python + CLI bash — exposes via /v1/sdk/*
+      - ./backups:/var/lib/harpocrate/backups
+      # Backups locaux .tar.age — persistent à travers les pulls/restarts.
+      # Le dossier ./backups est créé + chown 1001:1001 automatiquement
+      # par scripts/refresh.sh à chaque exécution (idempotent).
     healthcheck:
       # Python est garanti dans l'image (pas curl). urllib renvoie le status :
       # 200 → OK, autre → exit 1 → Docker marque unhealthy.

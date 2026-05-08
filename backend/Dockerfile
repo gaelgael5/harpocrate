@@ -46,6 +46,12 @@ RUN useradd -r -u 1001 -m harpocrate
 COPY app ./app
 COPY migrations ./migrations
 COPY types ./types
+# Crée le path par défaut des backups (HARPOCRATE_BACKUP_LOCAL_PATH) avec les
+# bonnes permissions pour l'user non-root. Sans ça, mkdir échoue en runtime
+# (Errno 13 sur /var/lib). En prod, ce path est généralement masqué par un
+# volume monté depuis docker-compose.yml pour persister à travers les pulls.
+RUN mkdir -p /var/lib/harpocrate/backups \
+ && chown -R harpocrate:harpocrate /var/lib/harpocrate
 USER harpocrate
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

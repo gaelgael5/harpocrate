@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Certificat TLS serveur",
+  "description": "Certificat HTTPS / TLS serveur (PEM) avec clé privée et chaîne intermédiaire optionnelle.",
+  "properties": {
+    "common_name": {
+      "type": "string",
+      "title": "Common Name (CN)",
+      "description": "FQDN principal du certificat (ex : api.example.com)"
+    },
+    "subject_alt_names": {
+      "type": "array",
+      "title": "Subject Alternative Names",
+      "items": { "type": "string" },
+      "description": "Noms alternatifs (DNS, IP) couverts par ce certificat"
+    },
+    "issuer": {
+      "type": "string",
+      "title": "Émetteur (issuer)",
+      "description": "CA qui a émis le certificat (ex : Let's Encrypt R3)"
+    },
+    "not_before": {
+      "type": "string",
+      "title": "Valide à partir de",
+      "format": "date"
+    },
+    "not_after": {
+      "type": "string",
+      "title": "Expire le",
+      "format": "date"
+    },
+    "fingerprint_sha256": {
+      "type": "string",
+      "title": "Empreinte SHA-256",
+      "description": "Hex 64 caractères, identifie de façon unique le certificat"
+    },
+    "certificate": {
+      "type": "string",
+      "title": "Certificat (PEM)",
+      "description": "Bloc -----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----",
+      "minLength": 1
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Clé privée (PEM)",
+      "description": "Bloc -----BEGIN PRIVATE KEY----- ou -----BEGIN RSA PRIVATE KEY-----",
+      "minLength": 1
+    },
+    "chain": {
+      "type": "string",
+      "title": "Chaîne intermédiaire (PEM, optionnel)",
+      "description": "Concaténation des certificats intermédiaires de la CA"
+    }
+  },
+  "required": ["certificate", "private_key"],
+  "additionalProperties": false
+}

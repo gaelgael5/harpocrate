@@ -55,8 +55,65 @@ else
     fi
 fi
 
-# ── 4. Sync releases/ depuis le repo Git (index.json + artefacts + docs) ─────
 RAW_BASE="https://raw.githubusercontent.com/gaelgael5/harpocrate/refs/heads/main"
+
+# ── 4. Sync des fichiers de déploiement (docker-compose.yml, apps.json) ──────
+# Sans ça, les modifs côté repo (nouveaux volumes, env vars, healthchecks…)
+# ne se propagent jamais au LXC. Backup automatique avant overwrite pour
+# préserver d'éventuelles customisations locales (le user peut les retrouver
+# dans les .bak.<timestamp>).
+sync_repo_file() {
+    local local_path="$1"
+    local remote_url="$2"
+    local tmp="${local_path}.new"
+    if ! curl -fsSL -o "${tmp}" "${remote_url}"; then
+        rm -f "${tmp}"
+        echo "  [!] Echec download $(basename "${local_path}") — version locale conservée."
+        return 0
+    fi
+    if [ -f "${local_path}" ] && cmp -s "${tmp}" "${local_path}"; then
+        rm -f "${tmp}"
+        echo "  -> $(basename "${local_path}") déjà à jour."
+        return 0
+    fi
+    if [ -f "${local_path}" ]; then
+        local backup="${local_path}.bak.$(date +%Y%m%d-%H%M%S)"
+        cp "${local_path}" "${backup}"
+        echo "  -> Mise à jour $(basename "${local_path}") (ancien : $(basename "${backup}"))"
+    else
+        echo "  -> Création $(basename "${local_path}")"
+    fi
+    mv "${tmp}" "${local_path}"
+}
+
+echo "[*] Sync des fichiers de déploiement..."
+sync_repo_file "$(pwd)/docker-compose.yml" "${RAW_BASE}/docker-compose.yml"
+sync_repo_file "$(pwd)/apps.json" "${RAW_BASE}/apps.json"
+
+# Auto-update du script lui-même : si refresh.sh distant diffère, on remplace
+# et on relance pour que les changements (nouvelles étapes, fonctions) soient
+# pris en compte immédiatement. La var REFRESH_SELF_UPDATED évite la boucle.
+if [ -z "${REFRESH_SELF_UPDATED:-}" ]; then
+    SELF_PATH="$(pwd)/refresh.sh"
+    SELF_TMP="${SELF_PATH}.new"
+    if curl -fsSL -o "${SELF_TMP}" "${RAW_BASE}/scripts/refresh.sh"; then
+        if ! cmp -s "${SELF_TMP}" "${SELF_PATH}"; then
+            backup="${SELF_PATH}.bak.$(date +%Y%m%d-%H%M%S)"
+            cp "${SELF_PATH}" "${backup}"
+            echo "[*] refresh.sh distant a changé — mise à jour + relance"
+            echo "    (ancien : $(basename "${backup}"))"
+            chmod +x "${SELF_TMP}"
+            mv "${SELF_TMP}" "${SELF_PATH}"
+            export REFRESH_SELF_UPDATED=1
+            exec "${SELF_PATH}" "$@"
+        fi
+        rm -f "${SELF_TMP}"
+    else
+        rm -f "${SELF_TMP}"
+    fi
+fi
+
+# ── 5. Sync releases/ depuis le repo Git (index.json + artefacts + docs) ─────
 RELEASES_DIR="$(pwd)/releases"
 DOCS_DIR="${RELEASES_DIR}/docs"
 mkdir -p "${DOCS_DIR}"

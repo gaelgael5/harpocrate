@@ -37,7 +37,25 @@ echo "==========================================="
 echo "  Refresh harpocrate (TAG=${TAG})"
 echo "==========================================="
 
-# ── 3. Sync releases/ depuis le repo Git (index.json + artefacts + docs) ─────
+# ── 3. Préparer les volumes de données (idempotent) ──────────────────────────
+# Le container backend tourne sous l'user 'harpocrate' (uid 1001 dans l'image).
+# Les volumes bind ./backups et ./data/postgres doivent appartenir à cet uid
+# côté hôte sinon le mkdir/écriture échoue (Errno 13).
+BACKUPS_DIR="$(pwd)/backups"
+if [ ! -d "${BACKUPS_DIR}" ]; then
+    echo "[*] Création de ${BACKUPS_DIR} (uid 1001 — user harpocrate du container)..."
+    install -d -o 1001 -g 1001 "${BACKUPS_DIR}"
+else
+    # S'assure que les permissions restent correctes même si le dossier
+    # existe déjà (cas où l'admin l'a créé manuellement avant ce commit).
+    current_uid=$(stat -c '%u' "${BACKUPS_DIR}")
+    if [ "${current_uid}" != "1001" ]; then
+        echo "[*] Réajustement de l'ownership de ${BACKUPS_DIR} → 1001:1001"
+        chown -R 1001:1001 "${BACKUPS_DIR}"
+    fi
+fi
+
+# ── 4. Sync releases/ depuis le repo Git (index.json + artefacts + docs) ─────
 RAW_BASE="https://raw.githubusercontent.com/gaelgael5/harpocrate/refs/heads/main"
 RELEASES_DIR="$(pwd)/releases"
 DOCS_DIR="${RELEASES_DIR}/docs"

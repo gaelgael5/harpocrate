@@ -25,10 +25,24 @@ from app.db.repositories import users as users_repo
 from app.services import notify_novu
 from app.services.audit import audit_log_insert
 
-SESSION_TTL = datetime.timedelta(minutes=30)
-MAX_ATTEMPTS = 3
-ANOMALY_THRESHOLD = 5
-ANOMALY_WINDOW = datetime.timedelta(hours=24)
+# Les seuils ci-dessous sont LU dynamiquement depuis settings — pas de cache
+# module-level. Si l'admin change `HARPOCRATE_RECOVERY_MAX_ATTEMPTS=10` puis
+# redémarre le container, la nouvelle valeur prend effet immédiatement.
+def _session_ttl() -> datetime.timedelta:
+    return datetime.timedelta(minutes=settings.recovery_session_ttl_minutes)
+
+
+def _max_attempts() -> int:
+    return settings.recovery_max_attempts
+
+
+def _anomaly_threshold() -> int:
+    return settings.recovery_anomaly_threshold
+
+
+def _anomaly_window() -> datetime.timedelta:
+    return datetime.timedelta(hours=settings.recovery_anomaly_window_hours)
+
 
 # Garde-fou RUF006 : on stocke les tasks Novu fire-and-forget pour empêcher
 # le garbage collector Python de les annuler avant la fin du POST HTTP.
@@ -106,8 +120,9 @@ async def start_session(
     ou non). Le caller renvoie toujours 202 au client. La détection
     d'anomalie (5+ sessions failed/expired sur 24h) est aussi faite ici.
     """
+    ttl = _session_ttl()
     now = datetime.datetime.now(datetime.UTC)
-    expires_at = now + SESSION_TTL
+    expires_at = now + ttl
 
     user_row = await users_repo.get_id_and_is_system_by_email(conn, email)
     user_id: UUID | None = None
@@ -151,14 +166,14 @@ async def start_session(
         # (cf. RUF006 / docs Python 3.12 asyncio).
         task = asyncio.create_task(
             notify_novu.trigger_event(
-                "passphrase-reset",
+                settings.recovery_novu_event_name,
                 subscriber_id=str(user_id),
                 email=email,
                 payload={
                     "firstName": user_display_name or "",
                     "resetLink": recovery_link,
-                    "expiresInMinutes": int(SESSION_TTL.total_seconds() / 60),
-                    "attemptsAllowed": MAX_ATTEMPTS,
+                    "expiresInMinutes": int(ttl.total_seconds() / 60),
+                    "attemptsAllowed": _max_attempts(),
                 },
             )
         )
@@ -194,9 +209,9 @@ async def _maybe_record_anomaly(
     email: str,
     user_id: UUID,
 ) -> None:
-    since = datetime.datetime.now(datetime.UTC) - ANOMALY_WINDOW
+    since = datetime.datetime.now(datetime.UTC) - _anomaly_window()
     count = await repo.count_unsuccessful_for_email(conn, email=email, since=since)
-    if count < ANOMALY_THRESHOLD:
+    if count < _anomaly_threshold():
         return
     await conn.execute(
         """
@@ -244,7 +259,7 @@ async def get_blobs(
 
     return RecoveryBlobs(
         session_id=row["id"],
-        attempts_left=MAX_ATTEMPTS - row["attempts"],
+        attempts_left=max(0, _max_attempts() - row["attempts"]),
         salt_recovery=user.salt_recovery,
         encrypted_sym_key_by_recovery=user.encrypted_sym_key_by_recovery,
         salt_passphrase=user.salt_passphrase,
@@ -266,7 +281,10 @@ async def record_failed_attempt(
     """Incrémente le compteur. Retourne `attempts_left`. Si la session
     n'est plus 'pending', l'increment ne fait rien — on lève
     SessionInvalidError pour informer le client."""
-    new_attempts = await repo.increment_attempts(conn, session_id)
+    max_att = _max_attempts()
+    new_attempts = await repo.increment_attempts(
+        conn, session_id, max_attempts=max_att
+    )
     if new_attempts is None:
         # increment_attempts WHERE status = 'pending' n'a affecté aucune row.
         row = await repo.get_by_id(conn, session_id)
@@ -274,10 +292,10 @@ async def record_failed_attempt(
             raise SessionNotFoundError("session not found")
         raise SessionInvalidError(f"session_{row['status']}")
 
-    # Si on vient de passer à 3 (donc status='failed'), on trace l'événement
-    # de session brûlée pour l'audit. Pas d'audit pour les attempts 1 et 2 :
-    # ce sont des erreurs de saisie banales, pas des incidents.
-    if new_attempts >= MAX_ATTEMPTS:
+    # Si on vient d'atteindre le max (donc status='failed'), on trace
+    # l'événement de session brûlée pour l'audit. Pas d'audit pour les
+    # attempts intermédiaires : ce sont des erreurs de saisie banales.
+    if new_attempts >= max_att:
         row = await repo.get_by_id(conn, session_id)
         if row is not None and row["user_id"] is not None:
             await audit_log_insert(
@@ -287,7 +305,7 @@ async def record_failed_attempt(
                 target_user_id=row["user_id"],
                 metadata={"session_id": str(session_id)},
             )
-    return max(0, MAX_ATTEMPTS - new_attempts)
+    return max(0, max_att - new_attempts)
 
 
 # ─── Complete ─────────────────────────────────────────────────────────────────

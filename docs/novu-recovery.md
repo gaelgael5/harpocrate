@@ -1,16 +1,31 @@
-# Workflow Novu — `passphrase-reset` (LOT_57)
+# Workflow Novu — `recovery-session` (LOT_57)
 
 Harpocrate délègue l'envoi d'email à Novu : le backend déclenche un workflow
-nommé `passphrase-reset` quand un utilisateur démarre une session de
+nommé `recovery-session` quand un utilisateur démarre une session de
 réinitialisation de passphrase. Côté Harpocrate, aucun template, aucun SMTP.
 
 ## Variables d'environnement Harpocrate
 
 ```
+# Novu (sans préfixe HARPOCRATE_, alias géré côté Settings)
 NOVU_API_URL=https://api.novu.co/v1
 NOVU_API_KEY=<ApiKey de l'organisation Novu, sans le préfixe>
-HARPOCRATE_PUBLIC_URL=https://vault.yoops.org   # déjà configuré ailleurs
+
+# Public URL utilisée pour reconstruire le `resetLink` envoyé dans le mail
+HARPOCRATE_PUBLIC_URL=https://vault.yoops.org
+
+# Tuning du flow recovery (tous optionnels — defaults raisonnables)
+HARPOCRATE_RECOVERY_NOVU_EVENT_NAME=recovery-session   # nom du workflow Novu
+HARPOCRATE_RECOVERY_SESSION_TTL_MINUTES=30             # durée de vie d'une session
+HARPOCRATE_RECOVERY_MAX_ATTEMPTS=3                     # tentatives 24-mots avant 'failed'
+HARPOCRATE_RECOVERY_ANOMALY_THRESHOLD=5                # seuil avant alerte admin
+HARPOCRATE_RECOVERY_ANOMALY_WINDOW_HOURS=24            # fenêtre glissante du seuil
 ```
+
+Pour **tester** le flow sans risquer de cramer une session après 3 erreurs
+de saisie, mettre `HARPOCRATE_RECOVERY_MAX_ATTEMPTS=99` puis restart le
+container. Idem `HARPOCRATE_RECOVERY_SESSION_TTL_MINUTES=240` pour
+prolonger la fenêtre de test.
 
 Si `NOVU_API_KEY` est vide, le service log `novu_not_configured`
 et passe en no-op silencieux. Le flow recovery reste fonctionnel côté UI
@@ -25,7 +40,7 @@ Authorization: ApiKey {NOVU_API_KEY}
 Content-Type: application/json
 
 {
-  "name": "passphrase-reset",
+  "name": "recovery-session",
   "to": {
     "subscriberId": "{user.id (UUID Harpocrate)}",
     "email": "{user.email}"
@@ -46,7 +61,7 @@ premier trigger, donc rien à pré-créer.
 
 Côté admin Novu :
 
-1. Créer un workflow nommé exactement **`passphrase-reset`** (sensible à la casse).
+1. Créer un workflow nommé exactement **`recovery-session`** (sensible à la casse).
 2. Ajouter un **email step** consommant les variables :
    - `{{payload.firstName}}` — prénom (peut être vide)
    - `{{payload.resetLink}}` — URL absolue à inclure dans un bouton/lien

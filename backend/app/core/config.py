@@ -144,6 +144,18 @@ class Settings(BaseSettings):
     def novu_configured(self) -> bool:
         return bool(self.novu_api_key)
 
+    # ─── Recovery passphrase (LOT_57) ─────────────────────────────────────────
+    # Tous les seuils/limites du flow recovery sont configurables pour permettre
+    # le test (ex. mettre max_attempts=99 pour itérer la saisie des 24 mots
+    # sans cramer la session) ou ajuster en prod.
+    recovery_session_ttl_minutes: int = Field(default=30, ge=5)
+    recovery_max_attempts: int = Field(default=3, ge=1)
+    recovery_anomaly_threshold: int = Field(default=5, ge=1)
+    recovery_anomaly_window_hours: int = Field(default=24, ge=1)
+    # Nom du workflow Novu déclenché lors d'une session de recovery — doit
+    # matcher exactement le `name` configuré côté admin Novu.
+    recovery_novu_event_name: str = Field(default="recovery-session")
+
     @property
     def s3_configured(self) -> bool:
         return bool(self.s3_bucket and self.s3_access_key_id and self.s3_secret_access_key)

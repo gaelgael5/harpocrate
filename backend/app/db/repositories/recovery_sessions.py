@@ -49,22 +49,30 @@ async def get_by_id(
 async def increment_attempts(
     conn: asyncpg.Connection[asyncpg.Record],
     session_id: UUID,
-) -> int:
-    """Incrémente le compteur. Si on atteint 3, on flippe automatiquement le
-    status à 'failed' dans la même requête. Retourne le nombre d'attempts
-    après incrément (0..3)."""
+    *,
+    max_attempts: int,
+) -> int | None:
+    """Incrémente le compteur. Si on atteint `max_attempts`, on flippe
+    automatiquement le status à 'failed' dans la même requête.
+
+    Retourne le nombre d'attempts après incrément, ou None si la session
+    n'était pas en status='pending' (déjà consommée/expired/failed).
+    `max_attempts` est paramétrable (cf. `settings.recovery_max_attempts`)
+    pour permettre les tests sans bloquer la session.
+    """
     return await conn.fetchval(
         """
         UPDATE recovery_sessions
         SET attempts = attempts + 1,
             status = CASE
-                WHEN attempts + 1 >= 3 THEN 'failed'
+                WHEN attempts + 1 >= $2 THEN 'failed'
                 ELSE status
             END
         WHERE id = $1 AND status = 'pending'
         RETURNING attempts
         """,
         session_id,
+        max_attempts,
     )
 
 

@@ -291,19 +291,23 @@ async def test_service_start_skips_novu_for_system_user() -> None:
 
 
 @pytest.mark.asyncio
-async def test_increment_attempts_flips_to_failed_at_three() -> None:
-    """L'attempt #3 doit faire passer la session en status='failed'."""
+async def test_increment_attempts_flips_to_failed_at_max() -> None:
+    """Atteindre `max_attempts` doit faire passer la session en status='failed'.
+
+    Le seuil est désormais paramétrable via `HARPOCRATE_RECOVERY_MAX_ATTEMPTS`
+    et passé en argument à la requête SQL (`$2`), pas hard-codé."""
     from app.db.repositories import recovery_sessions as repo
 
     conn = MagicMock()
-    conn.fetchval = AsyncMock(return_value=3)
+    conn.fetchval = AsyncMock(return_value=5)
 
-    new_attempts = await repo.increment_attempts(conn, uuid4())
-    assert new_attempts == 3
-    # vérifie que le SQL contient bien le CASE qui flip à 'failed'
+    new_attempts = await repo.increment_attempts(conn, uuid4(), max_attempts=5)
+    assert new_attempts == 5
     sql = conn.fetchval.await_args.args[0]
     assert "'failed'" in sql
-    assert "attempts + 1 >= 3" in sql
+    assert "attempts + 1 >= $2" in sql
+    # Le `max_attempts` arrive en deuxième paramètre SQL
+    assert conn.fetchval.await_args.args[2] == 5
 
 
 @pytest.mark.asyncio

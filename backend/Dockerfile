@@ -12,12 +12,19 @@ WORKDIR /app
 #   On utilise le client 16 pour matcher la version du serveur Postgres
 #   (sinon pg_dump-15 vs server-16 → erreur 'server version too high').
 #   Le client 16 est dispo via le dépôt officiel PostgreSQL apt.
+#
+# IMPORTANT : on lit /etc/os-release pour piocher le repo PGDG du bon codename
+# Debian (bookworm, trixie, …). Sans ça, un repo bookworm-pgdg sur une base
+# trixie casse car libpq5 du repo bookworm dépend de libldap-2.5-0 qui n'existe
+# pas en trixie (où c'est libldap2). python:3.12-slim peut basculer de codename
+# entre deux releases — il faut que ça suive automatiquement.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends age curl ca-certificates gnupg \
  && install -d /usr/share/postgresql-common/pgdg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
- && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+ && . /etc/os-release \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-16 \

@@ -47,6 +47,34 @@ def patch_asyncpg_create_pool() -> Iterator[None]:
         yield
 
 
+# UUID factice utilisé par la fixture autouse `mock_admin_user_resolver` pour
+# les tests qui appellent les endpoints admin sans pool DB réel.
+TEST_ADMIN_USER_ID = __import__("uuid").UUID("00000000-0000-0000-0000-000000000001")
+
+
+@pytest.fixture(autouse=True)
+def mock_admin_user_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Court-circuite `resolve_admin_user_id` pour les tests unitaires admin.
+
+    Les endpoints admin résolvent désormais un `users.id` en DB pour pouvoir
+    être référencé dans `audit_log.actor_user_id`. Sans pool DB réel, cette
+    résolution échoue. On la stubbe ici pour retourner un UUID stable.
+
+    On patche le module dédié `app.services.admin_user_resolver` (et pas
+    `app.core.admin_auth`) pour ne PAS déclencher le chargement précoce de
+    `app.core.security` — celui-ci capture `settings` à l'import, et un
+    chargement avant les fixtures `env` des tests lui ferait cacher une
+    `hmac_key` obsolète, cassant la validation JWT (Signature verification
+    failed).
+    """
+    from app.services import admin_user_resolver
+
+    async def _fake_resolve(*, keycloak_sub: str, email: str, display_name: str | None) -> Any:
+        return TEST_ADMIN_USER_ID
+
+    monkeypatch.setattr(admin_user_resolver, "resolve_admin_user_id", _fake_resolve)
+
+
 _REAL_DB_DSN_ENV = "HARPOCRATE_DB_DSN_TEST"
 
 

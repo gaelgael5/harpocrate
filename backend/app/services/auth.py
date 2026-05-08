@@ -22,6 +22,17 @@ from app.services.audit import audit_log_insert
 # ─── Helpers de validation ────────────────────────────────────────────────────
 
 
+async def _is_system_row(
+    conn: asyncpg.Connection[asyncpg.Record],
+    user_id: UUID,
+) -> bool:
+    """Lit uniquement le flag is_system. Sûr pour les system users (pas de
+    déréférencement des colonnes crypto NULL via _row_to_user)."""
+    return bool(await conn.fetchval(
+        "SELECT is_system FROM users WHERE id = $1", user_id
+    ))
+
+
 def _decode_base64(value: str, field: str) -> bytes:
     try:
         return base64.b64decode(value)
@@ -132,12 +143,26 @@ async def bootstrap_user(
         req.encrypted_sym_key_by_recovery, "encrypted_sym_key_by_recovery"
     )
 
-    try:
-        user_id = await users_repo.insert_bootstrap(
+    # Cas pré-existant : un admin Keycloak qui a touché /admin/* avant son
+    # first-login a déjà une row shell (is_system=TRUE) créée par
+    # `require_admin_jwt`. On la convertit en vrai user au lieu d'un INSERT
+    # qui échouerait sur UNIQUE(keycloak_sub).
+    existing_id = await users_repo.get_id_by_keycloak_sub(conn, keycloak_sub)
+    if existing_id is not None:
+        # Si la row a déjà du matériel crypto (is_system=FALSE), c'est un
+        # vrai user déjà bootstrappé → 409 (comportement historique).
+        is_shell = await _is_system_row(conn, existing_id)
+        if not is_shell:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "already_bootstrapped",
+                    "message": "User has already completed bootstrap",
+                },
+            )
+        await users_repo.convert_system_user_to_real(
             conn,
-            keycloak_sub=keycloak_sub,
-            email=email,
-            display_name=display_name,
+            user_id=existing_id,
             rsa_public_key=rsa_pub_bytes,
             salt_passphrase=salt_pass,
             salt_recovery=salt_rec,
@@ -149,14 +174,36 @@ async def bootstrap_user(
             kdf_parallelism=req.kdf_parallelism,
             rsa_key_size=req.rsa_key_size,
         )
-    except asyncpg.UniqueViolationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "already_bootstrapped",
-                "message": "User has already completed bootstrap",
-            },
-        ) from exc
+        # Met à jour l'email/display_name si Keycloak les a changés depuis
+        # la création de la shell row.
+        await users_repo.set_email(conn, user_id=existing_id, email=email)
+        user_id = existing_id
+    else:
+        try:
+            user_id = await users_repo.insert_bootstrap(
+                conn,
+                keycloak_sub=keycloak_sub,
+                email=email,
+                display_name=display_name,
+                rsa_public_key=rsa_pub_bytes,
+                salt_passphrase=salt_pass,
+                salt_recovery=salt_rec,
+                encrypted_rsa_private_key=enc_priv,
+                encrypted_sym_key_by_pass=enc_sym_pass,
+                encrypted_sym_key_by_recovery=enc_sym_rec,
+                kdf_memory_kb=req.kdf_memory_kb,
+                kdf_iterations=req.kdf_iterations,
+                kdf_parallelism=req.kdf_parallelism,
+                rsa_key_size=req.rsa_key_size,
+            )
+        except asyncpg.UniqueViolationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "already_bootstrapped",
+                    "message": "User has already completed bootstrap",
+                },
+            ) from exc
 
     await audit_log_insert(
         conn,

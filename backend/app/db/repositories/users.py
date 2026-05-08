@@ -220,3 +220,108 @@ async def set_email(
         user_id,
         email,
     )
+
+
+# ─── System users (LOT_56 — admin local + Keycloak admins pré-bootstrap) ─────
+
+
+async def get_id_by_keycloak_sub(
+    conn: asyncpg.Connection[asyncpg.Record],
+    sub: str,
+) -> UUID | None:
+    """Retourne uniquement l'UUID. Sûr pour les system users (lit pas le crypto)."""
+    return await conn.fetchval(
+        "SELECT id FROM users WHERE keycloak_sub = $1",
+        sub,
+    )
+
+
+async def get_id_and_is_system_by_email(
+    conn: asyncpg.Connection[asyncpg.Record],
+    email: str,
+) -> tuple[UUID, bool] | None:
+    """Retourne (id, is_system) pour le user avec cet email, ou None."""
+    row = await conn.fetchrow(
+        "SELECT id, is_system FROM users WHERE email = $1",
+        email,
+    )
+    if row is None:
+        return None
+    return row["id"], row["is_system"]
+
+
+async def insert_system_user(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    keycloak_sub: str | None,
+    email: str,
+    display_name: str | None,
+) -> UUID:
+    """Crée une row `users` "shell" sans matériel crypto (is_system=TRUE).
+
+    Pour : l'admin local (keycloak_sub=None) ou un admin Keycloak avant son
+    premier bootstrap crypto. La row sera convertie en vrai user au moment
+    du first-login via `convert_system_user_to_real`.
+    """
+    return await conn.fetchval(
+        """
+        INSERT INTO users (keycloak_sub, email, display_name, is_system)
+        VALUES ($1, $2, $3, TRUE)
+        RETURNING id
+        """,
+        keycloak_sub,
+        email,
+        display_name,
+    )
+
+
+async def convert_system_user_to_real(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    user_id: UUID,
+    rsa_public_key: bytes,
+    salt_passphrase: bytes,
+    salt_recovery: bytes,
+    encrypted_rsa_private_key: bytes,
+    encrypted_sym_key_by_pass: bytes,
+    encrypted_sym_key_by_recovery: bytes,
+    kdf_memory_kb: int,
+    kdf_iterations: int,
+    kdf_parallelism: int,
+    rsa_key_size: int,
+) -> None:
+    """UPDATE qui flippe is_system=FALSE et populate les colonnes crypto.
+
+    Utilisé au first-login lorsqu'un admin Keycloak avait déjà une row shell
+    créée par `require_admin_jwt` lors d'un accès admin antérieur. Idempotent
+    si appelé sur un user déjà real (pas de side-effect dévastateur, mais
+    écrase les blobs — ne pas appeler dans ce cas, c'est un upgrade one-shot).
+    """
+    await conn.execute(
+        """
+        UPDATE users SET
+            is_system = FALSE,
+            rsa_public_key = $2,
+            salt_passphrase = $3,
+            salt_recovery = $4,
+            encrypted_rsa_private_key = $5,
+            encrypted_sym_key_by_pass = $6,
+            encrypted_sym_key_by_recovery = $7,
+            kdf_memory_kb = $8,
+            kdf_iterations = $9,
+            kdf_parallelism = $10,
+            rsa_key_size = $11
+        WHERE id = $1
+        """,
+        user_id,
+        rsa_public_key,
+        salt_passphrase,
+        salt_recovery,
+        encrypted_rsa_private_key,
+        encrypted_sym_key_by_pass,
+        encrypted_sym_key_by_recovery,
+        kdf_memory_kb,
+        kdf_iterations,
+        kdf_parallelism,
+        rsa_key_size,
+    )

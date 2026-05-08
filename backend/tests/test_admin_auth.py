@@ -46,17 +46,32 @@ def _user_token() -> str:
     return make_jwt_token()
 
 
-def test_require_admin_jwt_accepts_admin_token() -> None:
+def test_require_admin_jwt_accepts_admin_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from uuid import uuid4
+
     from app.core.admin_auth import require_admin_jwt
+    from app.services import admin_user_resolver
+
+    # Court-circuite la résolution DB de l'user_id (pas de pool dans ce test).
+    # Override l'autouse fixture du conftest pour vérifier qu'un UUID
+    # spécifique est bien propagé jusqu'à AdminUser.
+    fake_id = uuid4()
+
+    async def _fake_resolve(*, keycloak_sub: str, email: str, display_name: str | None):
+        return fake_id
+
+    monkeypatch.setattr(admin_user_resolver, "resolve_admin_user_id", _fake_resolve)
+
     app_test = FastAPI()
 
     @app_test.get("/admin-only")
     async def admin_route(user=__import__("fastapi").Depends(require_admin_jwt)):
-        return {"ok": True}
+        return {"ok": True, "user_id": str(user.user_id)}
 
     client = TestClient(app_test)
     r = client.get("/admin-only", headers={"Authorization": f"Bearer {_admin_token()}"})
     assert r.status_code == 200
+    assert r.json()["user_id"] == str(fake_id)
 
 
 def test_require_admin_jwt_rejects_non_admin() -> None:

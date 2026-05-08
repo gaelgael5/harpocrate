@@ -8,13 +8,26 @@ import asyncpg
 
 
 async def get_value(conn: asyncpg.Connection, key: str) -> Any:
-    """Retourne la valeur JSON associée à la clé, ou None si absente."""
+    """Retourne la valeur JSON associée à la clé, ou None si absente.
+
+    `set_value` stocke `json.dumps(value)` — il faut donc désérialiser ici
+    pour rendre le contrat symétrique. Sans ça, asyncpg renvoyait la valeur
+    jsonb comme chaîne JSON brute (ex: `'"age1xxx"'` avec guillemets), ce qui
+    cassait silencieusement les callers qui s'attendaient à une str/dict
+    Python (cf. age-keygen → "unknown recipient type").
+    """
     row = await conn.fetchrow(
         "SELECT value FROM system_metadata WHERE key = $1", key
     )
-    if row is None:
+    if row is None or row["value"] is None:
         return None
-    return row["value"]
+    raw = row["value"]
+    if not isinstance(raw, str):
+        return raw
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
 
 
 async def set_value(conn: asyncpg.Connection, key: str, value: Any) -> None:

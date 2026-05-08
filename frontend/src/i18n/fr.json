@@ -509,6 +509,7 @@
       "fieldPrivateKeyPassphrase": "Passphrase de la clé (optionnel)",
       "passwordEditHint": "Laisser vide pour conserver le mot de passe existant",
       "privateKeyEditHint": "Laisser vide pour conserver la clé existante",
+      "usernameEditHint": "Laisser vide pour conserver les identifiants existants",
       "testSuccess": "Connexion testée avec succès",
       "testFailed": "Échec du test de connexion",
       "createSuccess": "Connexion créée",

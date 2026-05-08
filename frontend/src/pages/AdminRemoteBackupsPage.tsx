@@ -197,7 +197,18 @@ function extractR2AccountId(endpoint: string): string {
   return m?.[1] ?? ''
 }
 
-function buildPayload(values: FormValues): RemoteBackupCreatePayload {
+/**
+ * Type retourné en mode édition : `credentials` absent ⇒ on ne retouche pas
+ * les credentials côté serveur (le backend conserve le blob chiffré existant).
+ * Le cast vers `RemoteBackupCreatePayload` au call-site est sûr en création
+ * (la validation form garantit que tous les champs sont remplis) et toléré
+ * en update (Pydantic `RemoteBackupUpdate` accepte tous les champs optionnels).
+ */
+type FormPayload = Omit<RemoteBackupCreatePayload, 'credentials'> & {
+  credentials?: Record<string, unknown>
+}
+
+function buildPayload(values: FormValues, isEditing: boolean): FormPayload {
   const name = values.name.trim()
   if (values.kind === 'sftp') {
     const config: Record<string, unknown> = {
@@ -207,6 +218,17 @@ function buildPayload(values: FormValues): RemoteBackupCreatePayload {
     }
     if (values.host_key_fingerprint.trim()) {
       config.host_key_fingerprint = values.host_key_fingerprint.trim()
+    }
+    // En édition : si l'utilisateur n'a rien saisi, on omet `credentials` du
+    // payload pour conserver les valeurs chiffrées existantes côté serveur.
+    // Sans cette omission, on enverrait `{username: '', password: ''}` qui
+    // écraserait les vrais credentials et casserait l'auth SFTP.
+    const secretField =
+      values.auth_method === 'password' ? values.password : values.private_key
+    const credentialsTouched =
+      values.username.trim() !== '' || secretField !== ''
+    if (isEditing && !credentialsTouched) {
+      return { name, kind: 'sftp', config }
     }
     const credentials: Record<string, unknown> = {
       username: values.username.trim(),
@@ -228,6 +250,11 @@ function buildPayload(values: FormValues): RemoteBackupCreatePayload {
       port: typeof values.port === 'number' ? values.port : parseInt(String(values.port), 10) || 21,
       remote_path: values.remote_path.trim() || '/',
       use_tls: values.use_tls,
+    }
+    const credentialsTouched =
+      values.username.trim() !== '' || values.password !== ''
+    if (isEditing && !credentialsTouched) {
+      return { name, kind: 'ftps', config }
     }
     return {
       name,
@@ -254,6 +281,11 @@ function buildPayload(values: FormValues): RemoteBackupCreatePayload {
   }
   if (values.s3_prefix.trim()) {
     config.prefix = values.s3_prefix.trim()
+  }
+  const s3CredentialsTouched =
+    values.s3_access_key_id.trim() !== '' || values.s3_secret_access_key !== ''
+  if (isEditing && !s3CredentialsTouched) {
+    return { name, kind: 's3', config }
   }
   return {
     name,
@@ -294,11 +326,14 @@ export function AdminRemoteBackupsPage() {
   })
 
   const updateMut = useMutation({
-    mutationFn: (args: { id: string; payload: RemoteBackupCreatePayload }) =>
+    mutationFn: (args: { id: string; payload: FormPayload }) =>
       updateRemoteBackupConnection(args.id, {
         name: args.payload.name,
         config: args.payload.config,
-        // credentials sont updated SEULEMENT si l'admin re-saisit (sinon on garde l'existant)
+        // credentials sont updated SEULEMENT si l'admin re-saisit (sinon on
+        // garde l'existant). buildPayload omet `credentials` du FormPayload
+        // dans ce cas, donc envoyer args.payload.credentials (= undefined)
+        // signifie côté serveur "ne pas toucher au blob chiffré".
         credentials: args.payload.credentials,
       }),
     onSuccess: () => {
@@ -470,7 +505,9 @@ export function AdminRemoteBackupsPage() {
           if (editTarget) {
             updateMut.mutate({ id: editTarget.id, payload })
           } else {
-            createMut.mutate(payload)
+            // En création, `buildPayload(_, false)` ne passe jamais dans la
+            // branche d'omission de `credentials` — le cast est sûr ici.
+            createMut.mutate(payload as RemoteBackupCreatePayload)
           }
         }}
         submitting={createMut.isPending || updateMut.isPending}
@@ -491,7 +528,7 @@ function ConnectionFormModal({
   opened: boolean
   onClose: () => void
   editTarget: RemoteBackupConnection | null
-  onSubmit: (payload: RemoteBackupCreatePayload) => void
+  onSubmit: (payload: FormPayload) => void
   submitting: boolean
 }) {
   const { t } = useTranslation()
@@ -531,7 +568,8 @@ function ConnectionFormModal({
       host: (v, values) =>
         values.kind !== 's3' && !v.trim() ? t('common.required') : null,
       username: (v, values) =>
-        values.kind !== 's3' && !v.trim() ? t('common.required') : null,
+        // En édition, username vide signale "garder l'existant" (cf. buildPayload).
+        values.kind !== 's3' && !editTarget && !v.trim() ? t('common.required') : null,
       password: (v, values) =>
         values.kind === 'sftp' && values.auth_method === 'password' && !editTarget && !v
           ? t('common.required')
@@ -567,7 +605,7 @@ function ConnectionFormModal({
       title={editTarget ? t('admin.remoteBackups.editTitle') : t('admin.remoteBackups.addTitle')}
       size="lg"
     >
-      <form onSubmit={form.onSubmit((v) => onSubmit(buildPayload(v)))}>
+      <form onSubmit={form.onSubmit((v) => onSubmit(buildPayload(v, editTarget !== null)))}>
         <Stack gap="sm">
           <TextInput
             label={t('admin.remoteBackups.fieldName')}
@@ -642,7 +680,8 @@ function SftpFields({
       />
       <TextInput
         label={t('admin.remoteBackups.fieldUsername')}
-        required
+        required={!editing}
+        description={editing ? t('admin.remoteBackups.usernameEditHint') : undefined}
         {...form.getInputProps('username')}
       />
       <Select
@@ -715,7 +754,8 @@ function FtpsFields({
       />
       <TextInput
         label={t('admin.remoteBackups.fieldUsername')}
-        required
+        required={!editing}
+        description={editing ? t('admin.remoteBackups.usernameEditHint') : undefined}
         {...form.getInputProps('username')}
       />
       <PasswordInput
@@ -809,7 +849,8 @@ function S3Fields({
 
       <TextInput
         label={t('admin.remoteBackups.fieldS3AccessKeyId')}
-        required
+        required={!editing}
+        description={editing ? t('admin.remoteBackups.usernameEditHint') : undefined}
         {...form.getInputProps('s3_access_key_id')}
       />
       <PasswordInput

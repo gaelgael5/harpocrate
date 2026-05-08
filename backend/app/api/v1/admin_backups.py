@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.core.admin_auth import AdminJwt
 from app.core.config import settings
+from app.core.logging import logger
 from app.db.pool import get_pool
 from app.db.repositories import backups as backups_repo
 from app.services import backup as backup_svc
@@ -323,8 +324,25 @@ async def push_backup_to_remote(
             record.filename, _stream_file_chunks(file_path)
         )
     except RemoteBackupProviderError as exc:
+        # Log explicite : sans ça, le statut renvoyé par FastAPI n'apparaît
+        # que comme ligne d'accès basique côté logs container, et le payload
+        # `detail.message` peut être masqué par un reverse-proxy (Cloudflare
+        # avale les 502/504 et substitue son écran). Le log côté serveur
+        # garantit le diagnostic.
+        logger.warning(
+            "remote_push_failed",
+            backup_id=str(backup_id),
+            remote_id=str(remote_id),
+            remote_kind=remote.kind,
+            remote_name=remote.name,
+            error=str(exc),
+        )
+        # 422 plutôt que 502 : sémantiquement c'est la requête qui ne peut
+        # pas être traitée (auth distant, path inexistant…), pas l'origine
+        # FastAPI qui est cassée. Bonus : Cloudflare laisse passer 4xx tels
+        # quels alors qu'il intercepte les 502/504 avec son écran d'erreur.
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"error": "remote_push_failed", "message": str(exc)},
         ) from exc
 

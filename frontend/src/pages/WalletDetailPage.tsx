@@ -371,6 +371,11 @@ export function WalletDetailPage() {
               {wallet.description}
             </Text>
           )}
+          {/* Breadcrumb du chemin courant — affiché en permanence sous le
+              titre du coffre pour permettre à l'utilisateur de remonter
+              dans l'arborescence en un clic, sans avoir à dérouler l'arbre
+              ou scroller jusqu'au panneau central. */}
+          <PathBreadcrumb path={currentPath} onNavigate={setCurrentPath} />
         </Stack>
         <Group>
           <Button
@@ -466,9 +471,6 @@ export function WalletDetailPage() {
 
             {/* Contenu central */}
             <Stack gap="md" style={{ flex: 1 }}>
-              {/* Breadcrumb navigation */}
-              <PathBreadcrumb path={currentPath} onNavigate={setCurrentPath} />
-
               {secretsLoading ? (
                 <Center py="xl">
                   <Loader size="sm" />

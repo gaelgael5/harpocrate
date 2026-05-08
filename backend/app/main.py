@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.api.v1 import (
+    admin_anomalies,
     admin_backups,
     admin_maintenance,
     admin_remote_backups,
@@ -25,6 +26,7 @@ from app.api.v1 import (
     audit_log,
     auth,
     auth_local,
+    auth_recovery,
     config_keycloak,
     config_public,
     grants,
@@ -40,6 +42,7 @@ from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
 from app.core.logging import configure_logging, logger
 from app.db.pool import close_pool, get_pool, init_pool
+from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.services import local_admin_bootstrap
 from app.services import replication as replication_svc
@@ -103,6 +106,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     purge_task = asyncio.create_task(_wallet_purge_loop())
 
+    # LOT_57 — worker d'expiration des sessions de recovery (toutes les 5 min).
+    async def _recovery_expire_loop() -> None:
+        while True:
+            await asyncio.sleep(300)
+            try:
+                async with pool.acquire() as conn:
+                    expired = await recovery_repo.expire_pending(conn)
+                if expired > 0:
+                    logger.info("recovery_sessions_expired", count=expired)
+            except Exception as exc:
+                logger.warning("recovery_expire_failed", error=str(exc))
+
+    recovery_expire_task = asyncio.create_task(_recovery_expire_loop())
+
     try:
         yield
     finally:
@@ -111,8 +128,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # l'ordre inverse du démarrage.
         logger.info("shutdown_initiated", instance_id=settings.instance_id)
         purge_task.cancel()
+        recovery_expire_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await purge_task
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await recovery_expire_task
         await scheduler.stop()
         await sync_svc.stop_sync_replication()
         sync = get_cluster_sync()
@@ -191,10 +211,12 @@ app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")
 app.include_router(admin_secret_types.public_router, prefix="/v1")
 app.include_router(admin_system.router, prefix="/v1")
+app.include_router(admin_anomalies.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")
 app.include_router(auth_local.router, prefix="/v1")
+app.include_router(auth_recovery.router, prefix="/v1")
 app.include_router(auth.router, prefix="/v1")
 app.include_router(wallets.router, prefix="/v1")
 app.include_router(grants.router, prefix="/v1")

@@ -464,10 +464,15 @@ async def test_push_remote_file_missing(
 
 
 @pytest.mark.asyncio
-async def test_push_remote_provider_error_returns_502(
+async def test_push_remote_provider_error_returns_422(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any
 ) -> None:
-    """POST .../push-to-remote/... → 502 si le provider lève RemoteBackupProviderError."""
+    """POST .../push-to-remote/... → 422 si le provider lève RemoteBackupProviderError.
+
+    On retourne 422 (Unprocessable Entity) plutôt que 502 (Bad Gateway) pour que
+    Cloudflare laisse passer le payload `detail.message` au client (Cloudflare
+    intercepte les 502/504 avec son écran d'erreur générique).
+    """
     from app.api.v1 import admin_backups as ab
     from app.core import config as cfg
     from app.services import remote_backup_connections as remote_svc
@@ -499,7 +504,7 @@ async def test_push_remote_provider_error_returns_502(
             f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
             headers=_admin_header(),
         )
-    assert r.status_code == 502
+    assert r.status_code == 422
     body = r.json()
     assert body["detail"]["error"] == "remote_push_failed"
     assert "connection refused" in body["detail"]["message"]

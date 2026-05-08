@@ -134,6 +134,7 @@ export function Layout({ children }: { children?: ReactNode }) {
             <NavLink component={RouterNavLink} to="/admin/secret-types" label={t('admin.nav_secret_types')} />
             <NavLink component={RouterNavLink} to="/admin/users"        label={t('admin.nav_users')} />
             <NavLink component={RouterNavLink} to="/admin/system"       label={t('admin.nav_system')} />
+            <NavLink component={RouterNavLink} to="/admin/anomalies"    label={t('admin.nav_anomalies')} />
             <NavLink component={RouterNavLink} to="/admin/env"          label={t('admin.nav_env')} />
           </>
         )}

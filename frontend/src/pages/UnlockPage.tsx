@@ -179,6 +179,16 @@ export function UnlockPage() {
           >
             {t('unlock.unlockButton')}
           </Button>
+
+          {/* Lien discret vers le flow de recovery par 24 mots BIP-39. */}
+          <Button
+            variant="subtle"
+            size="xs"
+            onClick={() => navigate('/recover/start')}
+            color="gray"
+          >
+            {t('unlock.forgotPassphrase')}
+          </Button>
         </Stack>
 
         <Text

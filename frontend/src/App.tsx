@@ -24,6 +24,8 @@ import { LoginPage } from '@/pages/LoginPage'
 import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage'
 import { FirstLoginPage } from '@/pages/FirstLoginPage'
 import { UnlockPage } from '@/pages/UnlockPage'
+import { RecoverStartPage } from '@/pages/RecoverStartPage'
+import { RecoverPage } from '@/pages/RecoverPage'
 import { WalletsPage } from '@/pages/WalletsPage'
 import { WalletDetailPage } from '@/pages/WalletDetailPage'
 import { WalletNewPage } from '@/pages/WalletNewPage'
@@ -46,6 +48,7 @@ import { AdminSecretTypeCreatePage } from '@/pages/AdminSecretTypeCreatePage'
 import { AdminSecretTypeDetailPage } from '@/pages/AdminSecretTypeDetailPage'
 import { ExportAllPage } from '@/pages/ExportAllPage'
 import { AdminEnvPage } from '@/pages/AdminEnvPage'
+import { AdminAnomaliesPage } from '@/pages/AdminAnomaliesPage'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import { LandingPage } from '@/pages/LandingPage'
 import { ApiDocsPage } from '@/pages/ApiDocsPage'
@@ -149,6 +152,8 @@ export default function App() {
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
           <Route path="/first-login" element={<FirstLoginPage />} />
           <Route path="/unlock" element={<UnlockPage />} />
+          <Route path="/recover/start" element={<RecoverStartPage />} />
+          <Route path="/recover/:sessionId" element={<RecoverPage />} />
           <Route
             path="/integration"
             element={
@@ -205,6 +210,7 @@ export default function App() {
             <Route path="/admin/secret-types/:typeUuid" element={<AdminSecretTypeDetailPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/system" element={<AdminSystemPage />} />
+            <Route path="/admin/anomalies" element={<AdminAnomaliesPage />} />
             <Route path="/export-all" element={<ExportAllPage />} />
             <Route path="/admin/env" element={<AdminEnvPage />} />
           </Route>

@@ -455,6 +455,11 @@ export function AdminRemoteBackupsPage() {
       )}
 
       <ConnectionFormModal
+        // Force le remount à chaque changement de cible : useForm n'évalue
+        // initialValues qu'au premier mount, donc sans `key` le formulaire
+        // resterait sur DEFAULT_FORM quand on clique "Modifier" après une
+        // ouverture en mode "Créer".
+        key={editTarget?.id ?? 'create'}
         opened={modalOpen}
         onClose={() => {
           setModalOpen(false)

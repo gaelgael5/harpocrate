@@ -74,6 +74,8 @@
   "wallets": {
     "title": "Mes coffres-forts",
     "create": "Nouveau coffre",
+    "refresh": "Rafraîchir",
+    "refreshHint": "Recharger l'arborescence et les secrets de ce coffre",
     "noWallets": "Aucun coffre-fort. Créez-en un pour commencer.",
     "name": "Nom",
     "description": "Description",

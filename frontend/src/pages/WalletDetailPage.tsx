@@ -373,6 +373,17 @@ export function WalletDetailPage() {
           )}
         </Stack>
         <Group>
+          <Button
+            variant="subtle"
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
+              void queryClient.invalidateQueries({ queryKey: ['wallet-tree', walletId] })
+              void queryClient.invalidateQueries({ queryKey: ['wallet-secrets-path', walletId] })
+            }}
+            title={t('wallets.refreshHint')}
+          >
+            ↻ {t('wallets.refresh')}
+          </Button>
           <Button variant="outline" onClick={() => void handleExport()}>
             {t('wallets.export.button')}
           </Button>

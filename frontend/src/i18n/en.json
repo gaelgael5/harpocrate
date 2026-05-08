@@ -73,6 +73,8 @@
   "wallets": {
     "title": "My vaults",
     "create": "New vault",
+    "refresh": "Refresh",
+    "refreshHint": "Reload the folder tree and secrets of this vault",
     "noWallets": "No vaults. Create one to get started.",
     "name": "Name",
     "description": "Description",

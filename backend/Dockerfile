@@ -5,10 +5,22 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# `age` (binaire) est utilisé pour chiffrer/déchiffrer les .tar.age (LOT_12A
-# backup) et pour générer une paire de clés via /v1/admin/system/age-keygen.
+# Binaires système requis :
+# - age : chiffrement/déchiffrement des .tar.age (LOT_12A) + age-keygen UI
+# - postgresql-client-16 : pg_dump pour produire le SQL avant chiffrement age
+#   (sans ça → FileNotFoundError 'pg_dump' au moment du backup).
+#   On utilise le client 16 pour matcher la version du serveur Postgres
+#   (sinon pg_dump-15 vs server-16 → erreur 'server version too high').
+#   Le client 16 est dispo via le dépôt officiel PostgreSQL apt.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends age \
+ && apt-get install -y --no-install-recommends age curl ca-certificates gnupg \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-16 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --upgrade pip \

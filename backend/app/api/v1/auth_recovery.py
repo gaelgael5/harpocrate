@@ -67,12 +67,14 @@ async def start(body: StartBody, request: Request) -> JSONResponse:
     Retourne **toujours** 202 — anti-énumération. L'absence de mail dans la
     boîte du user est indistinguable d'un email inconnu côté serveur.
     """
+    user_agent = request.headers.get("User-Agent")
     pool = await get_pool()
     async with pool.acquire() as conn:
         await svc.start_session(
             conn,
             email=str(body.email).lower(),
             ip=_client_ip(request),
+            user_agent=user_agent,
         )
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,

@@ -508,6 +508,7 @@
       "fieldPrivateKeyPassphrase": "Key passphrase (optional)",
       "passwordEditHint": "Leave empty to keep the existing password",
       "privateKeyEditHint": "Leave empty to keep the existing key",
+      "usernameEditHint": "Leave empty to keep the existing credentials",
       "testSuccess": "Connection tested successfully",
       "testFailed": "Connection test failed",
       "createSuccess": "Connection created",

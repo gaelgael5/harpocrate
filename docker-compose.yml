@@ -1,3 +1,22 @@
+###############################################################################
+# docker-compose.yml — Stack PROD Harpocrate.
+#
+# Ce fichier est le compose officiel pour le déploiement serveur (LXC, K8s,
+# bare metal). Il pull les images PRÉ-BUILDÉES depuis GHCR — pas de build
+# local, pas de bind du code source.
+#
+# Variables d'env :
+#   TAG                 = tag de l'image GHCR (défaut "latest", peut être
+#                         override : `TAG=v1.2.0 docker compose up -d`).
+#   POSTGRES_*          = credentials DB (.env)
+#   HARPOCRATE_*        = config app (.env, voir .env.example)
+#
+# Pour le DEV LOCAL : `docker-compose.override.yml` (auto-loaded par Compose
+# quand il existe à côté du compose principal) override les images GHCR pour
+# build localement avec target=dev + bind code source. Sur le serveur, ce
+# fichier override n'existe PAS donc seul ce compose est utilisé.
+###############################################################################
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -20,10 +39,7 @@ services:
       start_period: 30s
 
   backend:
-    build:
-      context: ./backend
-      target: dev
-    image: harpocrate-backend:dev
+    image: ghcr.io/gaelgael5/harpocrate-backend:${TAG:-latest}
     container_name: harpocrate-backend
     restart: unless-stopped
     # Drain de 30s respecté par uvicorn (LOT 21A graceful shutdown) +
@@ -51,16 +67,14 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./backend/app:/app/app
-      - ./backend/migrations:/app/migrations
+      # Cross-app launcher menu — éditable côté serveur sans rebuild
       - ./apps.json:/app/apps.json:ro
-      # Cross-app launcher menu — éditable côté CT sans rebuild
+      # Artefacts SDK Python + CLI bash — exposés via /v1/sdk/*
       - ./releases:/app/releases:ro
-      # Artefacts SDK Python + CLI bash — exposes via /v1/sdk/*
-      - ./backups:/var/lib/harpocrate/backups
       # Backups locaux .tar.age — persistent à travers les pulls/restarts.
       # Le dossier ./backups est créé + chown 1001:1001 automatiquement
       # par scripts/refresh.sh à chaque exécution (idempotent).
+      - ./backups:/var/lib/harpocrate/backups
     healthcheck:
       # Python est garanti dans l'image (pas curl). urllib renvoie le status :
       # 200 → OK, autre → exit 1 → Docker marque unhealthy.
@@ -76,10 +90,7 @@ services:
       start_period: 30s
 
   frontend:
-    build:
-      context: ./frontend
-      target: prod
-    image: harpocrate-frontend:test
+    image: ghcr.io/gaelgael5/harpocrate-frontend:${TAG:-latest}
     container_name: harpocrate-frontend
     restart: unless-stopped
     # nginx flush rapide, pas de longue requête en cours.

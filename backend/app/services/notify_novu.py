@@ -56,13 +56,13 @@ async def trigger_event(
     if not settings.novu_configured:
         if raise_if_unconfigured:
             raise NovuNotConfiguredError(
-                "HARPOCRATE_NOVU_API_KEY not set — cannot trigger Novu workflow"
+                "NOVU_API_KEY not set — cannot trigger Novu workflow"
             )
         logger.warning(
             "novu_not_configured",
             event_name=name,
             subscriber_id=subscriber_id,
-            note="event skipped — set HARPOCRATE_NOVU_API_KEY to enable",
+            note="event skipped — set NOVU_API_KEY to enable",
         )
         return
 

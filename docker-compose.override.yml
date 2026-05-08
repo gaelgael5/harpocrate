@@ -1,0 +1,34 @@
+###############################################################################
+# docker-compose.override.yml — DEV LOCAL UNIQUEMENT.
+#
+# Ce fichier est auto-loaded par `docker compose up` SUR LE POSTE DE DEV.
+# Il override le compose principal pour :
+#   - build les images localement (pas de pull GHCR)
+#   - bind le code source (hot-reload uvicorn)
+#   - utiliser le stage `dev` du Dockerfile
+#
+# IMPORTANT : ce fichier ne DOIT PAS être déployé sur le serveur. Le
+# `scripts/refresh.sh` ne le télécharge pas (il sync seulement docker-compose.yml
+# et apps.json). Sur le LXC il n'existe donc pas, et seules les directives du
+# docker-compose.yml principal s'appliquent → pull GHCR.
+#
+# Pour désactiver l'override en local (ex. tester la conf prod) :
+#   docker compose -f docker-compose.yml --no-override up
+###############################################################################
+
+services:
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    image: harpocrate-backend:dev
+    volumes:
+      # Hot-reload : uvicorn surveille /app/app et recharge à la sauvegarde
+      - ./backend/app:/app/app
+      - ./backend/migrations:/app/migrations
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+    image: harpocrate-frontend:dev

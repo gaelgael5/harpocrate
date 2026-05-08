@@ -66,7 +66,11 @@ sync_repo_file() {
     local local_path="$1"
     local remote_url="$2"
     local tmp="${local_path}.new"
-    if ! curl -fsSL -o "${tmp}" "${remote_url}"; then
+    # Cache-busting GitHub raw (Fastly cache TTL 5 min) : on ajoute un
+    # query string unique pour forcer un fetch frais sans risquer de tomber
+    # sur une edge node qui sert encore l'ancien contenu.
+    local cb="?cb=$(date +%s%N 2>/dev/null || date +%s)"
+    if ! curl -fsSL -o "${tmp}" "${remote_url}${cb}"; then
         rm -f "${tmp}"
         echo "  [!] Echec download $(basename "${local_path}") — version locale conservée."
         return 0
@@ -96,7 +100,8 @@ sync_repo_file "$(pwd)/apps.json" "${RAW_BASE}/apps.json"
 if [ -z "${REFRESH_SELF_UPDATED:-}" ]; then
     SELF_PATH="$(pwd)/refresh.sh"
     SELF_TMP="${SELF_PATH}.new"
-    if curl -fsSL -o "${SELF_TMP}" "${RAW_BASE}/scripts/refresh.sh"; then
+    SELF_CB="?cb=$(date +%s%N 2>/dev/null || date +%s)"
+    if curl -fsSL -o "${SELF_TMP}" "${RAW_BASE}/scripts/refresh.sh${SELF_CB}"; then
         if ! cmp -s "${SELF_TMP}" "${SELF_PATH}"; then
             backup="${SELF_PATH}.bak.$(date +%Y%m%d-%H%M%S)"
             cp "${SELF_PATH}" "${backup}"

@@ -186,7 +186,7 @@
     "newValue": "Nouvelle valeur",
     "edit_success": "Valeur mise à jour",
     "paths": {
-      "root": "Racine",
+      "root": "Coffre",
       "folders": "Dossiers",
       "noFolders": "Aucun sous-dossier",
       "secretsHere": "Secrets ici",

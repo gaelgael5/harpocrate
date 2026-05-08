@@ -185,7 +185,7 @@
     "newValue": "New value",
     "edit_success": "Value updated",
     "paths": {
-      "root": "Root",
+      "root": "Vault",
       "folders": "Folders",
       "noFolders": "No subfolders",
       "secretsHere": "Secrets here",

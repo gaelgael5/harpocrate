@@ -25,6 +25,8 @@ import {
   ActionIcon,
   Tooltip,
   PasswordInput,
+  Breadcrumbs,
+  Anchor,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
@@ -212,6 +214,19 @@ export function SecretDetailPage() {
 
   return (
     <Stack>
+      {/* Breadcrumb : "Coffre" cliquable pour remonter au wallet, puis nom du
+          secret en texte. Cohérent avec le breadcrumb intra-wallet pour que
+          l'utilisateur sache toujours comment revenir. */}
+      <Breadcrumbs>
+        <Anchor
+          onClick={() => navigate(`/wallets/${walletId ?? ''}`)}
+          style={{ cursor: 'pointer' }}
+        >
+          {t('secrets.paths.root')}
+        </Anchor>
+        <Text>{secret.name}</Text>
+      </Breadcrumbs>
+
       <Group justify="space-between">
         <Stack gap={2}>
           <Group gap="sm">

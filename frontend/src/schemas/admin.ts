@@ -208,6 +208,9 @@ export const RemoteBackupConnectionSchema = z.object({
   updated_at: z.string(),
   created_by_user_id: z.string().nullable(),
   deleted_at: z.string().nullable(),
+  // LOT_57.fix : true si la connexion a des credentials chiffrés stockés.
+  // Optionnel pour compat avec un backend pré-fix.
+  has_credentials: z.boolean().optional().default(false),
 })
 
 export type RemoteBackupConnection = z.infer<typeof RemoteBackupConnectionSchema>

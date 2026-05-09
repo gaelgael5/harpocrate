@@ -626,6 +626,22 @@ function ConnectionFormModal({
             description={editTarget ? t('admin.remoteBackups.kindLockedHint') : undefined}
           />
 
+          {/* LOT_57.fix : indicateur visuel de l'état des credentials.
+              Les champs username/password ne se repeuplent jamais (zero-
+              knowledge), donc l'admin a besoin d'un feedback explicite
+              pour savoir si la connexion a déjà des identifiants stockés. */}
+          {editTarget && (
+            editTarget.has_credentials ? (
+              <Alert color="green" variant="light">
+                {t('admin.remoteBackups.credentialsStoredHint')}
+              </Alert>
+            ) : (
+              <Alert color="orange" variant="light">
+                {t('admin.remoteBackups.credentialsMissingHint')}
+              </Alert>
+            )
+          )}
+
           {form.values.kind === 'sftp' && <SftpFields form={form} editing={editTarget !== null} />}
           {form.values.kind === 'ftps' && <FtpsFields form={form} editing={editTarget !== null} />}
           {form.values.kind === 's3' && <S3Fields form={form} editing={editTarget !== null} />}

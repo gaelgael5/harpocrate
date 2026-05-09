@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
 from app.db.repositories import anomalies as anomalies_repo
+from app.db.repositories import notification_events as notif_repo
 
 router = APIRouter(prefix="/admin", tags=["admin-anomalies"])
 
@@ -89,7 +90,8 @@ async def list_recovery_sessions(
             rows = await conn.fetch(
                 """
                 SELECT id, user_id, email, created_at, expires_at, status,
-                       attempts, ip_started, ip_consumed, consumed_at
+                       attempts, ip_started, ip_consumed, consumed_at,
+                       novu_transaction_id
                 FROM recovery_sessions
                 WHERE status = $1
                 ORDER BY created_at DESC
@@ -102,13 +104,21 @@ async def list_recovery_sessions(
             rows = await conn.fetch(
                 """
                 SELECT id, user_id, email, created_at, expires_at, status,
-                       attempts, ip_started, ip_consumed, consumed_at
+                       attempts, ip_started, ip_consumed, consumed_at,
+                       novu_transaction_id
                 FROM recovery_sessions
                 ORDER BY created_at DESC
                 LIMIT $1
                 """,
                 limit,
             )
+
+        # Batch lookup du dernier event de chaque session pour éviter N+1.
+        tx_ids = [r["novu_transaction_id"] for r in rows if r["novu_transaction_id"]]
+        latest_events = await notif_repo.list_latest_events_for_transactions(
+            conn, tx_ids
+        )
+
     return JSONResponse(
         {
             "sessions": [
@@ -125,11 +135,25 @@ async def list_recovery_sessions(
                     "consumed_at": r["consumed_at"].isoformat()
                     if r["consumed_at"]
                     else None,
+                    "novu_transaction_id": r["novu_transaction_id"],
+                    "latest_event": _format_latest_event(
+                        latest_events.get(r["novu_transaction_id"])
+                    ),
                 }
                 for r in rows
             ]
         }
     )
+
+
+def _format_latest_event(event: object) -> dict[str, str] | None:
+    """Sérialise le dernier event pour l'API admin (None si pas d'event)."""
+    if event is None:
+        return None
+    return {
+        "event_type": event["event_type"],
+        "received_at": event["received_at"].isoformat(),
+    }
 
 
 def _safe_uuid(v: object) -> UUID | None:

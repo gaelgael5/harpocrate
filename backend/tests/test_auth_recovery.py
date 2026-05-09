@@ -47,20 +47,27 @@ def _client(pool: MagicMock) -> AsyncClient:
 
 @pytest.mark.asyncio
 async def test_start_returns_202_for_unknown_email() -> None:
-    """Anti-énumération : 202 même si l'email n'existe pas."""
+    """Anti-énumération : 202 même si l'email n'existe pas.
+
+    Le `tracking_id` retourné est valide même pour les emails inconnus
+    (généré côté DB pour le futur WebSocket de suivi). C'est ce qui rend
+    indistinguable un envoi en cours d'un email inconnu côté client.
+    """
     from app.services import recovery as svc
 
-    conn = MagicMock()
-    pool = _make_pool(conn)
+    fake_tracking = uuid4()
+    pool = _make_pool(MagicMock())
 
-    with patch.object(svc, "start_session", AsyncMock(return_value=None)) as m:
+    with patch.object(svc, "start_session", AsyncMock(return_value=fake_tracking)) as m:
         async with _client(pool) as cli:
             r = await cli.post(
                 "/v1/auth/recovery/start",
                 json={"email": "unknown@example.com"},
             )
     assert r.status_code == 202
-    assert r.json() == {"ok": True}
+    body = r.json()
+    assert body["ok"] is True
+    assert body["tracking_id"] == str(fake_tracking)
     m.assert_awaited_once()
 
 
@@ -262,15 +269,15 @@ async def test_service_start_skips_novu_for_unknown_email() -> None:
     """Si l'email n'existe pas, aucune notification ne part — mais la session
     est quand même créée pour anti-énumération + count anomalie."""
     from app.db.repositories import recovery_sessions as repo
-    from app.services import notify_novu
+    from app.services import notify_listmonk
     from app.services import recovery as svc
 
     conn = MagicMock()
     new_id = uuid4()
-    with patch.object(repo, "insert", AsyncMock(return_value=new_id)) as ins, patch(
+    with patch.object(repo, "insert", AsyncMock(return_value=(new_id, uuid4()))) as ins, patch(
         "app.services.recovery.users_repo.get_id_and_is_system_by_email",
         AsyncMock(return_value=None),
-    ), patch.object(notify_novu, "trigger_event", AsyncMock()) as trig:
+    ), patch.object(notify_listmonk, "trigger_recovery", AsyncMock(return_value=True)) as trig:
         await svc.start_session(conn, email="ghost@example.com", ip="1.2.3.4")
 
     ins.assert_awaited_once()
@@ -282,18 +289,19 @@ async def test_service_start_skips_novu_for_system_user() -> None:
     """Le local-admin (is_system=True) n'a pas de matériel crypto → pas de
     workflow recovery déclenché."""
     from app.db.repositories import recovery_sessions as repo
-    from app.services import notify_novu
+    from app.services import notify_listmonk
     from app.services import recovery as svc
 
     conn = MagicMock()
     user_id = uuid4()
     new_id = uuid4()
-    with patch.object(repo, "insert", AsyncMock(return_value=new_id)), patch(
+    with patch.object(repo, "insert", AsyncMock(return_value=(new_id, uuid4()))), patch(
         "app.services.recovery.users_repo.get_id_and_is_system_by_email",
         AsyncMock(return_value=(user_id, True)),
-    ), patch.object(notify_novu, "trigger_event", AsyncMock()) as trig:
+    ), patch.object(notify_listmonk, "trigger_recovery", AsyncMock(return_value=True)) as trig:
         await svc.start_session(conn, email="admin@harpocrate.local", ip=None)
 
+    # Pas de mail envoyé pour un system user
     trig.assert_not_called()
 
 
@@ -321,7 +329,7 @@ async def test_increment_attempts_flips_to_failed_at_max() -> None:
 async def test_anomaly_recorded_when_threshold_reached() -> None:
     """5 sessions failed/expired sur 24h → INSERT identity_anomaly_events."""
     from app.db.repositories import recovery_sessions as repo
-    from app.services import notify_novu
+    from app.services import notify_listmonk
     from app.services import recovery as svc
 
     conn = MagicMock()
@@ -337,14 +345,14 @@ async def test_anomaly_recorded_when_threshold_reached() -> None:
     conn.execute = AsyncMock(side_effect=fake_execute)
     conn.fetchval = AsyncMock(return_value="Gael")  # display_name lookup
 
-    with patch.object(repo, "insert", AsyncMock(return_value=new_session_id)), patch(
+    with patch.object(repo, "insert", AsyncMock(return_value=(new_session_id, uuid4()))), patch(
         "app.services.recovery.users_repo.get_id_and_is_system_by_email",
         AsyncMock(return_value=(user_id, False)),
     ), patch.object(
         repo,
         "count_unsuccessful_for_email",
         AsyncMock(return_value=5),
-    ), patch.object(notify_novu, "trigger_event", AsyncMock()):
+    ), patch.object(notify_listmonk, "trigger_recovery", AsyncMock(return_value=True)):
         await svc.start_session(conn, email="g@example.com", ip=None)
 
     # Au moins un INSERT identity_anomaly_events doit avoir eu lieu.
@@ -494,10 +502,16 @@ async def test_service_abandon_account_deletes_wallets_then_user(
     ), patch.object(repo, "mark_consumed", AsyncMock()):
         await svc.abandon_account(conn, session_id=session_id, ip="1.2.3.4")
 
-    # Le DELETE wallets doit précéder le DELETE users (FK RESTRICT)
-    assert len(executed) >= 2
-    assert "DELETE FROM wallets" in executed[0]
-    assert "DELETE FROM users" in executed[1]
+    # Ordre attendu :
+    #   1. SET LOCAL session_replication_role (désactive triggers métier)
+    #   2. DELETE wallet_grants émis par cet user (FK RESTRICT sur granted_by)
+    #   3. DELETE wallets dont il est owner (FK RESTRICT)
+    #   4. DELETE users
+    assert len(executed) >= 4
+    assert "SET LOCAL session_replication_role" in executed[0]
+    assert "DELETE FROM wallet_grants" in executed[1]
+    assert "DELETE FROM wallets" in executed[2]
+    assert "DELETE FROM users" in executed[3]
 
 
 @pytest.mark.asyncio

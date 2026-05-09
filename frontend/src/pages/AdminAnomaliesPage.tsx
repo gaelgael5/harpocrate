@@ -37,6 +37,11 @@ interface AnomalyRow {
   acknowledged_by_user_id: string | null
 }
 
+interface NotificationEvent {
+  event_type: 'sent' | 'delivery' | 'open' | 'click' | 'failed'
+  received_at: string
+}
+
 interface RecoverySession {
   id: string
   user_id: string | null
@@ -48,6 +53,16 @@ interface RecoverySession {
   ip_started: string | null
   ip_consumed: string | null
   consumed_at: string | null
+  novu_transaction_id: string | null
+  latest_event: NotificationEvent | null
+}
+
+const EVENT_COLOR: Record<NotificationEvent['event_type'], string> = {
+  sent: 'blue',
+  delivery: 'cyan',
+  open: 'green',
+  click: 'teal',
+  failed: 'red',
 }
 
 const SEVERITY_COLOR: Record<AnomalyRow['severity'], string> = {
@@ -230,6 +245,8 @@ export function AdminAnomaliesPage() {
                       <Table.Th>{t('admin.anomalies.sessionsStatus')}</Table.Th>
                       <Table.Th>{t('admin.anomalies.sessionsAttempts')}</Table.Th>
                       <Table.Th>{t('admin.anomalies.sessionsIpStarted')}</Table.Th>
+                      <Table.Th>{t('admin.anomalies.sessionsLatestEvent')}</Table.Th>
+                      <Table.Th>{t('admin.anomalies.sessionsNovuTx')}</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -251,6 +268,26 @@ export function AdminAnomaliesPage() {
                         </Table.Td>
                         <Table.Td>
                           <Code style={{ fontSize: '0.7rem' }}>{s.ip_started ?? '—'}</Code>
+                        </Table.Td>
+                        <Table.Td>
+                          {s.latest_event ? (
+                            <Badge
+                              color={EVENT_COLOR[s.latest_event.event_type]}
+                              variant="light"
+                              title={new Date(s.latest_event.received_at).toLocaleString()}
+                            >
+                              {s.latest_event.event_type}
+                            </Badge>
+                          ) : (
+                            <Text size="xs" c="dimmed">
+                              —
+                            </Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          <Code style={{ fontSize: '0.7rem', wordBreak: 'break-all' }}>
+                            {s.novu_transaction_id ?? '—'}
+                          </Code>
                         </Table.Td>
                       </Table.Tr>
                     ))}

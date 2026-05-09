@@ -447,7 +447,9 @@
       "sessionsEmail": "Email",
       "sessionsStatus": "Statut",
       "sessionsAttempts": "Tentatives",
-      "sessionsIpStarted": "IP origine"
+      "sessionsIpStarted": "IP origine",
+      "sessionsLatestEvent": "Dernier event",
+      "sessionsNovuTx": "Tx ID provider"
     },
     "system": {
       "title": "Informations système",

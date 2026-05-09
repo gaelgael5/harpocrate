@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime
+import uuid
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -22,7 +23,8 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.db.repositories import recovery_sessions as repo
 from app.db.repositories import users as users_repo
-from app.services import notify_novu
+from app.services import notification_delivery as delivery_svc
+from app.services import notify_listmonk
 from app.services.audit import audit_log_insert
 
 
@@ -115,12 +117,19 @@ async def start_session(
     ip: str | None,
     user_agent: str | None = None,
     public_url: str | None = None,
-) -> None:
+) -> UUID:
     """Crée une session et déclenche la notification.
 
-    Anti-énumération : retourne `None` quel que soit le cas (email existe
-    ou non). Le caller renvoie toujours 202 au client. La détection
-    d'anomalie (5+ sessions failed/expired sur 24h) est aussi faite ici.
+    Anti-énumération : retourne TOUJOURS un `tracking_id` UUID au caller,
+    qu'un user existe ou pas. Le `tracking_id` est destiné au futur
+    endpoint WebSocket de suivi de livraison (séparé du `session_id`
+    secret reçu par mail). Quand l'email est inconnu, le tracking_id
+    pointe sur une row "fantôme" : aucun webhook ne viendra jamais
+    l'updater → la WS restera silencieuse, indistinguable d'une vraie
+    session côté client.
+
+    La détection d'anomalie (5+ sessions failed/expired sur 24h) est
+    aussi faite ici.
     """
     ttl = _session_ttl()
     now = datetime.datetime.now(datetime.UTC)
@@ -140,7 +149,7 @@ async def start_session(
             )
             user_id = None
 
-    session_id = await repo.insert(
+    session_id, tracking_id = await repo.insert(
         conn,
         user_id=user_id,
         email=email,
@@ -153,15 +162,15 @@ async def start_session(
         await _maybe_record_anomaly(conn, email=email, user_id=user_id)
 
     if user_id is not None:
-        # Trigger Novu en arrière-plan : on ne bloque pas la réponse HTTP.
-        # La fonction trigger_event swallow déjà ses erreurs.
+        # Trigger listmonk en arrière-plan : on ne bloque pas la réponse HTTP.
+        # `notify_listmonk.trigger_recovery` swallow déjà ses erreurs.
         link_base = (public_url or settings.public_url).rstrip("/")
         recovery_link = f"{link_base}/recover/{session_id}"
-        # Payload aligné sur le schéma JSON-Schema déclaré côté workflow Novu.
-        # Tous les champs sont des strings — Novu valide strictement les types.
-        # `appName`, `year`, `requestedAt` sont calculés ici ; `requestIp` et
-        # `requestUserAgent` viennent du request HTTP côté endpoint /start.
-        novu_payload = {
+        # Payload consommé par le template listmonk via {{ data.* }}.
+        # Tous les champs sont stringifiés (listmonk Sprig templates ne font
+        # pas de coercion automatique). Locale du template à choisir plus
+        # tard depuis la préférence user.
+        listmonk_payload = {
             "appName": "Harpocrate",
             "expiresInMinutes": str(int(ttl.total_seconds() / 60)),
             "recoveryLink": recovery_link,
@@ -170,17 +179,69 @@ async def start_session(
             "requestedAt": now.isoformat(),
             "year": str(now.year),
         }
+        # On génère le tx_id côté Harpocrate AVANT l'appel listmonk pour
+        # pouvoir le persister immédiatement (au cas où l'envoi mail échoue,
+        # on a quand même la trace en DB). Le tx_id est passé à listmonk
+        # via header custom `X-Harpocrate-Tx-Id` — listmonk le forward dans
+        # ses webhooks de delivery, ce qui permettra plus tard la jointure.
+        tx_id = str(uuid.uuid4())
+
+        async def _persist_tx_and_trigger() -> None:
+            from app.db.pool import get_pool
+
+            pool = await get_pool()
+            try:
+                async with pool.acquire() as bg_conn:
+                    await repo.set_novu_transaction_id(
+                        bg_conn,
+                        session_id=session_id,
+                        transaction_id=tx_id,
+                    )
+            except Exception as exc:
+                # Si la persistance du tx_id rate, on n'envoie pas — sinon
+                # on aurait un mail dans la nature sans trace côté Harpocrate.
+                logger.warning(
+                    "recovery_tx_persist_failed",
+                    session_id=str(session_id),
+                    tx_id=tx_id,
+                    error=str(exc),
+                )
+                return
+
+            sent = await notify_listmonk.trigger_recovery(
+                email=email,
+                tx_id=tx_id,
+                payload=listmonk_payload,
+                locale="fr",  # TODO: lire depuis users.preferred_locale quand dispo
+            )
+            if not sent:
+                return
+
+            # Amorce la timeline notification_events avec un event 'sent'
+            # local — avant même le premier webhook delivery de listmonk.
+            try:
+                async with pool.acquire() as bg_conn:
+                    await delivery_svc.record_local_sent(
+                        bg_conn,
+                        transaction_id=tx_id,
+                        metadata={
+                            "source": "trigger",
+                            "provider": "listmonk",
+                            "session_id": str(session_id),
+                        },
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "recovery_local_sent_persist_failed",
+                    session_id=str(session_id),
+                    tx_id=tx_id,
+                    error=str(exc),
+                )
+
         # On garde une référence dans `_BACKGROUND_TASKS` pour empêcher
         # le garbage-collector de tuer le task avant qu'il ne se termine
         # (cf. RUF006 / docs Python 3.12 asyncio).
-        task = asyncio.create_task(
-            notify_novu.trigger_event(
-                settings.recovery_novu_event_name,
-                subscriber_id=str(user_id),
-                email=email,
-                payload=novu_payload,
-            )
-        )
+        task = asyncio.create_task(_persist_tx_and_trigger())
         _BACKGROUND_TASKS.add(task)
         task.add_done_callback(_BACKGROUND_TASKS.discard)
         await audit_log_insert(
@@ -205,6 +266,8 @@ async def start_session(
             session_id=str(session_id),
             email=email,
         )
+
+    return tracking_id
 
 
 async def _maybe_record_anomaly(
@@ -345,10 +408,26 @@ async def abandon_account(
     email: str = row["email"]
 
     async with conn.transaction():
-        # Cascade explicite : wallets a ON DELETE RESTRICT vers users, donc
-        # on doit les détruire avant. Les secrets cascadent automatiquement
-        # via wallets.id.
+        # Désactive temporairement les triggers métier (notamment
+        # `protect_owner_grant_delete` qui bloque la suppression du grant
+        # auto-owner d'un wallet). Scope = transaction courante uniquement.
+        # Les FK et CHECK SQL continuent d'être appliqués normalement.
+        await conn.execute("SET LOCAL session_replication_role = 'replica'")
+
+        # Grants émis par cet user vers d'autres users (RESTRICT sur
+        # `granted_by_user_id`) — il faut les vider avant DELETE users
+        # sinon la contrainte bloque même hors trigger.
+        await conn.execute(
+            "DELETE FROM wallet_grants WHERE granted_by_user_id = $1",
+            user_id,
+        )
+
+        # Wallets dont il est owner (RESTRICT) → cascade les grants reçus
+        # et les secrets associés. Le trigger protect_owner_grant_delete
+        # est désactivé pour la transaction → la cascade peut se finir.
         await conn.execute("DELETE FROM wallets WHERE owner_user_id = $1", user_id)
+
+        # L'user lui-même (cascade le reste : anomalies, sessions, etc.)
         await conn.execute("DELETE FROM users WHERE id = $1", user_id)
         # NB : on ne peut PAS audit_log_insert ici (FK actor_user_id pointe
         # sur la row qu'on vient de DELETE — violerait audit_log_one_actor).

@@ -142,6 +142,10 @@ async def bootstrap_user(
     enc_sym_rec = _decode_base64(
         req.encrypted_sym_key_by_recovery, "encrypted_sym_key_by_recovery"
     )
+    enc_rsa_priv_by_recovery = _decode_base64(
+        req.encrypted_rsa_private_key_by_recovery,
+        "encrypted_rsa_private_key_by_recovery",
+    )
 
     # Cas pré-existant : un admin Keycloak qui a touché /admin/* avant son
     # first-login a déjà une row shell (is_system=TRUE) créée par
@@ -169,6 +173,7 @@ async def bootstrap_user(
             encrypted_rsa_private_key=enc_priv,
             encrypted_sym_key_by_pass=enc_sym_pass,
             encrypted_sym_key_by_recovery=enc_sym_rec,
+            encrypted_rsa_private_key_by_recovery=enc_rsa_priv_by_recovery,
             kdf_memory_kb=req.kdf_memory_kb,
             kdf_iterations=req.kdf_iterations,
             kdf_parallelism=req.kdf_parallelism,
@@ -191,6 +196,7 @@ async def bootstrap_user(
                 encrypted_rsa_private_key=enc_priv,
                 encrypted_sym_key_by_pass=enc_sym_pass,
                 encrypted_sym_key_by_recovery=enc_sym_rec,
+                encrypted_rsa_private_key_by_recovery=enc_rsa_priv_by_recovery,
                 kdf_memory_kb=req.kdf_memory_kb,
                 kdf_iterations=req.kdf_iterations,
                 kdf_parallelism=req.kdf_parallelism,
@@ -260,10 +266,19 @@ async def renew_recovery(
     user: UserRow,
     req: RecoveryRenewRequest,
 ) -> datetime.datetime:
-    """Valide et met à jour le blob recovery."""
+    """Valide et met à jour le blob recovery.
+
+    LOT_57 fix : on re-chiffre AUSSI rsa_priv avec la nouvelle recovery_key
+    (sinon le flow recovery casserait — l'ancien blob by_recovery serait
+    déchiffrable par les anciens 24 mots, mais l'user a régénéré).
+    """
     new_salt = _check_salt(req.new_salt_recovery, "new_salt_recovery")
     new_enc_rec = _decode_base64(
         req.new_encrypted_sym_key_by_recovery, "new_encrypted_sym_key_by_recovery"
+    )
+    new_enc_rsa_priv_by_rec = _decode_base64(
+        req.new_encrypted_rsa_private_key_by_recovery,
+        "new_encrypted_rsa_private_key_by_recovery",
     )
 
     updated_at = await users_repo.update_recovery(
@@ -271,6 +286,7 @@ async def renew_recovery(
         user_id=user.id,
         new_salt_recovery=new_salt,
         new_encrypted_sym_key_by_recovery=new_enc_rec,
+        new_encrypted_rsa_private_key_by_recovery=new_enc_rsa_priv_by_rec,
     )
 
     await audit_log_insert(

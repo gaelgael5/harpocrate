@@ -27,6 +27,9 @@ class BootstrapRequest(BaseModel):
     encrypted_rsa_private_key: str  # base64
     encrypted_sym_key_by_pass: str  # base64
     encrypted_sym_key_by_recovery: str  # base64
+    # LOT_57 fix : rsa_priv re-chiffrée avec recovery_key, indispensable
+    # pour rendre le flow recovery (24 mots) opérant.
+    encrypted_rsa_private_key_by_recovery: str  # base64
 
     kdf_memory_kb: int
     kdf_iterations: int
@@ -38,6 +41,7 @@ class BootstrapRequest(BaseModel):
         "encrypted_rsa_private_key",
         "encrypted_sym_key_by_pass",
         "encrypted_sym_key_by_recovery",
+        "encrypted_rsa_private_key_by_recovery",
     )
     @classmethod
     def _not_empty(cls, v: str) -> str:
@@ -63,6 +67,9 @@ class RecoveryRenewRequest(BaseModel):
 
     new_salt_recovery: str  # base64, exactement 16 bytes décodés
     new_encrypted_sym_key_by_recovery: str  # base64
+    # LOT_57 fix : nouvelle recovery_key → re-chiffrement obligatoire de
+    # rsa_priv avec cette nouvelle clé, sinon le flow recovery casserait.
+    new_encrypted_rsa_private_key_by_recovery: str  # base64
 
 
 # ─── Réponses ────────────────────────────────────────────────────────────────

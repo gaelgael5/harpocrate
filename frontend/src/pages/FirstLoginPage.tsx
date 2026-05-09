@@ -195,6 +195,15 @@ export function FirstLoginPage() {
         recoveryKey,
       )
 
+      // LOT_57 fix : Encrypt rsa_priv with recovery_key — indispensable
+      // pour rendre le flow recovery zero-knowledge fonctionnel. Sans cette
+      // copie, l'utilisateur récupère sym_key via les 24 mots mais reste
+      // sans accès à rsa_priv (chiffrée uniquement avec pass_key).
+      const encRsaPrivByRecovery = await aesGcmEncrypt(
+        cryptoMaterial.rsaPriv,
+        recoveryKey,
+      )
+
       // POST bootstrap
       const body = {
         rsa_public_key: toBase64(cryptoMaterial.rsaPub),
@@ -203,6 +212,7 @@ export function FirstLoginPage() {
         encrypted_rsa_private_key: toBase64(encRsaPriv),
         encrypted_sym_key_by_pass: toBase64(encSymByPass),
         encrypted_sym_key_by_recovery: toBase64(encSymByRecovery),
+        encrypted_rsa_private_key_by_recovery: toBase64(encRsaPrivByRecovery),
         kdf_memory_kb: kdfParams.memory_kb,
         kdf_iterations: kdfParams.iterations,
         kdf_parallelism: kdfParams.parallelism,

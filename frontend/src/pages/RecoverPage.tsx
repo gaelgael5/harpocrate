@@ -45,8 +45,9 @@ interface RecoveryBlobs {
   attempts_left: number
   salt_recovery: string
   encrypted_sym_key_by_recovery: string
-  salt_passphrase: string
-  encrypted_rsa_private_key: string
+  // LOT_57 fix : rsa_priv chiffrée avec recovery_key (séparée de la copie
+  // chiffrée par pass_key). Permet la récupération zero-knowledge.
+  encrypted_rsa_private_key_by_recovery: string
   rsa_public_key: string
   kdf_params: KdfParams
 }
@@ -267,21 +268,23 @@ export function RecoverPage() {
       const saltRec = fromBase64(blobs.salt_recovery)
       const recoveryKey = await deriveKeyFromSeed(seed, saltRec, blobs.kdf_params)
 
-      // 3. AES-GCM décrypte sym_key
+      // 3. AES-GCM décrypte sym_key avec recovery_key
       let symKey: Uint8Array
+      let rsaPriv: Uint8Array
       try {
         const encSym = fromBase64(blobs.encrypted_sym_key_by_recovery)
         symKey = await aesGcmDecrypt(encSym, recoveryKey)
+        // 4. AES-GCM décrypte rsa_priv avec recovery_key (LOT_57 fix —
+        //    avant la migration 022, rsa_priv n'était chiffrée qu'avec
+        //    pass_key et donc inaccessible via les 24 mots).
+        const encRsaPrivByRec = fromBase64(blobs.encrypted_rsa_private_key_by_recovery)
+        rsaPriv = await aesGcmDecrypt(encRsaPrivByRec, recoveryKey)
       } catch {
         await reportFailedAttempt()
         setErrorMsg(t('recover.errors.invalid_words'))
         setStep('words')
         return
       }
-
-      // 4. AES-GCM décrypte rsa_private_key avec sym_key (cohérence chaîne crypto)
-      const encPriv = fromBase64(blobs.encrypted_rsa_private_key)
-      const rsaPriv = await aesGcmDecrypt(encPriv, symKey)
 
       setDecryptedSymKey(symKey)
       setDecryptedRsaPriv(rsaPriv)

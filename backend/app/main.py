@@ -32,6 +32,7 @@ from app.api.v1 import (
     grants,
     health,
     identity_management,
+    me_wallet_environments,
     sdk_downloads,
     secrets,
     users,
@@ -230,5 +231,6 @@ app.include_router(audit_log.router, prefix="/v1")
 app.include_router(apps.router, prefix="/v1")
 app.include_router(api_key_openapi.router, prefix="/v1")
 app.include_router(identity_management.router, prefix="/v1")
+app.include_router(me_wallet_environments.router, prefix="/v1")
 app.include_router(sdk_downloads.router, prefix="/v1")
 app.include_router(webhooks_notify.router, prefix="/v1")

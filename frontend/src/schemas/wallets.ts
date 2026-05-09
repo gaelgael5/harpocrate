@@ -51,6 +51,8 @@ export const WalletItemSchema = z.object({
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
   deleted_at: z.string().datetime({ offset: true }).nullable().optional(),
+  // LOT_58 : NULL = "None" (item virtuel côté UI)
+  environment_id: z.string().uuid().nullable().optional(),
 })
 
 export const WalletListResponseSchema = z.object({

@@ -15,6 +15,10 @@ import {
   Box,
   Divider,
   Collapse,
+  ActionIcon,
+  Tooltip,
+  Modal,
+  TextInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useNavigate } from 'react-router-dom'
@@ -23,6 +27,12 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '@/lib/api-client'
 import { WalletListResponseSchema, type WalletItem } from '@/schemas/wallets'
 import { hasPermission, PERM_READ } from '@/schemas/grants'
+import {
+  fetchWalletEnvironments,
+  createWalletEnvironment,
+  deleteWalletEnvironment,
+  type WalletEnvironment,
+} from '@/lib/walletEnvironmentsApi'
 
 function WalletCard({ wallet }: { wallet: WalletItem }) {
   const { t } = useTranslation()
@@ -158,11 +168,68 @@ function DeletedWalletCard({ wallet }: { wallet: WalletItem }) {
   )
 }
 
+/** Section "Environnement" — header + grid des wallets de cet env */
+function EnvironmentSection({
+  envName,
+  envId,
+  isVirtualNone,
+  wallets,
+  onDelete,
+}: {
+  envName: string
+  envId: string | null
+  isVirtualNone: boolean
+  wallets: WalletItem[]
+  onDelete?: (envId: string, envName: string) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Stack gap="xs">
+      <Group justify="space-between" align="center">
+        <Group gap="xs">
+          <Text fw={600} size="md" style={{ color: '#0a0a0a' }}>
+            {envName}
+          </Text>
+          <Badge variant="outline" size="xs" color="gray">
+            {wallets.length}
+          </Badge>
+        </Group>
+        {!isVirtualNone && envId && onDelete && (
+          <Tooltip label={t('wallets.environments.delete')}>
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              size="sm"
+              onClick={() => onDelete(envId, envName)}
+            >
+              ×
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </Group>
+      {wallets.length === 0 ? (
+        <Text c="dimmed" size="xs" pl="sm">
+          {t('wallets.environments.empty')}
+        </Text>
+      ) : (
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+          {wallets.map((w) => (
+            <WalletCard key={w.id} wallet={w} />
+          ))}
+        </SimpleGrid>
+      )}
+    </Stack>
+  )
+}
+
 export function WalletsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [trashOpen, setTrashOpen] = useState(false)
+  const [envModalOpen, setEnvModalOpen] = useState(false)
+  const [newEnvName, setNewEnvName] = useState('')
+  const [envCreateError, setEnvCreateError] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['wallets'],
@@ -172,18 +239,62 @@ export function WalletsPage() {
     },
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: (walletId: string) =>
-      api.delete(`/wallets/${walletId}`),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
-      notifications.show({ color: 'green', message: t('wallets.deleteSuccess') })
-    },
-    onError: () => notifications.show({ color: 'red', message: t('wallets.deleteError') }),
+  const envQuery = useQuery({
+    queryKey: ['wallet-environments'],
+    queryFn: fetchWalletEnvironments,
   })
-  void deleteMutation
 
-  if (isLoading) {
+  const createEnvMut = useMutation({
+    mutationFn: createWalletEnvironment,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['wallet-environments'] })
+      setEnvModalOpen(false)
+      setNewEnvName('')
+      setEnvCreateError(null)
+      notifications.show({
+        color: 'green',
+        message: t('wallets.environments.createSuccess'),
+      })
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      setEnvCreateError(msg)
+    },
+  })
+
+  const deleteEnvMut = useMutation({
+    mutationFn: deleteWalletEnvironment,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['wallet-environments'] })
+      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
+      notifications.show({
+        color: 'green',
+        message: t('wallets.environments.deleteSuccess'),
+      })
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    },
+  })
+
+  function handleDeleteEnv(envId: string, envName: string) {
+    if (!window.confirm(t('wallets.environments.deleteConfirm', { name: envName }))) {
+      return
+    }
+    deleteEnvMut.mutate(envId)
+  }
+
+  function handleSubmitNewEnv() {
+    const trimmed = newEnvName.trim()
+    if (!trimmed) {
+      setEnvCreateError(t('common.required'))
+      return
+    }
+    createEnvMut.mutate(trimmed)
+  }
+
+  if (isLoading || envQuery.isLoading) {
     return <Center py="xl"><Loader color="brand" /></Center>
   }
 
@@ -194,12 +305,28 @@ export function WalletsPage() {
 
   const wallets = data?.wallets ?? []
   const deletedWallets = data?.deleted_wallets ?? []
+  const environments: WalletEnvironment[] = envQuery.data ?? []
+
+  // Groupage des wallets par environment_id (NULL → "None" virtuel).
+  const noneWallets = wallets.filter((w) => !w.environment_id)
+  const walletsByEnv = new Map<string, WalletItem[]>()
+  for (const env of environments) {
+    walletsByEnv.set(env.id, [])
+  }
+  for (const w of wallets) {
+    if (w.environment_id && walletsByEnv.has(w.environment_id)) {
+      walletsByEnv.get(w.environment_id)!.push(w)
+    }
+  }
 
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="center">
         <Title order={2}>{t('wallets.title')}</Title>
         <Group gap="xs">
+          <Button variant="default" onClick={() => setEnvModalOpen(true)}>
+            {t('wallets.environments.create')}
+          </Button>
           <Button variant="default" onClick={() => navigate('/wallets/import')}>
             {t('wallets.import.button')}
           </Button>
@@ -209,13 +336,81 @@ export function WalletsPage() {
         </Group>
       </Group>
 
-      {wallets.length === 0 ? (
+      {wallets.length === 0 && environments.length === 0 ? (
         <Text c="dimmed">{t('wallets.noWallets')}</Text>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-          {wallets.map((w) => <WalletCard key={w.id} wallet={w} />)}
-        </SimpleGrid>
+        <Stack gap="lg">
+          {/* Section "None" toujours en tête */}
+          <EnvironmentSection
+            envName={t('wallets.environments.none')}
+            envId={null}
+            isVirtualNone
+            wallets={noneWallets}
+          />
+          {/* Sections par env (alphabétique = ordre du backend) */}
+          {environments.map((env) => (
+            <EnvironmentSection
+              key={env.id}
+              envName={env.name}
+              envId={env.id}
+              isVirtualNone={false}
+              wallets={walletsByEnv.get(env.id) ?? []}
+              onDelete={handleDeleteEnv}
+            />
+          ))}
+        </Stack>
       )}
+
+      {/* Modal création environnement */}
+      <Modal
+        opened={envModalOpen}
+        onClose={() => {
+          setEnvModalOpen(false)
+          setNewEnvName('')
+          setEnvCreateError(null)
+        }}
+        title={t('wallets.environments.createTitle')}
+        size="sm"
+      >
+        <Stack gap="sm">
+          <TextInput
+            label={t('wallets.environments.nameLabel')}
+            placeholder={t('wallets.environments.namePlaceholder')}
+            value={newEnvName}
+            onChange={(e) => setNewEnvName(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSubmitNewEnv()
+            }}
+            autoFocus
+            data-testid="env-name-input"
+          />
+          {envCreateError && (
+            <Alert color="red" variant="light">
+              {envCreateError}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setEnvModalOpen(false)
+                setNewEnvName('')
+                setEnvCreateError(null)
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              color="brand"
+              onClick={handleSubmitNewEnv}
+              loading={createEnvMut.isPending}
+              disabled={!newEnvName.trim()}
+            >
+              {t('wallets.environments.create')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* Corbeille */}
       <Divider />

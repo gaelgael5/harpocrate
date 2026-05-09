@@ -125,6 +125,19 @@
   "wallets": {
     "title": "My vaults",
     "create": "New vault",
+    "environment": "Environment",
+    "environments": {
+      "none": "None",
+      "create": "New environment",
+      "createTitle": "Create environment",
+      "createSuccess": "Environment created",
+      "delete": "Delete environment",
+      "deleteConfirm": "Delete environment \"{{name}}\"?",
+      "deleteSuccess": "Environment deleted",
+      "nameLabel": "Environment name",
+      "namePlaceholder": "e.g. dev, staging, prod",
+      "empty": "No vaults in this environment"
+    },
     "refresh": "Refresh",
     "refreshHint": "Reload the folder tree and secrets of this vault",
     "noWallets": "No vaults. Create one to get started.",

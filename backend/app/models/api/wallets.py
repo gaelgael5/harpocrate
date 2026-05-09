@@ -16,6 +16,9 @@ class WalletCreateRequest(BaseModel):
     description: str | None = None
     tags: list[str] = []
     encrypted_wallet_key_for_owner: str  # base64
+    # LOT_58 : environnement (None si non fourni → wallet rangé sous "None"
+    # côté UI, environment_id NULL en DB).
+    environment_id: UUID | None = None
 
     @field_validator("name")
     @classmethod
@@ -55,6 +58,17 @@ class WalletPatchRequest(BaseModel):
     name: str | None = None
     description: str | None = None
     tags: list[str] | None = None
+    # LOT_58 : changement d'environnement. None signifie "pas de changement"
+    # (Pydantic ne distingue pas explicit NULL vs omitted en JSON sans
+    # `model_fields_set`). Pour mettre à NULL côté DB ("None" virtuel),
+    # passer la chaîne sentinelle "__NONE__" ou utiliser un mécanisme
+    # dédié — pour l'instant on décide : `environment_id=null` dans le
+    # JSON = wallet repasse à "None".
+    environment_id: UUID | None = None
+    # Distingue "le caller veut explicitement changer l'env" vs "il n'a pas
+    # mentionné le champ". Sans ça impossible de différencier "garder"
+    # de "remettre à None".
+    set_environment: bool = False
 
     @field_validator("name")
     @classmethod
@@ -109,6 +123,8 @@ class WalletItem(BaseModel):
     created_at: datetime.datetime
     updated_at: datetime.datetime
     deleted_at: datetime.datetime | None = None
+    # LOT_58 : environment_id NULL = "None" (item virtuel côté UI).
+    environment_id: UUID | None = None
 
 
 class WalletListResponse(BaseModel):

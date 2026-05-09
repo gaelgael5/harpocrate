@@ -12,6 +12,8 @@ import asyncpg
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.core.logging import logger
+from app.db.repositories import wallet_environments as wallet_env_repo
 from app.db.repositories import wallets as wallets_repo
 from app.models.api.exports import (
     ExportedSecret,
@@ -25,7 +27,6 @@ from app.models.api.wallets import (
     WalletCreateRequest,
     WalletPatchRequest,
 )
-from app.core.logging import logger
 from app.models.db.wallet import WalletWithGrant
 from app.services.audit import audit_log_insert
 
@@ -65,6 +66,29 @@ def _decode_key(b64_value: str) -> bytes:
         ) from exc
 
 
+async def _validate_environment_ownership(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    environment_id: UUID | None,
+    owner_user_id: UUID,
+) -> None:
+    """Vérifie que l'environment_id (s'il est fourni) appartient bien à
+    `owner_user_id`. Sinon lève 400 environment_not_owned (ne pas leak via
+    404 — ça permettrait de tester l'existence d'un id côté autres users).
+    """
+    if environment_id is None:
+        return
+    env = await wallet_env_repo.get_by_id(conn, environment_id)
+    if env is None or env.owner_user_id != owner_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "environment_not_owned",
+                "message": "environment_id does not exist or is not owned by you",
+            },
+        )
+
+
 # ─── Create ───────────────────────────────────────────────────────────────────
 
 
@@ -78,6 +102,13 @@ async def create_wallet(
     """Crée un wallet avec grant owner (permissions=63). Retourne wallet_id."""
     enc_key = _decode_key(req.encrypted_wallet_key_for_owner)
 
+    # LOT_58 : valide que l'environment_id (s'il est fourni) appartient
+    # bien au caller — sinon on permettrait à un user de ranger un wallet
+    # dans l'env d'un autre user (leak d'identifiants d'env).
+    await _validate_environment_ownership(
+        conn, environment_id=req.environment_id, owner_user_id=caller_user_id
+    )
+
     async with conn.transaction():
         wallet_id = await wallets_repo.insert_wallet_with_grant(
             conn,
@@ -86,6 +117,7 @@ async def create_wallet(
             owner_user_id=caller_user_id,
             tags=req.tags,
             encrypted_wallet_key=enc_key,
+            environment_id=req.environment_id,
         )
         await audit_log_insert(
             conn,
@@ -199,13 +231,27 @@ async def patch_wallet(
             },
         )
 
+    # LOT_58 : si le caller veut changer l'env, on valide d'abord que le
+    # nouvel env (s'il n'est pas NULL) lui appartient.
+    if req.set_environment:
+        await _validate_environment_ownership(
+            conn,
+            environment_id=req.environment_id,
+            owner_user_id=wallet.owner_user_id,
+        )
+
     async with conn.transaction():
+        from app.db.repositories.wallets import _ENV_UNCHANGED
+
         await wallets_repo.update_wallet(
             conn,
             wallet_id=wallet_id,
             name=req.name,
             description=req.description,
             tags=req.tags,
+            environment_id=(
+                req.environment_id if req.set_environment else _ENV_UNCHANGED
+            ),
         )
         await audit_log_insert(
             conn,

@@ -54,3 +54,6 @@ class WalletWithGrant:
 
     # Suppression logique — None = actif
     deleted_at: datetime.datetime | None = None
+
+    # LOT_58 : environment_id (NULL = "None" virtuel)
+    environment_id: UUID | None = None

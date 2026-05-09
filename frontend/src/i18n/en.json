@@ -600,6 +600,8 @@
       "passwordEditHint": "Leave empty to keep the existing password",
       "privateKeyEditHint": "Leave empty to keep the existing key",
       "usernameEditHint": "Leave empty to keep the existing credentials",
+      "credentialsStoredHint": "✓ Credentials stored. Leave the fields empty to keep them.",
+      "credentialsMissingHint": "⚠ No credentials stored for this connection. Enter them to make it usable.",
       "testSuccess": "Connection tested successfully",
       "testFailed": "Connection test failed",
       "createSuccess": "Connection created",

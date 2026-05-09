@@ -601,6 +601,8 @@
       "passwordEditHint": "Laisser vide pour conserver le mot de passe existant",
       "privateKeyEditHint": "Laisser vide pour conserver la clé existante",
       "usernameEditHint": "Laisser vide pour conserver les identifiants existants",
+      "credentialsStoredHint": "✓ Identifiants enregistrés. Laisser les champs vides pour les conserver.",
+      "credentialsMissingHint": "⚠ Aucun identifiant enregistré pour cette connexion. Saisissez-les pour qu'elle soit utilisable.",
       "testSuccess": "Connexion testée avec succès",
       "testFailed": "Échec du test de connexion",
       "createSuccess": "Connexion créée",

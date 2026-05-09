@@ -33,6 +33,10 @@ class RemoteBackupConnection:
     updated_at: str
     created_by_user_id: UUID | None
     deleted_at: str | None
+    # LOT_57.fix : flag pour permettre à l'UI d'afficher si des credentials
+    # sont stockés (sans jamais les exposer en clair). Indispensable pour
+    # que l'admin sache à la réouverture qu'une connexion est utilisable.
+    has_credentials: bool
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -44,6 +48,7 @@ class RemoteBackupConnection:
             "updated_at": self.updated_at,
             "created_by_user_id": str(self.created_by_user_id) if self.created_by_user_id else None,
             "deleted_at": self.deleted_at,
+            "has_credentials": self.has_credentials,
         }
 
 
@@ -53,6 +58,10 @@ def _row_to_dto(row: asyncpg.Record) -> RemoteBackupConnection:
         config = json.loads(raw_config)
     else:
         config = dict(raw_config) if raw_config else {}
+    # `credentials_encrypted` peut être NULL (vraiment vide) ou un blob.
+    # Un blob de longueur 0 compte aussi comme "pas de credentials".
+    raw_creds = row["credentials_encrypted"]
+    has_creds = raw_creds is not None and len(raw_creds) > 0
     return RemoteBackupConnection(
         id=row["id"],
         name=row["name"],
@@ -62,6 +71,7 @@ def _row_to_dto(row: asyncpg.Record) -> RemoteBackupConnection:
         updated_at=row["updated_at"].isoformat(),
         created_by_user_id=row["created_by_user_id"],
         deleted_at=row["deleted_at"].isoformat() if row["deleted_at"] else None,
+        has_credentials=has_creds,
     )
 
 

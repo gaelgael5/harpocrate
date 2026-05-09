@@ -27,6 +27,9 @@ class UserRow:
     created_at: datetime.datetime
     updated_at: datetime.datetime
     last_unlock_at: datetime.datetime | None
+    # LOT_57 fix — rsa_priv chiffrée avec recovery_key (pour le flow recovery
+    # zero-knowledge). NULL pour les users créés avant migration 022.
+    encrypted_rsa_private_key_by_recovery: bytes | None = field(default=None)
     # Colonnes de gouvernance d'identité (LOT_02 — migration 002)
     quarantine_until: datetime.datetime | None = field(default=None)
     quarantine_reason: str | None = field(default=None)

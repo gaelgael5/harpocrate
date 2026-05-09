@@ -121,8 +121,7 @@ async def test_get_returns_blobs_when_session_valid() -> None:
         attempts_left=3,
         salt_recovery=b"a" * 16,
         encrypted_sym_key_by_recovery=b"b" * 32,
-        salt_passphrase=b"c" * 16,
-        encrypted_rsa_private_key=b"d" * 64,
+        encrypted_rsa_private_key_by_recovery=b"d" * 64,
         rsa_public_key=b"e" * 32,
         kdf_memory_kb=65536,
         kdf_iterations=3,
@@ -137,6 +136,7 @@ async def test_get_returns_blobs_when_session_valid() -> None:
     body = r.json()
     assert body["attempts_left"] == 3
     assert body["kdf_params"]["memory_kb"] == 65536
+    assert "encrypted_rsa_private_key_by_recovery" in body
     assert "salt_recovery" in body
 
 

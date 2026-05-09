@@ -11,6 +11,12 @@ from app.models.db.user import UserRow
 
 
 def _row_to_user(row: Any) -> UserRow:
+    enc_rsa_priv_by_recovery_raw = row.get("encrypted_rsa_private_key_by_recovery", None)
+    enc_rsa_priv_by_recovery = (
+        bytes(enc_rsa_priv_by_recovery_raw)
+        if enc_rsa_priv_by_recovery_raw is not None
+        else None
+    )
     return UserRow(
         id=row["id"],
         keycloak_sub=row["keycloak_sub"],
@@ -22,6 +28,7 @@ def _row_to_user(row: Any) -> UserRow:
         encrypted_rsa_private_key=bytes(row["encrypted_rsa_private_key"]),
         encrypted_sym_key_by_pass=bytes(row["encrypted_sym_key_by_pass"]),
         encrypted_sym_key_by_recovery=bytes(row["encrypted_sym_key_by_recovery"]),
+        encrypted_rsa_private_key_by_recovery=enc_rsa_priv_by_recovery,
         kdf_memory_kb=row["kdf_memory_kb"],
         kdf_iterations=row["kdf_iterations"],
         kdf_parallelism=row["kdf_parallelism"],
@@ -61,12 +68,19 @@ async def insert_bootstrap(
     encrypted_rsa_private_key: bytes,
     encrypted_sym_key_by_pass: bytes,
     encrypted_sym_key_by_recovery: bytes,
+    encrypted_rsa_private_key_by_recovery: bytes,
     kdf_memory_kb: int,
     kdf_iterations: int,
     kdf_parallelism: int,
     rsa_key_size: int,
 ) -> UUID:
-    """Insère un utilisateur bootstrappé et retourne son UUID."""
+    """Insère un utilisateur bootstrappé et retourne son UUID.
+
+    `encrypted_rsa_private_key_by_recovery` (LOT_57 fix) : permet la
+    récupération zero-knowledge de rsa_priv via les 24 mots. Indispensable
+    pour que le flow recovery soit fonctionnel — sans ça, l'utilisateur
+    récupère seulement sym_key et se retrouve avec une rsa_priv inaccessible.
+    """
     result: UUID = await conn.fetchval(
         """
         INSERT INTO users (
@@ -74,8 +88,9 @@ async def insert_bootstrap(
             rsa_public_key, salt_passphrase, salt_recovery,
             encrypted_rsa_private_key, encrypted_sym_key_by_pass,
             encrypted_sym_key_by_recovery,
+            encrypted_rsa_private_key_by_recovery,
             kdf_memory_kb, kdf_iterations, kdf_parallelism, rsa_key_size
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         RETURNING id
         """,
         keycloak_sub,
@@ -87,6 +102,7 @@ async def insert_bootstrap(
         encrypted_rsa_private_key,
         encrypted_sym_key_by_pass,
         encrypted_sym_key_by_recovery,
+        encrypted_rsa_private_key_by_recovery,
         kdf_memory_kb,
         kdf_iterations,
         kdf_parallelism,
@@ -137,20 +153,29 @@ async def update_recovery(
     user_id: UUID,
     new_salt_recovery: bytes,
     new_encrypted_sym_key_by_recovery: bytes,
+    new_encrypted_rsa_private_key_by_recovery: bytes,
 ) -> datetime.datetime:
-    """Met à jour le blob recovery et retourne le updated_at."""
+    """Met à jour le blob recovery et retourne le updated_at.
+
+    LOT_57 fix : on doit aussi re-chiffrer rsa_priv avec la nouvelle
+    recovery_key (sinon le flow recovery resterait inopérant après un
+    renew_recovery — l'ancien blob by_recovery utiliserait l'ancienne
+    recovery_key alors que les 24 mots ont changé).
+    """
     result: datetime.datetime = await conn.fetchval(
         """
         UPDATE users
         SET
             salt_recovery = $2,
-            encrypted_sym_key_by_recovery = $3
+            encrypted_sym_key_by_recovery = $3,
+            encrypted_rsa_private_key_by_recovery = $4
         WHERE id = $1
         RETURNING updated_at
         """,
         user_id,
         new_salt_recovery,
         new_encrypted_sym_key_by_recovery,
+        new_encrypted_rsa_private_key_by_recovery,
     )
     return result
 
@@ -285,6 +310,7 @@ async def convert_system_user_to_real(
     encrypted_rsa_private_key: bytes,
     encrypted_sym_key_by_pass: bytes,
     encrypted_sym_key_by_recovery: bytes,
+    encrypted_rsa_private_key_by_recovery: bytes,
     kdf_memory_kb: int,
     kdf_iterations: int,
     kdf_parallelism: int,
@@ -307,10 +333,11 @@ async def convert_system_user_to_real(
             encrypted_rsa_private_key = $5,
             encrypted_sym_key_by_pass = $6,
             encrypted_sym_key_by_recovery = $7,
-            kdf_memory_kb = $8,
-            kdf_iterations = $9,
-            kdf_parallelism = $10,
-            rsa_key_size = $11
+            encrypted_rsa_private_key_by_recovery = $8,
+            kdf_memory_kb = $9,
+            kdf_iterations = $10,
+            kdf_parallelism = $11,
+            rsa_key_size = $12
         WHERE id = $1
         """,
         user_id,
@@ -320,6 +347,7 @@ async def convert_system_user_to_real(
         encrypted_rsa_private_key,
         encrypted_sym_key_by_pass,
         encrypted_sym_key_by_recovery,
+        encrypted_rsa_private_key_by_recovery,
         kdf_memory_kb,
         kdf_iterations,
         kdf_parallelism,

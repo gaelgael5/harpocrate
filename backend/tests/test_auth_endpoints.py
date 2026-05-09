@@ -152,6 +152,7 @@ def _fake_user_row() -> dict[str, Any]:
         "encrypted_rsa_private_key": b"fake_enc_priv",
         "encrypted_sym_key_by_pass": b"fake_enc_sym_pass",
         "encrypted_sym_key_by_recovery": b"fake_enc_sym_rec",
+        "encrypted_rsa_private_key_by_recovery": b"fake_enc_priv_rec",
         "kdf_memory_kb": 65536,
         "kdf_iterations": 3,
         "kdf_parallelism": 4,
@@ -226,6 +227,7 @@ def _bootstrap_payload(
         "encrypted_rsa_private_key": _blob_b64(),
         "encrypted_sym_key_by_pass": _blob_b64(),
         "encrypted_sym_key_by_recovery": _blob_b64(),
+        "encrypted_rsa_private_key_by_recovery": _blob_b64(),
         "kdf_memory_kb": kdf_memory_kb,
         "kdf_iterations": kdf_iterations,
         "kdf_parallelism": kdf_parallelism,
@@ -420,6 +422,7 @@ async def test_recovery_renew_updates_blob() -> None:
     payload = {
         "new_salt_recovery": _salt_b64(),
         "new_encrypted_sym_key_by_recovery": _blob_b64(),
+        "new_encrypted_rsa_private_key_by_recovery": _blob_b64(),
     }
 
     async with _make_client(pool) as client:

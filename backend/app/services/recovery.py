@@ -79,8 +79,9 @@ class RecoveryBlobs:
     attempts_left: int
     salt_recovery: bytes
     encrypted_sym_key_by_recovery: bytes
-    salt_passphrase: bytes
-    encrypted_rsa_private_key: bytes
+    # rsa_priv chiffrée AVEC recovery_key (pas pass_key) — c'est ce qui rend
+    # le flow recovery zero-knowledge fonctionnel. Cf. migration 022.
+    encrypted_rsa_private_key_by_recovery: bytes
     rsa_public_key: bytes
     kdf_memory_kb: int
     kdf_iterations: int
@@ -94,9 +95,8 @@ class RecoveryBlobs:
             "encrypted_sym_key_by_recovery": base64.b64encode(
                 self.encrypted_sym_key_by_recovery
             ).decode(),
-            "salt_passphrase": base64.b64encode(self.salt_passphrase).decode(),
-            "encrypted_rsa_private_key": base64.b64encode(
-                self.encrypted_rsa_private_key
+            "encrypted_rsa_private_key_by_recovery": base64.b64encode(
+                self.encrypted_rsa_private_key_by_recovery
             ).decode(),
             "rsa_public_key": base64.b64encode(self.rsa_public_key).decode(),
             "kdf_params": {
@@ -324,13 +324,24 @@ async def get_blobs(
         # User a été supprimé entre-temps.
         raise SessionInvalidError("session_unrecoverable")
 
+    # LOT_57 fix : sans la copie de rsa_priv chiffrée par recovery_key, le
+    # flow ne peut pas aboutir (rsa_priv est nécessaire pour déchiffrer les
+    # wallet_grants côté client). Cas pour les users créés avant migration
+    # 022 : ils doivent passer par renew_recovery pour activer le flow.
+    if user.encrypted_rsa_private_key_by_recovery is None:
+        logger.warning(
+            "recovery_unavailable_pre_022_user",
+            session_id=str(session_id),
+            user_id=str(user.id),
+        )
+        raise SessionInvalidError("recovery_not_provisioned")
+
     return RecoveryBlobs(
         session_id=row["id"],
         attempts_left=max(0, _max_attempts() - row["attempts"]),
         salt_recovery=user.salt_recovery,
         encrypted_sym_key_by_recovery=user.encrypted_sym_key_by_recovery,
-        salt_passphrase=user.salt_passphrase,
-        encrypted_rsa_private_key=user.encrypted_rsa_private_key,
+        encrypted_rsa_private_key_by_recovery=user.encrypted_rsa_private_key_by_recovery,
         rsa_public_key=user.rsa_public_key,
         kdf_memory_kb=user.kdf_memory_kb,
         kdf_iterations=user.kdf_iterations,

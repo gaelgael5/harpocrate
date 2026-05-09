@@ -446,7 +446,9 @@
       "sessionsEmail": "Email",
       "sessionsStatus": "Status",
       "sessionsAttempts": "Attempts",
-      "sessionsIpStarted": "Origin IP"
+      "sessionsIpStarted": "Origin IP",
+      "sessionsLatestEvent": "Latest event",
+      "sessionsNovuTx": "Provider Tx ID"
     },
     "system": {
       "title": "System information",

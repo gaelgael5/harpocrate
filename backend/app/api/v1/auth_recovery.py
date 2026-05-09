@@ -62,15 +62,20 @@ class StartBody(BaseModel):
 
 @router.post("/start", status_code=status.HTTP_202_ACCEPTED)
 async def start(body: StartBody, request: Request) -> JSONResponse:
-    """Crée une session de recovery + déclenche la notification Novu.
+    """Crée une session de recovery + déclenche la notification.
 
     Retourne **toujours** 202 — anti-énumération. L'absence de mail dans la
     boîte du user est indistinguable d'un email inconnu côté serveur.
+
+    Le `tracking_id` retourné permet au client de s'abonner au futur
+    WebSocket de suivi de livraison (`/v1/ws/recovery/track/{tracking_id}`).
+    Si l'email est inconnu, le tracking_id est valide mais ne recevra
+    jamais d'event — indistinguable d'un envoi en cours côté UI.
     """
     user_agent = request.headers.get("User-Agent")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await svc.start_session(
+        tracking_id = await svc.start_session(
             conn,
             email=str(body.email).lower(),
             ip=_client_ip(request),
@@ -78,7 +83,7 @@ async def start(body: StartBody, request: Request) -> JSONResponse:
         )
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
-        content={"ok": True},
+        content={"ok": True, "tracking_id": str(tracking_id)},
     )
 
 

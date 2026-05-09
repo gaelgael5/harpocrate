@@ -106,6 +106,72 @@ export function RecoverPage() {
     setPasteError(null)
   }
 
+  // Modal de confirmation de destruction — réutilisable depuis l'étape
+  // `words` (l'utilisateur réalise qu'il a perdu ses mots) ou `error`
+  // (session déjà cramée). Reset à la fermeture pour ne pas conserver le
+  // texte tapé entre deux ouvertures.
+  function renderDestroyModal() {
+    return (
+      <Modal
+        opened={destroyOpen}
+        onClose={() => {
+          setDestroyOpen(false)
+          setDestroyTyped('')
+          setDestroyError(null)
+        }}
+        title={t('recover.destroyModalTitle')}
+        size="md"
+      >
+        <Stack gap="sm">
+          <Alert color="red" variant="light" title={t('recover.destroyWarningTitle')}>
+            {t('recover.destroyWarningBody')}
+          </Alert>
+          <Text size="sm">
+            {t('recover.destroyTypeInstruction')}{' '}
+            <Text span fw={700} ff="monospace">
+              {DESTROY_CONFIRM_LITERAL}
+            </Text>
+          </Text>
+          <TextInput
+            value={destroyTyped}
+            onChange={(e) => setDestroyTyped(e.currentTarget.value)}
+            placeholder={DESTROY_CONFIRM_LITERAL}
+            data-testid="recover-destroy-confirm"
+            disabled={destroying}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {destroyError && (
+            <Alert color="red" variant="light">
+              {destroyError}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setDestroyOpen(false)
+                setDestroyTyped('')
+                setDestroyError(null)
+              }}
+              disabled={destroying}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              color="red"
+              onClick={() => void handleAbandonAccount()}
+              loading={destroying}
+              disabled={destroyTyped !== DESTROY_CONFIRM_LITERAL}
+            >
+              {t('recover.destroyConfirm')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    )
+  }
+
   async function handleAbandonAccount() {
     if (destroyTyped !== DESTROY_CONFIRM_LITERAL) {
       setDestroyError(t('recover.destroyTypeMismatch'))
@@ -346,63 +412,7 @@ export function RecoverPage() {
             </Button>
           </Box>
 
-          <Modal
-            opened={destroyOpen}
-            onClose={() => {
-              setDestroyOpen(false)
-              setDestroyTyped('')
-              setDestroyError(null)
-            }}
-            title={t('recover.destroyModalTitle')}
-            size="md"
-          >
-            <Stack gap="sm">
-              <Alert color="red" variant="light" title={t('recover.destroyWarningTitle')}>
-                {t('recover.destroyWarningBody')}
-              </Alert>
-              <Text size="sm">
-                {t('recover.destroyTypeInstruction')}{' '}
-                <Text span fw={700} ff="monospace">
-                  {DESTROY_CONFIRM_LITERAL}
-                </Text>
-              </Text>
-              <TextInput
-                value={destroyTyped}
-                onChange={(e) => setDestroyTyped(e.currentTarget.value)}
-                placeholder={DESTROY_CONFIRM_LITERAL}
-                data-testid="recover-destroy-confirm"
-                disabled={destroying}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {destroyError && (
-                <Alert color="red" variant="light">
-                  {destroyError}
-                </Alert>
-              )}
-              <Group justify="flex-end">
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    setDestroyOpen(false)
-                    setDestroyTyped('')
-                    setDestroyError(null)
-                  }}
-                  disabled={destroying}
-                >
-                  {t('common.cancel')}
-                </Button>
-                <Button
-                  color="red"
-                  onClick={() => void handleAbandonAccount()}
-                  loading={destroying}
-                  disabled={destroyTyped !== DESTROY_CONFIRM_LITERAL}
-                >
-                  {t('recover.destroyConfirm')}
-                </Button>
-              </Group>
-            </Stack>
-          </Modal>
+          {renderDestroyModal()}
         </Stack>
       </Center>
     )
@@ -563,6 +573,26 @@ export function RecoverPage() {
         <Anchor onClick={() => navigate('/login')} ta="center" style={{ cursor: 'pointer' }}>
           {t('recover.backToLogin')}
         </Anchor>
+
+        {/* Échappatoire pour l'utilisateur qui réalise pendant la saisie
+            qu'il a définitivement perdu ses 24 mots — sans avoir à attendre
+            d'épuiser ses tentatives ou l'expiration de la session. */}
+        <Box mt="lg" pt="md" style={{ borderTop: '1px solid #eee' }}>
+          <Text size="xs" c="dimmed" mb="xs" ta="center">
+            {t('recover.destroyHint')}
+          </Text>
+          <Button
+            variant="outline"
+            color="red"
+            size="xs"
+            fullWidth
+            onClick={() => setDestroyOpen(true)}
+          >
+            {t('recover.destroyButton')}
+          </Button>
+        </Box>
+
+        {renderDestroyModal()}
       </Stack>
     </Center>
   )

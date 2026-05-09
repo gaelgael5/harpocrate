@@ -36,6 +36,7 @@ from app.api.v1 import (
     secrets,
     users,
     wallets,
+    webhooks_notify,
 )
 from app.core.cluster_sync import get_cluster_sync, init_cluster_sync
 from app.core.config import settings
@@ -230,3 +231,4 @@ app.include_router(apps.router, prefix="/v1")
 app.include_router(api_key_openapi.router, prefix="/v1")
 app.include_router(identity_management.router, prefix="/v1")
 app.include_router(sdk_downloads.router, prefix="/v1")
+app.include_router(webhooks_notify.router, prefix="/v1")

@@ -122,27 +122,28 @@ class Settings(BaseSettings):
     s3_region: str = Field(default="us-east-1")
     s3_key_prefix: str = Field(default="harpocrate-backups/")
 
-    # ─── Notifications externes via Novu (LOT_57) ─────────────────────────────
-    # Harpocrate ne gère pas l'envoi de mail directement : il déclenche un
-    # workflow Novu qui s'occupe du templating + provider mail. Si la clé
-    # n'est pas configurée, le service retombe en no-op (logge à warning).
+    # ─── Notifications externes via listmonk (LOT_57) ─────────────────────────
+    # Harpocrate ne gère pas l'envoi de mail directement : il déclenche
+    # un transactional template listmonk via POST /api/tx. Si la config est
+    # incomplète, le service retombe en no-op (logge à warning).
     #
-    # `validation_alias` court-circuite le préfixe global `HARPOCRATE_` —
-    # ces variables sont nommées `NOVU_API_*` (convention Novu standard,
-    # plus facile à lier à la doc Novu).
-    novu_api_url: str = Field(
-        default="https://api.novu.co/v1",
-        validation_alias="NOVU_API_URL",
-    )
-    novu_api_key: str = Field(
-        default="",
-        json_schema_extra={"is_secret": True},
-        validation_alias="NOVU_API_KEY",
-    )
+    # Toutes les variables utilisent le préfixe global `HARPOCRATE_` (cf.
+    # env_prefix). Cohérent avec le reste de la config Harpocrate.
+    listmonk_url: str = Field(default="")
+    listmonk_user: str = Field(default="")
+    listmonk_token: str = Field(default="", json_schema_extra={"is_secret": True})
+
+    # IDs des templates transactional listmonk pour les mails de recovery,
+    # par locale. À configurer côté admin listmonk avant le premier envoi.
+    # Pattern `*_<locale>` extensible : ajouter `..._es`, `..._de`, etc.
+    listmonk_template_recovery_en: int = Field(default=5)
+    listmonk_template_recovery_fr: int = Field(default=4)
 
     @property
-    def novu_configured(self) -> bool:
-        return bool(self.novu_api_key)
+    def listmonk_configured(self) -> bool:
+        # Les template_id ont des defaults non-zéro, donc l'unique check
+        # qui décide de l'activation est la présence des credentials.
+        return bool(self.listmonk_url and self.listmonk_user and self.listmonk_token)
 
     # ─── Recovery passphrase (LOT_57) ─────────────────────────────────────────
     # Tous les seuils/limites du flow recovery sont configurables pour permettre
@@ -152,9 +153,6 @@ class Settings(BaseSettings):
     recovery_max_attempts: int = Field(default=3, ge=1)
     recovery_anomaly_threshold: int = Field(default=5, ge=1)
     recovery_anomaly_window_hours: int = Field(default=24, ge=1)
-    # Nom du workflow Novu déclenché lors d'une session de recovery — doit
-    # matcher exactement le `name` configuré côté admin Novu.
-    recovery_novu_event_name: str = Field(default="recovery-session")
 
     @property
     def s3_configured(self) -> bool:

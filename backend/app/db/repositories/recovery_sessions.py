@@ -14,21 +14,26 @@ async def insert(
     email: str,
     expires_at: datetime.datetime,
     ip_started: str | None,
-) -> UUID:
-    """Crée une nouvelle session pending. `user_id` peut être NULL si le
-    requesting email ne correspond à aucun utilisateur en base (anti-énumération).
+) -> tuple[UUID, UUID]:
+    """Crée une nouvelle session pending et retourne `(session_id, tracking_id)`.
+
+    `user_id` peut être NULL si l'email ne correspond à aucun utilisateur en
+    base (anti-énumération). `tracking_id` est généré par le DEFAULT DB et
+    permet au client front de s'abonner à un futur WebSocket de suivi de
+    livraison sans exposer `session_id` (qui reste secret, reçu par mail).
     """
-    return await conn.fetchval(
+    row = await conn.fetchrow(
         """
         INSERT INTO recovery_sessions (user_id, email, expires_at, ip_started)
         VALUES ($1, $2, $3, $4)
-        RETURNING id
+        RETURNING id, tracking_id
         """,
         user_id,
         email,
         expires_at,
         ip_started,
     )
+    return row["id"], row["tracking_id"]
 
 
 async def get_by_id(
@@ -73,6 +78,92 @@ async def increment_attempts(
         """,
         session_id,
         max_attempts,
+    )
+
+
+async def set_novu_transaction_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    session_id: UUID,
+    transaction_id: str,
+) -> None:
+    """Persiste le transactionId du provider mail retourné par le trigger
+    pour traçabilité (corrélation logs côté provider / debug delivery)."""
+    await conn.execute(
+        "UPDATE recovery_sessions SET novu_transaction_id = $2 WHERE id = $1",
+        session_id,
+        transaction_id,
+    )
+
+
+async def set_sent_at(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    transaction_id: str,
+    sent_at: datetime.datetime,
+) -> int:
+    """Marque la session comme effectivement envoyée par le provider.
+
+    Retourne le nombre de rows affectées (0 si transaction_id inconnu —
+    ce qui est tolérable, le webhook peut concerner un autre type d'event).
+    """
+    result = await conn.execute(
+        """
+        UPDATE recovery_sessions
+        SET sent_at = $2
+        WHERE novu_transaction_id = $1 AND sent_at IS NULL
+        """,
+        transaction_id,
+        sent_at,
+    )
+    try:
+        return int(result.split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+async def set_delivery_status(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    transaction_id: str,
+    status: str,
+    status_at: datetime.datetime,
+) -> int:
+    """Met à jour le statut de livraison (`sent`/`delivered`/`failed`).
+
+    Le CHECK SQL valide que la valeur est dans l'enum. Retourne le nombre
+    de rows affectées (0 si transaction_id inconnu).
+    """
+    result = await conn.execute(
+        """
+        UPDATE recovery_sessions
+        SET delivery_status = $2,
+            delivery_status_at = $3
+        WHERE novu_transaction_id = $1
+        """,
+        transaction_id,
+        status,
+        status_at,
+    )
+    try:
+        return int(result.split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+async def get_by_tracking_id(
+    conn: asyncpg.Connection[asyncpg.Record],
+    tracking_id: UUID,
+) -> asyncpg.Record | None:
+    """Lookup pour le futur endpoint WebSocket — récupère une session via
+    son tracking_id public (séparé du session_id secret)."""
+    return await conn.fetchrow(
+        """
+        SELECT id, tracking_id, status, sent_at, delivery_status, delivery_status_at
+        FROM recovery_sessions
+        WHERE tracking_id = $1
+        """,
+        tracking_id,
     )
 
 

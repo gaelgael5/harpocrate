@@ -29,6 +29,7 @@ import { z } from 'zod'
 
 import { api, ApiError } from '@/lib/api-client'
 import { invalidateWalletQueries } from '@/lib/walletQueries'
+import { fetchWalletEnvironments } from '@/lib/walletEnvironmentsApi'
 import { FolderTree } from '@/components/FolderTree'
 import { exportWallet } from '@/lib/exportImportApi'
 import { WalletItemSchema } from '@/schemas/wallets'
@@ -292,6 +293,13 @@ export function WalletDetailPage() {
     enabled: !!walletId,
   })
 
+  // LOT_58 : on charge la liste des envs pour résoudre wallet.environment_id
+  // → name (le backend ne renvoie que l'id sur le wallet pour rester atomique).
+  const { data: environments } = useQuery({
+    queryKey: ['wallet-environments'],
+    queryFn: fetchWalletEnvironments,
+  })
+
   const { data: treeData, isLoading: treeLoading } = useQuery({
     queryKey: ['wallet-tree', walletId, currentPath],
     queryFn: async () => {
@@ -365,7 +373,16 @@ export function WalletDetailPage() {
 
       <Group justify="space-between">
         <Stack gap={2}>
-          <Title order={2}>{wallet.name}</Title>
+          <Group gap="xs" align="baseline">
+            <Title order={2}>{wallet.name}</Title>
+            {/* LOT_58 : nom de l'env affiché en petit à côté du titre,
+                masqué si NULL (= "None" virtuel). */}
+            {wallet.environment_id && (
+              <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+                {environments?.find((e) => e.id === wallet.environment_id)?.name ?? ''}
+              </Text>
+            )}
+          </Group>
           {wallet.description && (
             <Text c="dimmed" size="sm">
               {wallet.description}

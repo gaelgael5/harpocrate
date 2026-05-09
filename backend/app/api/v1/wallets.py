@@ -48,6 +48,7 @@ def _wallet_item(w: WalletWithGrant, caller_user_id: UUID) -> WalletItem:
         created_at=w.created_at,
         updated_at=w.updated_at,
         deleted_at=w.deleted_at,
+        environment_id=w.environment_id,
     )
 
 

@@ -126,6 +126,19 @@
   "wallets": {
     "title": "Mes coffres-forts",
     "create": "Nouveau coffre",
+    "environment": "Environnement",
+    "environments": {
+      "none": "Aucun (None)",
+      "create": "Nouvel environnement",
+      "createTitle": "Créer un environnement",
+      "createSuccess": "Environnement créé",
+      "delete": "Supprimer cet environnement",
+      "deleteConfirm": "Supprimer l'environnement « {{name}} » ?",
+      "deleteSuccess": "Environnement supprimé",
+      "nameLabel": "Nom de l'environnement",
+      "namePlaceholder": "ex: dev, staging, prod",
+      "empty": "Aucun coffre dans cet environnement"
+    },
     "refresh": "Rafraîchir",
     "refreshHint": "Recharger l'arborescence et les secrets de ce coffre",
     "noWallets": "Aucun coffre-fort. Créez-en un pour commencer.",

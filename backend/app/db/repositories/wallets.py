@@ -32,6 +32,13 @@ def decode_cursor(cursor: str) -> tuple[datetime.datetime, UUID]:
 
 
 def _row_to_wallet_with_grant(row: Any, tags: list[str]) -> WalletWithGrant:
+    # LOT_58 : `environment_id` peut ne pas être présent dans le row
+    # (vieilles requêtes SELECT pas encore mises à jour). Default None.
+    env_id = None
+    try:
+        env_id = row["environment_id"]
+    except (KeyError, TypeError):
+        env_id = None
     return WalletWithGrant(
         id=row["id"],
         name=row["name"],
@@ -44,6 +51,7 @@ def _row_to_wallet_with_grant(row: Any, tags: list[str]) -> WalletWithGrant:
         valued_secrets_count=row["valued_secrets_count"] or 0,
         placeholder_secrets_count=row["placeholder_secrets_count"] or 0,
         deleted_at=row["deleted_at"],
+        environment_id=env_id,
     )
 
 
@@ -58,6 +66,7 @@ async def insert_wallet_with_grant(
     owner_user_id: UUID,
     tags: list[str],
     encrypted_wallet_key: bytes,
+    environment_id: UUID | None = None,
 ) -> UUID:
     """Insère wallet + grant owner (permissions=63) + tags dans une transaction.
 
@@ -65,13 +74,14 @@ async def insert_wallet_with_grant(
     """
     wallet_id: UUID = await conn.fetchval(
         """
-        INSERT INTO wallets (name, description, owner_user_id)
-        VALUES ($1, $2, $3)
+        INSERT INTO wallets (name, description, owner_user_id, environment_id)
+        VALUES ($1, $2, $3, $4)
         RETURNING id
         """,
         name,
         description,
         owner_user_id,
+        environment_id,
     )
 
     await conn.execute(
@@ -113,7 +123,7 @@ async def list_wallets_for_user(
         """
         SELECT
             w.id, w.name, w.description, w.owner_user_id, w.created_at, w.updated_at,
-            w.deleted_at,
+            w.deleted_at, w.environment_id,
             wg.permissions AS my_permissions,
             COALESCE(s.valued, 0)       AS valued_secrets_count,
             COALESCE(s.placeholder, 0)  AS placeholder_secrets_count
@@ -178,7 +188,7 @@ async def get_wallet_for_user(
         """
         SELECT
             w.id, w.name, w.description, w.owner_user_id, w.created_at, w.updated_at,
-            w.deleted_at,
+            w.deleted_at, w.environment_id,
             wg.permissions AS my_permissions,
             COALESCE(s.valued, 0)       AS valued_secrets_count,
             COALESCE(s.placeholder, 0)  AS placeholder_secrets_count
@@ -211,6 +221,9 @@ async def get_wallet_for_user(
 # ─── UPDATE wallet (PATCH) ────────────────────────────────────────────────────
 
 
+_ENV_UNCHANGED = object()
+
+
 async def update_wallet(
     conn: asyncpg.Connection[asyncpg.Record],
     *,
@@ -218,8 +231,14 @@ async def update_wallet(
     name: str | None,
     description: str | None,
     tags: list[str] | None,
+    environment_id: UUID | None | object = _ENV_UNCHANGED,
 ) -> None:
-    """Met à jour name/description si fournis. Remplace les tags si fournis."""
+    """Met à jour name/description si fournis. Remplace les tags si fournis.
+
+    Pour `environment_id`, sentinelle `_ENV_UNCHANGED` (default) = pas de
+    changement. Passer `None` explicite = remettre le wallet à "None"
+    (clear de l'environnement). Passer un UUID = associer à cet env.
+    """
     parts: list[str] = []
     params: list[Any] = []
     idx = 1
@@ -232,6 +251,11 @@ async def update_wallet(
     if description is not None:
         parts.append(f"description = ${idx}")
         params.append(description)
+        idx += 1
+
+    if environment_id is not _ENV_UNCHANGED:
+        parts.append(f"environment_id = ${idx}")
+        params.append(environment_id)
         idx += 1
 
     if parts:
@@ -296,7 +320,7 @@ async def list_deleted_wallets_for_user(
         """
         SELECT
             w.id, w.name, w.description, w.owner_user_id, w.created_at, w.updated_at,
-            w.deleted_at,
+            w.deleted_at, w.environment_id,
             wg.permissions AS my_permissions,
             0 AS valued_secrets_count,
             0 AS placeholder_secrets_count

@@ -14,23 +14,32 @@ import {
   Button,
   Alert,
   Group,
+  Select,
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api-client'
 import { rsaOaepEncrypt } from '@/crypto/rsa-oaep'
 import { randomBytes, toBase64 } from '@/crypto/helpers'
 import { useCryptoStore } from '@/stores/crypto'
 import { WalletCreateResponseSchema } from '@/schemas/wallets'
+import {
+  fetchWalletEnvironments,
+  createWalletEnvironment,
+} from '@/lib/walletEnvironmentsApi'
 
 interface FormValues {
   name: string
   description: string
   tags: string
+  /** "" = "None" virtuel ; sinon UUID d'un wallet_environment */
+  environment_id: string
 }
+
+const _NEW_ENV_SENTINEL = '__NEW_ENV__'
 
 export function WalletNewPage() {
   const { t } = useTranslation()
@@ -41,12 +50,35 @@ export function WalletNewPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [creatingEnv, setCreatingEnv] = useState(false)
+  const [newEnvName, setNewEnvName] = useState('')
+
+  const envQuery = useQuery({
+    queryKey: ['wallet-environments'],
+    queryFn: fetchWalletEnvironments,
+  })
+
+  const createEnvMut = useMutation({
+    mutationFn: createWalletEnvironment,
+    onSuccess: (newEnv) => {
+      void queryClient.invalidateQueries({ queryKey: ['wallet-environments'] })
+      // Sélectionne automatiquement le nouvel env créé
+      form.setFieldValue('environment_id', newEnv.id)
+      setCreatingEnv(false)
+      setNewEnvName('')
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    },
+  })
 
   const form = useForm<FormValues>({
     initialValues: {
       name: '',
       description: '',
       tags: '',
+      environment_id: '',
     },
     validate: {
       name: (v) =>
@@ -84,6 +116,7 @@ export function WalletNewPage() {
         description: values.description.trim() || null,
         tags,
         encrypted_wallet_key_for_owner: toBase64(encWalletKey),
+        environment_id: values.environment_id || null,
       }
 
       const resp = await api.post<unknown>('/wallets', body)
@@ -138,6 +171,70 @@ export function WalletNewPage() {
             description="Comma-separated"
             {...form.getInputProps('tags')}
           />
+
+          {/* Select environnement avec option "+ Nouveau" inline */}
+          {creatingEnv ? (
+            <Stack gap="xs">
+              <TextInput
+                label={t('wallets.environments.nameLabel')}
+                placeholder={t('wallets.environments.namePlaceholder')}
+                value={newEnvName}
+                onChange={(e) => setNewEnvName(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (newEnvName.trim()) createEnvMut.mutate(newEnvName.trim())
+                  }
+                }}
+                autoFocus
+              />
+              <Group gap="xs" justify="flex-end">
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  onClick={() => {
+                    setCreatingEnv(false)
+                    setNewEnvName('')
+                  }}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  size="xs"
+                  color="brand"
+                  loading={createEnvMut.isPending}
+                  disabled={!newEnvName.trim()}
+                  onClick={() => createEnvMut.mutate(newEnvName.trim())}
+                >
+                  {t('wallets.environments.create')}
+                </Button>
+              </Group>
+            </Stack>
+          ) : (
+            <Select
+              label={t('wallets.environment')}
+              placeholder={t('wallets.environments.none')}
+              data={[
+                { value: '', label: t('wallets.environments.none') },
+                ...(envQuery.data ?? []).map((env) => ({
+                  value: env.id,
+                  label: env.name,
+                })),
+                { value: _NEW_ENV_SENTINEL, label: `+ ${t('wallets.environments.create')}` },
+              ]}
+              value={form.values.environment_id}
+              onChange={(v) => {
+                if (v === _NEW_ENV_SENTINEL) {
+                  setCreatingEnv(true)
+                } else {
+                  form.setFieldValue('environment_id', v ?? '')
+                }
+              }}
+              clearable={false}
+              allowDeselect={false}
+            />
+          )}
+
           <Group justify="flex-end">
             <Button variant="subtle" onClick={() => navigate(-1)}>
               {t('common.cancel')}

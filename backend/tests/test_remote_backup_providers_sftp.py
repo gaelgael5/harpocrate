@@ -74,8 +74,9 @@ def _make_provider() -> SftpProvider:
 
 @pytest.mark.asyncio
 async def test_test_connection_success() -> None:
-    """test_connection ouvre, list, ferme — sans lever."""
+    """test_connection ouvre, ensure dir, list, ferme — sans lever."""
     sftp_mock = MagicMock()
+    sftp_mock.makedirs = AsyncMock(return_value=None)
     sftp_mock.listdir = AsyncMock(return_value=[])
     sftp_ctx = MagicMock()
     sftp_ctx.__aenter__ = AsyncMock(return_value=sftp_mock)
@@ -89,6 +90,7 @@ async def test_test_connection_success() -> None:
     with patch("asyncssh.connect", AsyncMock(return_value=conn_mock)):
         await _make_provider().test_connection()
 
+    sftp_mock.makedirs.assert_awaited_once_with("/dest", exist_ok=True)
     sftp_mock.listdir.assert_awaited_once_with("/dest")
     conn_mock.close.assert_called_once()
 
@@ -105,9 +107,10 @@ async def test_test_connection_wraps_oserror_into_provider_error() -> None:
 
 @pytest.mark.asyncio
 async def test_test_connection_wraps_listdir_failure() -> None:
-    """Un échec de listdir → RemoteBackupProviderError avec mention du path."""
+    """Un échec de listdir (après makedirs OK) → RemoteBackupProviderError avec mention du path."""
     sftp_mock = MagicMock()
-    sftp_mock.listdir = AsyncMock(side_effect=OSError("no such file"))
+    sftp_mock.makedirs = AsyncMock(return_value=None)
+    sftp_mock.listdir = AsyncMock(side_effect=OSError("permission denied"))
     sftp_ctx = MagicMock()
     sftp_ctx.__aenter__ = AsyncMock(return_value=sftp_mock)
     sftp_ctx.__aexit__ = AsyncMock(return_value=None)
@@ -125,6 +128,28 @@ async def test_test_connection_wraps_listdir_failure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_test_connection_wraps_makedirs_failure() -> None:
+    """Un échec de makedirs (permission denied sur parent) → RemoteBackupProviderError."""
+    sftp_mock = MagicMock()
+    sftp_mock.makedirs = AsyncMock(side_effect=OSError("permission denied"))
+    sftp_mock.listdir = AsyncMock(return_value=[])
+    sftp_ctx = MagicMock()
+    sftp_ctx.__aenter__ = AsyncMock(return_value=sftp_mock)
+    sftp_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    conn_mock = MagicMock()
+    conn_mock.start_sftp_client = MagicMock(return_value=sftp_ctx)
+    conn_mock.close = MagicMock()
+    conn_mock.wait_closed = AsyncMock()
+
+    with (
+        patch("asyncssh.connect", AsyncMock(return_value=conn_mock)),
+        pytest.raises(RemoteBackupProviderError, match="cannot create remote_path"),
+    ):
+        await _make_provider().test_connection()
+
+
+@pytest.mark.asyncio
 async def test_upload_stream_writes_all_chunks_and_returns_total() -> None:
     """upload_stream consomme l'AsyncIterator et retourne le nombre total d'octets."""
     written: list[bytes] = []
@@ -134,6 +159,7 @@ async def test_upload_stream_writes_all_chunks_and_returns_total() -> None:
     remote_file.__aexit__ = AsyncMock(return_value=None)
 
     sftp_mock = MagicMock()
+    sftp_mock.makedirs = AsyncMock(return_value=None)
     sftp_mock.open = AsyncMock(return_value=remote_file)
     sftp_ctx = MagicMock()
     sftp_ctx.__aenter__ = AsyncMock(return_value=sftp_mock)
@@ -153,6 +179,7 @@ async def test_upload_stream_writes_all_chunks_and_returns_total() -> None:
 
     assert total == len(b"hello world!")
     assert b"".join(written) == b"hello world!"
+    sftp_mock.makedirs.assert_awaited_once_with("/dest", exist_ok=True)
     sftp_mock.open.assert_awaited_once_with("/dest/backup.tar.gz", "wb")
 
 

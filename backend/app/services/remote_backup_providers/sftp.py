@@ -101,19 +101,35 @@ class SftpProvider:
         return conn
 
     async def test_connection(self) -> None:
-        """Ouvre une connexion SFTP, liste le remote_path, ferme."""
+        """Ouvre une connexion SFTP, garantit l'existence du remote_path, le liste, ferme.
+
+        Si le `remote_path` n'existe pas, on tente de le créer (récursivement).
+        Si l'admin a déclaré la connexion vers ce dossier, c'est qu'il veut
+        qu'on l'utilise — on le crée au besoin. Si la création échoue
+        (permission denied, parent inaccessible, etc.), le message est explicite.
+        """
         conn = await self._open_connection()
         try:
             async with conn.start_sftp_client() as sftp:
+                await self._ensure_remote_path(sftp)
                 try:
                     await sftp.listdir(self._remote_path)
                 except (OSError, asyncssh.Error) as exc:
                     raise RemoteBackupProviderError(
-                        f"SFTP cannot access remote_path={self._remote_path!r}: {exc}"
+                        f"SFTP cannot list remote_path={self._remote_path!r}: {exc}"
                     ) from exc
         finally:
             conn.close()
             await conn.wait_closed()
+
+    async def _ensure_remote_path(self, sftp: Any) -> None:
+        """Crée `remote_path` (et ses parents) s'il n'existe pas. No-op s'il existe."""
+        try:
+            await sftp.makedirs(self._remote_path, exist_ok=True)
+        except (OSError, asyncssh.Error) as exc:
+            raise RemoteBackupProviderError(
+                f"SFTP cannot create remote_path={self._remote_path!r}: {exc}"
+            ) from exc
 
     async def upload_stream(
         self,
@@ -133,6 +149,9 @@ class SftpProvider:
         bytes_written = 0
         try:
             async with conn.start_sftp_client() as sftp:
+                # Garantit que le dossier de destination existe — sinon `open(..., "wb")`
+                # échoue avec "No such file" car SFTP ne crée pas les parents implicitement.
+                await self._ensure_remote_path(sftp)
                 try:
                     async with await sftp.open(full_path, "wb") as remote_file:
                         async for chunk in source:

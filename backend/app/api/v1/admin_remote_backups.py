@@ -162,8 +162,13 @@ async def test_remote_backup(connection_id: UUID, admin: AdminJwt) -> JSONRespon
     try:
         await provider.test_connection()
     except RemoteBackupProviderError as exc:
+        # 200 + ok:false (et non 502) car :
+        #  - sémantiquement la requête HTTP a abouti, le résultat (négatif)
+        #    est dans le body : c'est un payload, pas une erreur de transport
+        #  - Cloudflare avale les 502 et affiche sa page générique, masquant
+        #    le message d'erreur du provider que l'admin a besoin de voir
         return JSONResponse(
             {"ok": False, "error": "test_failed", "message": str(exc)},
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_200_OK,
         )
     return JSONResponse({"ok": True})

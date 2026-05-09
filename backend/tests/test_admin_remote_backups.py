@@ -256,7 +256,7 @@ async def test_test_endpoint_returns_ok_on_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_test_endpoint_returns_502_on_provider_error() -> None:
+async def test_test_endpoint_returns_200_with_ok_false_on_provider_error() -> None:
     from app.services import remote_backup_connections as svc
     from app.services.remote_backup_providers import (
         RemoteBackupProviderError,
@@ -297,9 +297,12 @@ async def test_test_endpoint_returns_502_on_provider_error() -> None:
         svc.get_decrypted_credentials = orig_creds  # type: ignore[assignment]
         ar.get_provider = orig_factory  # type: ignore[assignment]
 
-    assert r.status_code == 502, r.text
+    # 200 + ok:false : la requête HTTP a abouti, le résultat (négatif) est dans
+    # le body. Évite que Cloudflare avale un 5xx et masque le message d'erreur.
+    assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is False
+    assert body["error"] == "test_failed"
     assert "Connection refused" in body["message"]
 
 

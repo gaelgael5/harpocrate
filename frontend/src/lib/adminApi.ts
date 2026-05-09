@@ -279,13 +279,14 @@ export async function pushBackupToRemote(
 }
 
 export async function testRemoteBackupConnection(id: string): Promise<RemoteBackupTestResponse> {
-  // Le backend renvoie 200 si OK, 502 si KO. api-client throw sur 502 → on catch ici
-  // pour récupérer le body et exposer le message d'erreur lisible côté UI.
+  // Le backend renvoie toujours 200 — le résultat (ok:true ou ok:false avec message)
+  // est dans le body. Cela évite que Cloudflare avale un 5xx et masque l'erreur du
+  // provider (page d'erreur générique au lieu du vrai message). Le catch reste
+  // utile en filet de sécurité pour les vraies erreurs réseau / timeout.
   try {
     const raw = await api.post<unknown>(`/admin/backup-remotes/${id}/test`, {})
     return RemoteBackupTestResponseSchema.parse(raw)
   } catch (err) {
-    // ApiError contient le code/message — on les remappe en RemoteBackupTestResponse
     const e = err as { code?: string; message?: string }
     return {
       ok: false,

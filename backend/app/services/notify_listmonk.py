@@ -34,6 +34,59 @@ class ListmonkNotConfiguredError(RuntimeError):
     """Levée uniquement si un caller force l'envoi sans config (tests)."""
 
 
+def _auth_header() -> str:
+    return f"token {settings.listmonk_user}:{settings.listmonk_token}"
+
+
+async def _ensure_subscriber(client: httpx.AsyncClient, email: str) -> bool:
+    """Crée le subscriber côté listmonk si absent (upsert idempotent).
+
+    Listmonk refuse `POST /api/tx` si le `subscriber_email` n'existe pas
+    en base ("Subscriber not found"). Contrairement à Novu il n'auto-crée
+    pas. On fait donc un POST `/api/subscribers` avant chaque envoi avec
+    `preconfirm_subscriptions=true` (pas de double opt-in pour un mail
+    transactional). 409 = déjà existe → traité comme succès.
+
+    Retourne True si le subscriber est garanti exister à l'issue, False
+    sinon (network/HTTP error → on remonte au caller).
+    """
+    url = f"{settings.listmonk_url.rstrip('/')}/api/subscribers"
+    body = {
+        "email": email,
+        "name": email,  # listmonk exige un name non-vide
+        "status": "enabled",
+        "preconfirm_subscriptions": True,
+        "lists": [],
+    }
+    try:
+        response = await client.post(
+            url,
+            json=body,
+            headers={
+                "Authorization": _auth_header(),
+                "Content-Type": "application/json",
+            },
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("listmonk_subscriber_network_error", error=str(exc))
+        return False
+
+    if response.status_code in (200, 201):
+        return True
+    if response.status_code == 409:
+        # Subscriber déjà existant → c'est ce qu'on veut.
+        return True
+    # 400 "email already exists" est une autre forme courante côté listmonk.
+    if response.status_code == 400 and "already exists" in response.text.lower():
+        return True
+    logger.warning(
+        "listmonk_subscriber_create_failed",
+        status=response.status_code,
+        body=response.text[:300],
+    )
+    return False
+
+
 def _resolve_template_id(locale: str) -> int:
     """Sélectionne le `template_id` listmonk selon la locale.
 
@@ -103,15 +156,25 @@ async def trigger_recovery(
         "headers": [{_TX_ID_HEADER: tx_id}],
     }
     url = f"{settings.listmonk_url.rstrip('/')}/api/tx"
-    auth_value = f"token {settings.listmonk_user}:{settings.listmonk_token}"
 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+            # 1. Garantir que le subscriber existe côté listmonk
+            #    (sinon /api/tx renvoie 400 "Subscriber not found").
+            if not await _ensure_subscriber(client, email):
+                logger.warning(
+                    "listmonk_trigger_aborted_subscriber_missing",
+                    tx_id=tx_id,
+                    email=email,
+                )
+                return False
+
+            # 2. Trigger le template transactional.
             response = await client.post(
                 url,
                 json=body,
                 headers={
-                    "Authorization": auth_value,
+                    "Authorization": _auth_header(),
                     "Content-Type": "application/json",
                 },
             )

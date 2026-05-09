@@ -46,7 +46,13 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          # `ignore-error=true` : si l'export du cache vers GitHub Actions
+          # Cache plante (5xx transitoire fréquent côté infra GHA, page
+          # "Unicorn"), on ne fait PAS échouer le job. L'image est déjà
+          # pushée vers GHCR à ce stade — perdre l'optimisation cache
+          # pour ce build est un coût négligeable comparé à un job rouge
+          # qui bloque le déploiement.
+          cache-to: type=gha,mode=max,scope=backend,ignore-error=true
 
   frontend:
     runs-on: ubuntu-latest
@@ -87,4 +93,5 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+          # cf. backend : tolère les 5xx transitoires de GHA Cache.
+          cache-to: type=gha,mode=max,scope=frontend,ignore-error=true

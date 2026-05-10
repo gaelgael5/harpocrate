@@ -252,16 +252,65 @@ class RunResult:
     bytes_pushed: int | None = None
 
 
+async def _last_db_change(conn: asyncpg.Connection) -> datetime:
+    """Retourne l'horodatage du dernier changement métier détectable.
+
+    Couvre les tables où `updated_at`/`occurred_at` est touché à chaque mutation
+    significative pour le contenu d'un backup. Réutilisé du snapshot scheduler
+    pour cohérence du critère "rien n'a bougé".
+    """
+    return await conn.fetchval(
+        """
+        SELECT GREATEST(
+          COALESCE((SELECT MAX(updated_at)  FROM users),     '1970-01-01'::timestamptz),
+          COALESCE((SELECT MAX(updated_at)  FROM wallets),   '1970-01-01'::timestamptz),
+          COALESCE((SELECT MAX(updated_at)  FROM secrets),   '1970-01-01'::timestamptz),
+          COALESCE((SELECT MAX(occurred_at) FROM audit_log), '1970-01-01'::timestamptz)
+        )
+        """
+    )
+
+
+async def _last_backup_completed_at(conn: asyncpg.Connection) -> datetime | None:
+    """Heure de fin du dernier backup local (snapshot ou full, peu importe).
+
+    `created_at` côté `backups_local` est stamp à l'INSERT, après pg_dump et
+    chiffrement age — c'est bien l'heure de FIN du backup.
+    """
+    return await conn.fetchval(
+        "SELECT MAX(created_at) FROM backups_local"
+    )
+
+
 async def run_schedule(
     conn: asyncpg.Connection,
     schedule: ScheduledBackup,
 ) -> RunResult:
     """Exécute un schedule : crée un backup local, puis push si remote_id non NULL.
 
+    Skip-if-no-change : si le dernier backup local (n'importe lequel) est plus
+    récent que le dernier changement métier, on saute — pas la peine d'écrire
+    sur disque l'équivalent bit-à-bit du backup précédent. Le statut est
+    'skipped' avec un message explicite, et `next_run_at` est avancé pour ne
+    pas reboucler.
+
     Retourne un RunResult — n'écrit pas en DB le résultat (le caller s'en
     charge via `repo.mark_run`, ce qui permet aussi de calculer le prochain
     `next_run_at` au même endroit).
     """
+    # 0) Skip-if-no-change : compare dernier change vs dernier backup terminé
+    last_backup_end = await _last_backup_completed_at(conn)
+    if last_backup_end is not None:
+        last_change = await _last_db_change(conn)
+        if last_change <= last_backup_end:
+            return RunResult(
+                status="skipped",
+                error=(
+                    f"no changes since last backup completed at "
+                    f"{last_backup_end.isoformat()}"
+                ),
+            )
+
     # 1) Création du backup local
     try:
         record = await create_backup(

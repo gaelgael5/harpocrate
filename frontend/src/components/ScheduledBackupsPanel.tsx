@@ -108,6 +108,15 @@ export function ScheduledBackupsPanel() {
           color: 'green',
           message: t('admin.scheduledBackups.runNowSuccess'),
         })
+      } else if (result.status === 'skipped') {
+        // Skip n'est pas une erreur — c'est un comportement attendu (DB
+        // inchangée depuis le dernier backup). Toast bleu informatif.
+        notifications.show({
+          color: 'blue',
+          title: t('admin.scheduledBackups.runNowSkippedTitle'),
+          message: result.error ?? t('admin.scheduledBackups.runNowSkippedDefault'),
+          autoClose: 6000,
+        })
       } else {
         notifications.show({
           color: 'red',
@@ -250,8 +259,27 @@ function ScheduleRow({
     if (!schedule.last_run_at) return t('admin.scheduledBackups.lastRunNever')
     const ts = dayjs(schedule.last_run_at).format('YYYY-MM-DD HH:mm')
     if (schedule.last_run_status === 'ok') return `✓ ${ts}`
+    if (schedule.last_run_status === 'skipped') return `○ ${ts}`
     return `✗ ${ts}`
   })()
+  // Couleur du dernier run :
+  //   - 'failed'   → rouge (problème)
+  //   - 'skipped'  → gris (normal — DB inchangée, on n'a rien à backup)
+  //   - 'ok' / null → dimmed
+  const lastRunColor =
+    schedule.last_run_status === 'failed'
+      ? 'red'
+      : schedule.last_run_status === 'skipped'
+        ? 'gray'
+        : 'dimmed'
+  // Tooltip plus explicite pour skipped : on affiche la raison renvoyée par
+  // le backend (ex: "no changes since last backup completed at ...").
+  const lastRunTooltip =
+    schedule.last_run_status === 'skipped'
+      ? t('admin.scheduledBackups.skippedTooltip', {
+          reason: schedule.last_run_error ?? '',
+        })
+      : (schedule.last_run_error ?? undefined)
 
   return (
     <>
@@ -289,8 +317,8 @@ function ScheduleRow({
         <Table.Td>
           <Text
             size="xs"
-            c={schedule.last_run_status === 'failed' ? 'red' : 'dimmed'}
-            title={schedule.last_run_error ?? undefined}
+            c={lastRunColor}
+            title={lastRunTooltip}
           >
             {lastRunLabel}
           </Text>

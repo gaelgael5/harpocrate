@@ -431,7 +431,7 @@
   "admin": {
     "title": "Administration",
     "nav_backups": "Sauvegardes",
-    "nav_remote_backups": "Backups distants",
+    "nav_remote_backups": "Connexions distantes",
     "nav_replication": "Réplication",
     "nav_snapshots": "Snapshots auto",
     "nav_users": "Utilisateurs",

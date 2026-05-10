@@ -430,7 +430,7 @@
   "admin": {
     "title": "Administration",
     "nav_backups": "Backups",
-    "nav_remote_backups": "Remote backups",
+    "nav_remote_backups": "Remote connections",
     "nav_replication": "Replication",
     "nav_snapshots": "Auto snapshots",
     "nav_users": "Users",

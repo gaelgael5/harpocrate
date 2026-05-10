@@ -11,34 +11,56 @@
 #   5. Down + up de la stack via docker-compose-dev.yml
 #
 # Usage :
-#   ./dev-deploy.sh                # branche par défaut
-#   BRANCH=feat/ma-branche ./dev-deploy.sh
+#   ./dev-deploy.sh                       # reste sur la branche courante, pull
+#   ./dev-deploy.sh feat/ma-branche       # checkout cette branche, puis pull
 #
 # Pour la PROD (pull GHCR, pas de build local), utiliser scripts/refresh.sh.
 
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-git@github.com:gaelgael5/harpocrate.git}"
-BRANCH="${BRANCH:-main}"
 COMPOSE_FILE="docker-compose-dev.yml"
+
+# Branche cible : argument positionnel optionnel. Si absent, on reste sur la
+# branche courante du repo (pas de switch automatique).
+TARGET_BRANCH="${1:-}"
 
 # ─── 1) Positionnement dans le repo ─────────────────────────────────────────
 
 if [ -d ".git" ]; then
-  echo "[1/6] Repo détecté dans $(pwd) — pull branche ${BRANCH}..."
-  git fetch origin
-  git checkout "$BRANCH"
-  git pull --ff-only origin "$BRANCH"
+  if [ -n "$TARGET_BRANCH" ]; then
+    echo "[1/6] Repo détecté dans $(pwd) — switch vers ${TARGET_BRANCH}..."
+    git fetch origin
+    git checkout "$TARGET_BRANCH"
+    git pull --ff-only origin "$TARGET_BRANCH"
+  else
+    CURRENT_BRANCH="$(git branch --show-current)"
+    echo "[1/6] Repo détecté dans $(pwd) — pull branche courante (${CURRENT_BRANCH})..."
+    git pull --ff-only
+  fi
 else
   APP_DIR="harpocrate"
   if [ -d "$APP_DIR/.git" ]; then
-    echo "[1/6] Repo cloné dans ./${APP_DIR} — pull branche ${BRANCH}..."
-    git -C "$APP_DIR" fetch origin
-    git -C "$APP_DIR" checkout "$BRANCH"
-    git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+    if [ -n "$TARGET_BRANCH" ]; then
+      echo "[1/6] Repo dans ./${APP_DIR} — switch vers ${TARGET_BRANCH}..."
+      git -C "$APP_DIR" fetch origin
+      git -C "$APP_DIR" checkout "$TARGET_BRANCH"
+      git -C "$APP_DIR" pull --ff-only origin "$TARGET_BRANCH"
+    else
+      CURRENT_BRANCH="$(git -C "$APP_DIR" branch --show-current)"
+      echo "[1/6] Repo dans ./${APP_DIR} — pull branche courante (${CURRENT_BRANCH})..."
+      git -C "$APP_DIR" pull --ff-only
+    fi
   else
-    echo "[1/6] Clone du repo dans ./${APP_DIR} (branche ${BRANCH})..."
-    git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+    # Premier clone : on demande explicitement une branche cible (sinon
+    # on ne sait pas laquelle prendre — pas de "branche courante" possible).
+    if [ -z "$TARGET_BRANCH" ]; then
+      echo "[1/6] Aucun repo trouvé. Premier clone — précise la branche en argument :"
+      echo "      ./dev-deploy.sh main"
+      exit 1
+    fi
+    echo "[1/6] Clone du repo dans ./${APP_DIR} (branche ${TARGET_BRANCH})..."
+    git clone --branch "$TARGET_BRANCH" "$REPO_URL" "$APP_DIR"
   fi
   cd "$APP_DIR"
 fi

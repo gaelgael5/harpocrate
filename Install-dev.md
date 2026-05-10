@@ -167,10 +167,11 @@ C'est tout. Le script fait `git pull`, rebuild les images, et redémarre la
 stack. Les volumes `data/postgres` et `data/backups` sont préservés (rebuild
 des images n'affecte pas les données).
 
-Pour switcher de branche :
+Par défaut, le script reste sur la branche courante. Pour switcher de branche,
+passe-la en argument :
 
 ```bash
-BRANCH=feat/ma-branche ./dev-deploy.sh
+./dev-deploy.sh feat/ma-branche
 ```
 
 ---

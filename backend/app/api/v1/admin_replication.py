@@ -1,22 +1,31 @@
-"""Endpoints /v1/admin/replication/* — LOT_20.
+"""Endpoints /v1/admin/replication/* — LOT_20 + LOT réplication itération 1.
 
 Auth : AdminJwt uniquement.
 
-- GET /strategies — liste les stratégies disponibles + active
-- POST /strategies/{id}/activate — bascule la stratégie active
+- GET /strategies — liste les stratégies disponibles + actives
+- POST /strategies/{id}/activate — active une stratégie (multi-actives OK)
+- POST /strategies/{id}/deactivate — désactive sans toucher aux autres
 - GET /status — état temps réel (interroge Patroni si stratégie patroni)
+- GET /streaming/nodes — liste les standby (avec last_state/last_lag)
+- POST /streaming/nodes — ajoute un standby, retourne le bundle de config
+- DELETE /streaming/nodes/{id} — supprime un standby (DROP ROLE + delete row)
+- POST /streaming/reload-pg-hba — reload pg_hba.conf après modif manuelle
 """
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
 from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
+from app.db.repositories import replication_strategies as strat_repo
 from app.services import replication as svc
+from app.services import streaming_replication as streaming_svc
 
 router = APIRouter(prefix="/admin/replication", tags=["admin-replication"])
 
@@ -25,8 +34,7 @@ router = APIRouter(prefix="/admin/replication", tags=["admin-replication"])
 async def list_strategies(admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
-        from app.db.repositories import replication_strategies as repo
-        rows = await repo.list_strategies(conn)
+        rows = await strat_repo.list_strategies(conn)
     return JSONResponse({
         "strategies": [svc.row_to_dict(r) for r in rows],
     })
@@ -38,6 +46,8 @@ async def list_strategies(admin: AdminJwt) -> JSONResponse:
     response_class=JSONResponse,
 )
 async def activate_strategy(strategy_id: UUID, admin: AdminJwt) -> JSONResponse:
+    """Active une stratégie. Plusieurs stratégies peuvent être actives en
+    parallèle (depuis la migration 026)."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         ok = await svc.activate(conn, strategy_id)
@@ -47,6 +57,150 @@ async def activate_strategy(strategy_id: UUID, admin: AdminJwt) -> JSONResponse:
             detail={"error": "strategy_not_found_or_disabled"},
         )
     return JSONResponse({"activated": True, "strategy_id": str(strategy_id)})
+
+
+@router.post(
+    "/strategies/{strategy_id}/deactivate",
+    status_code=status.HTTP_200_OK,
+    response_class=JSONResponse,
+)
+async def deactivate_strategy(strategy_id: UUID, admin: AdminJwt) -> JSONResponse:
+    """Désactive une stratégie sans toucher aux autres."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        ok = await svc.deactivate(conn, strategy_id)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "strategy_not_found_or_already_inactive"},
+        )
+    return JSONResponse({"deactivated": True, "strategy_id": str(strategy_id)})
+
+
+# ─── Streaming async — gestion des standby nodes ────────────────────────────
+
+
+class AddNodeRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=128)
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=5432, ge=1, le=65535)
+    role: str = Field(default="standby_ro")
+    notes: str | None = Field(default=None, max_length=2000)
+    # Adresse du master telle que vue depuis le standby (peut être différente
+    # de ce que voit Harpocrate, ex: IP LAN vs hostname public).
+    master_host: str = Field(min_length=1, max_length=255)
+    master_port: int = Field(default=5432, ge=1, le=65535)
+    standby_data_dir: str = Field(default="/var/lib/postgresql/16/main", max_length=512)
+
+
+@router.get("/streaming/nodes", response_class=JSONResponse)
+async def list_streaming_nodes(admin: AdminJwt) -> JSONResponse:
+    """Liste tous les standby (toutes stratégies streaming_async confondues)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        nodes = await streaming_svc.list_nodes(conn)
+    return JSONResponse({"nodes": [n.to_dict() for n in nodes]})
+
+
+@router.post(
+    "/streaming/nodes",
+    status_code=status.HTTP_201_CREATED,
+    response_class=JSONResponse,
+)
+async def add_streaming_node(
+    body: AddNodeRequest, admin: AdminJwt
+) -> JSONResponse:
+    """Ajoute un standby et retourne le bundle de config (1 fois — le password
+    n'est plus jamais ré-affichable après cette réponse)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # On rattache le node à la stratégie streaming_async (la seule pour
+        # cette itération). Si elle n'existe pas, on remonte une erreur claire.
+        strat = await conn.fetchrow(
+            "SELECT id FROM replication_strategies WHERE type = 'streaming_async' LIMIT 1"
+        )
+        if strat is None:
+            raise HTTPException(
+                status_code=status.HTTP_412_PRECONDITION_FAILED,
+                detail={
+                    "error": "streaming_strategy_missing",
+                    "message": "streaming_async strategy not seeded. Run migration 026.",
+                },
+            )
+
+        try:
+            node_id, bundle = await streaming_svc.add_node(
+                conn,
+                strategy_id=strat["id"],
+                label=body.label,
+                host=body.host,
+                port=body.port,
+                role=body.role,
+                notes=body.notes,
+                master_host=body.master_host,
+                master_port=body.master_port,
+                standby_data_dir=body.standby_data_dir,
+                created_by_user_id=admin.user_id,
+            )
+        except Exception as exc:
+            msg = str(exc)
+            if "unique" in msg.lower() or "23505" in msg:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error": "label_or_app_name_already_exists"},
+                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"error": "internal_error", "message": msg},
+            ) from exc
+
+    payload: dict[str, Any] = {
+        "id": str(node_id),
+        "bundle": bundle.to_dict(),
+    }
+    return JSONResponse(payload, status_code=status.HTTP_201_CREATED)
+
+
+@router.delete(
+    "/streaming/nodes/{node_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_streaming_node(node_id: UUID, admin: AdminJwt) -> Response:
+    """Supprime un standby : DROP ROLE côté master + DELETE row.
+
+    Si le DROP ROLE échoue (ex: standby encore connecté), on remonte 409
+    pour que l'admin déconnecte le standby d'abord.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            ok = await streaming_svc.delete_node(conn, node_id)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "drop_role_failed",
+                    "message": str(exc),
+                },
+            ) from exc
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "node_not_found"},
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/streaming/reload-pg-hba", response_class=JSONResponse)
+async def reload_pg_hba(admin: AdminJwt) -> JSONResponse:
+    """À appeler après que l'admin a modifié pg_hba.conf manuellement côté
+    master. Lance `SELECT pg_reload_conf()` pour que les nouvelles règles
+    prennent effet sans redémarrer Postgres."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await streaming_svc.reload_pg_hba(conn)
+    return JSONResponse({"reloaded": True})
 
 
 @router.get("/status", response_class=JSONResponse)

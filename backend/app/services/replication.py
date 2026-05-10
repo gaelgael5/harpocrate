@@ -39,6 +39,7 @@ def _label_for(type_: str) -> str:
         "patroni": "Patroni + etcd",
         "harpocrate_sync": "Harpocrate Sync (replication applicative)",
         "s3_wal": "S3 WAL Archiving",
+        "streaming_async": "Streaming async",
     }.get(type_, type_)
 
 
@@ -48,24 +49,25 @@ def _description_for(type_: str) -> str:
         "patroni": "Streaming replication PostgreSQL avec failover automatique via Patroni + etcd.",
         "harpocrate_sync": "Réplication applicative inter-instances (LOT 21B).",
         "s3_wal": "Archivage WAL continu vers S3-compatible (lot futur).",
+        "streaming_async": "Réplication PostgreSQL streaming asynchrone — un ou plusieurs standby. Hors-app : commandes générées par l'UI à exécuter en SSH.",
     }.get(type_, "")
 
 
 async def ensure_env_strategy_active(
     conn: asyncpg.Connection[asyncpg.Record],
 ) -> None:
-    """Au démarrage : crée + active la stratégie env si pas déjà fait.
+    """Au démarrage : crée la stratégie env si elle n'existe pas, l'active si
+    aucune stratégie n'est encore active. Idempotent.
 
-    Idempotent — si l'admin a basculé manuellement vers une autre stratégie
-    via l'UI, on respecte son choix (on ne réécrase pas l'active).
+    Multi-actives autorisé (LOT réplication itération 1) : on n'écrase pas
+    les choix de l'admin. Si une stratégie env est déjà déclarée mais désactivée,
+    on respecte le choix admin (on ne ré-active pas).
     """
     requested = settings.replication_strategy
-    active = await repo.get_active_strategy(conn)
-    if active is not None and active["type"] == requested:
-        return  # déjà aligné
-
     label = _label_for(requested)
     config = _config_from_env()
+
+    # Upsert idempotent (insère si label inconnu, sinon update config).
     new_id = await repo.upsert_strategy(
         conn,
         type_=requested,
@@ -73,8 +75,11 @@ async def ensure_env_strategy_active(
         description=_description_for(requested),
         config=config,
     )
-    if active is None:
-        # Première initialisation : on active.
+
+    # Si AUCUNE stratégie n'est active, on active celle de l'env (cas premier
+    # démarrage). Si l'admin a déjà activé/désactivé manuellement, on respecte.
+    active_rows = await repo.list_active(conn)
+    if not active_rows:
         await repo.activate_strategy(conn, new_id)
         logger.info(
             "replication_strategy_seeded_active",
@@ -83,10 +88,9 @@ async def ensure_env_strategy_active(
         )
     else:
         logger.info(
-            "replication_strategy_env_diverges_from_active",
-            env=requested,
-            active=active["type"],
-            note="UI choice respected",
+            "replication_strategy_already_active",
+            active_count=len(active_rows),
+            env_type=requested,
         )
 
 
@@ -106,8 +110,18 @@ async def activate(
     conn: asyncpg.Connection[asyncpg.Record],
     strategy_id: UUID,
 ) -> bool:
-    """Bascule la stratégie active. Retourne False si l'ID est inconnu/désactivé."""
+    """Active une stratégie. Plusieurs stratégies peuvent être actives en
+    parallèle (multi-active depuis la migration 026).
+    """
     return await repo.activate_strategy(conn, strategy_id)
+
+
+async def deactivate(
+    conn: asyncpg.Connection[asyncpg.Record],
+    strategy_id: UUID,
+) -> bool:
+    """Désactive une stratégie sans toucher aux autres."""
+    return await repo.deactivate_strategy(conn, strategy_id)
 
 
 def row_to_dict(row: asyncpg.Record) -> dict[str, Any]:

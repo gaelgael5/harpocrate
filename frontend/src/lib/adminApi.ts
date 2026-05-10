@@ -373,6 +373,58 @@ export async function activateReplicationStrategy(
   )
 }
 
+export async function deactivateReplicationStrategy(
+  strategyId: string,
+): Promise<{ deactivated: boolean; strategy_id: string }> {
+  return api.post<{ deactivated: boolean; strategy_id: string }>(
+    `/admin/replication/strategies/${strategyId}/deactivate`,
+    {},
+  )
+}
+
+// ─── Streaming replication nodes (LOT réplication itération 1) ───────────────
+
+import {
+  ReplicationNodeListResponseSchema,
+  ReplicationNodeAddResponseSchema,
+  type ReplicationNodeListResponse,
+  type ReplicationNodeAddResponse,
+} from '@/schemas/admin'
+
+export async function fetchStreamingNodes(): Promise<ReplicationNodeListResponse> {
+  const raw = await api.get<unknown>('/admin/replication/streaming/nodes')
+  return ReplicationNodeListResponseSchema.parse(raw)
+}
+
+export interface AddStreamingNodePayload {
+  label: string
+  host: string
+  port: number
+  role: 'standby_ro' | 'standby_failover_ready' | 'archive_only'
+  notes?: string | null
+  master_host: string
+  master_port: number
+  standby_data_dir?: string
+}
+
+export async function addStreamingNode(
+  body: AddStreamingNodePayload,
+): Promise<ReplicationNodeAddResponse> {
+  const raw = await api.post<unknown>('/admin/replication/streaming/nodes', body)
+  return ReplicationNodeAddResponseSchema.parse(raw)
+}
+
+export async function deleteStreamingNode(id: string): Promise<void> {
+  await api.delete<void>(`/admin/replication/streaming/nodes/${id}`)
+}
+
+export async function reloadPgHba(): Promise<{ reloaded: boolean }> {
+  return api.post<{ reloaded: boolean }>(
+    '/admin/replication/streaming/reload-pg-hba',
+    {},
+  )
+}
+
 // ─── Scheduled backups (cron-like) ───────────────────────────────────────────
 
 export async function fetchScheduledBackups(): Promise<ScheduledBackupListResponse> {

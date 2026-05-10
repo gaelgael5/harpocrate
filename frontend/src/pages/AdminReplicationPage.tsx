@@ -17,23 +17,23 @@ import {
   Card,
   Group,
   Badge,
-  Button,
   Loader,
   Center,
   Alert,
   Table,
+  Switch,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { modals } from '@mantine/modals'
 import { useTranslation } from 'react-i18next'
 
 import {
   fetchReplicationStrategies,
   fetchReplicationStatus,
   activateReplicationStrategy,
+  deactivateReplicationStrategy,
 } from '@/lib/adminApi'
 import { ApiError } from '@/lib/api-client'
-import type { ReplicationStrategy } from '@/schemas/admin'
+import { StreamingNodesPanel } from '@/components/StreamingNodesPanel'
 
 function StatusBadge({ status }: { status: string }) {
   const color = status === 'ok' ? 'green' : status === 'degraded' ? 'orange' : 'red'
@@ -101,12 +101,24 @@ export function AdminReplicationPage() {
     queryFn: fetchReplicationStrategies,
   })
 
-  const activateMut = useMutation({
-    mutationFn: activateReplicationStrategy,
-    onSuccess: () => {
+  // Multi-actives autorisé : Switch indépendant par stratégie. activate/
+  // deactivate sont deux endpoints distincts mais on les unifie ici pour
+  // simplifier le composant (le résultat n'est pas consommé, juste le
+  // succès/erreur compte).
+  const toggleMut = useMutation({
+    mutationFn: async (args: { id: string; enable: boolean }) => {
+      if (args.enable) {
+        await activateReplicationStrategy(args.id)
+      } else {
+        await deactivateReplicationStrategy(args.id)
+      }
+    },
+    onSuccess: (_data, args) => {
       notifications.show({
         color: 'green',
-        message: t('admin.replication.activateSuccess'),
+        message: args.enable
+          ? t('admin.replication.activateSuccess')
+          : t('admin.replication.deactivateSuccess'),
       })
       void qc.invalidateQueries({ queryKey: ['admin-replication-status'] })
       void qc.invalidateQueries({ queryKey: ['admin-replication-strategies'] })
@@ -116,19 +128,6 @@ export function AdminReplicationPage() {
       notifications.show({ color: 'red', title: t('common.error'), message: msg })
     },
   })
-
-  function confirmActivate(strategy: ReplicationStrategy) {
-    modals.openConfirmModal({
-      title: t('admin.replication.activateConfirmTitle'),
-      children: (
-        <Text size="sm">
-          {t('admin.replication.activateConfirmDesc', { label: strategy.label })}
-        </Text>
-      ),
-      labels: { confirm: t('admin.replication.activate'), cancel: t('common.cancel') },
-      onConfirm: () => activateMut.mutate(strategy.id),
-    })
-  }
 
   return (
     <Stack>
@@ -183,11 +182,14 @@ export function AdminReplicationPage() {
         </Card>
       )}
 
-      {/* Liste des stratégies */}
+      {/* Liste des stratégies — multi-actives, switch indépendant par strat */}
       {strategiesQuery.data && (
         <Card withBorder>
           <Stack>
             <Title order={4}>{t('admin.replication.availableStrategies')}</Title>
+            <Text size="sm" c="dimmed">
+              {t('admin.replication.multiActiveHint')}
+            </Text>
             <Stack gap="md">
               {strategiesQuery.data.strategies.map((s) => (
                 <Card key={s.id} withBorder padding="sm">
@@ -196,8 +198,9 @@ export function AdminReplicationPage() {
                       <Group gap="xs">
                         <Text fw={600}>{s.label}</Text>
                         <Badge variant="light">{s.type}</Badge>
-                        {s.is_active && <Badge color="green">{t('admin.replication.active')}</Badge>}
-                        {!s.enabled && <Badge color="gray">{t('admin.replication.disabled')}</Badge>}
+                        {!s.enabled && (
+                          <Badge color="gray">{t('admin.replication.disabled')}</Badge>
+                        )}
                       </Group>
                       {s.description && (
                         <Text size="sm" c="dimmed">
@@ -205,18 +208,21 @@ export function AdminReplicationPage() {
                         </Text>
                       )}
                     </Stack>
-                    {!s.is_active && s.enabled && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        loading={
-                          activateMut.isPending && activateMut.variables === s.id
-                        }
-                        onClick={() => confirmActivate(s)}
-                      >
-                        {t('admin.replication.activate')}
-                      </Button>
-                    )}
+                    <Switch
+                      label={
+                        s.is_active
+                          ? t('admin.replication.active')
+                          : t('admin.replication.inactive')
+                      }
+                      checked={s.is_active}
+                      disabled={!s.enabled || toggleMut.isPending}
+                      onChange={(e) =>
+                        toggleMut.mutate({
+                          id: s.id,
+                          enable: e.currentTarget.checked,
+                        })
+                      }
+                    />
                   </Group>
                 </Card>
               ))}
@@ -224,6 +230,9 @@ export function AdminReplicationPage() {
           </Stack>
         </Card>
       )}
+
+      {/* Streaming async — gestion des standby */}
+      <StreamingNodesPanel />
     </Stack>
   )
 }

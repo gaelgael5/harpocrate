@@ -37,12 +37,15 @@ class ScheduledBackupsScheduler:
     """Boucle de tick + sérialisation des exécutions."""
 
     def __init__(self, pool: asyncpg.Pool) -> None:
+        from app.services.backup_lock import get_global_backup_lock
+
         self._pool = pool
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
-        # Lock global : sérialise toutes les exécutions, qu'elles viennent du
-        # tick automatique ou de l'API run-now.
-        self._run_lock = asyncio.Lock()
+        # Lock partagé avec le snapshot_scheduler : pas deux pg_dump en
+        # parallèle. Sert aussi à sérialiser les runs de schedules entre eux
+        # (tick auto + run-now).
+        self._run_lock = get_global_backup_lock()
 
     @property
     def run_lock(self) -> asyncio.Lock:

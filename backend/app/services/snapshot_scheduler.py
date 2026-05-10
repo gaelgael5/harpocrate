@@ -1,4 +1,14 @@
-"""Scheduler de snapshots automatiques cron + rotation GFS — LOT_14."""
+"""Scheduler de snapshots automatiques cron + rotation GFS — LOT_14.
+
+Push remote :
+  - Le push vers S3 hardcodé du `.env` est DÉPRÉCIÉ (LOT scheduled-backups).
+  - Le push se fait désormais vers les `remote_backup_connection` listées
+    dans `policy.remote_destinations_to_push` (interprétée comme `list[UUID]`).
+  - Pour chaque cible, on utilise `prefix_snapshots`/`remote_path_snapshots`
+    de la connexion. Si non configuré, on skip ce remote avec une anomalie.
+  - Best-effort : un échec sur un remote n'arrête pas les autres. Chaque
+    échec génère une `system_anomaly_event` (visible dans la page Anomalies).
+"""
 from __future__ import annotations
 
 import asyncio
@@ -14,8 +24,14 @@ from app.core.logging import logger
 from app.db.repositories import backups as backups_repo
 from app.db.repositories import system_metadata as meta_repo
 from app.services import backup as backup_svc
-from app.services import backup_s3 as s3_svc
+from app.services import remote_backup_connections as remote_svc
+from app.services import system_anomalies as anomaly_svc
+from app.services.backup_lock import get_global_backup_lock
 from app.services.gfs_rotation import GFSPolicy, RotationAction, rotate
+from app.services.remote_backup_providers import (
+    RemoteBackupProviderError,
+    get_provider,
+)
 
 
 async def get_policy(conn: asyncpg.Connection) -> GFSPolicy:
@@ -124,25 +140,28 @@ class SnapshotScheduler:
             raise _NoChangeError()
 
         # ─── Création du snapshot ─────────────────────────────────────────────
-        logger.info("snapshot_creating", trigger="manual" if description else "auto")
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
-        backup = await _create_snapshot_record(
-            conn,
-            timestamp=timestamp,
-            tier="hourly",
-            description=description or "Auto snapshot",
-        )
+        # Lock global partagé avec scheduled_backups_scheduler : empêche deux
+        # pg_dump concurrents (CPU/IO/RAM doublés sans bénéfice + risque de
+        # contention disque). Si un autre worker tient le lock, on attend.
+        backup_lock = get_global_backup_lock()
+        async with backup_lock:
+            logger.info("snapshot_creating", trigger="manual" if description else "auto")
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H-%M-%S")
+            backup = await _create_snapshot_record(
+                conn,
+                timestamp=timestamp,
+                tier="hourly",
+                description=description or "Auto snapshot",
+            )
 
+        # ─── Push vers remote_backup_connection (best-effort sériel) ─────────
+        # Push HORS du lock : l'upload réseau peut être long et n'a pas besoin
+        # de bloquer un autre pg_dump éventuellement en attente.
         remote_pushes: list[dict] = []
-        if not skip_remote and policy.push_remote_after_snapshot and settings.s3_configured:
-            t_push = time.monotonic()
-            try:
-                s3_key = await s3_svc.push_backup_to_s3(str(backup.id), conn)
-                remote_pushes.append({"destination": "s3", "success": True, "s3_key": s3_key})
-            except Exception as exc:
-                remote_pushes.append({"destination": "s3", "success": False, "error": str(exc)})
-                logger.error("snapshot_remote_push_failed", error=str(exc))
-            logger.info("snapshot_remote_push_done", duration_ms=int((time.monotonic() - t_push) * 1000))
+        if not skip_remote and policy.push_remote_after_snapshot:
+            remote_pushes = await self._push_snapshot_to_remotes(
+                conn, backup=backup, policy=policy
+            )
 
         # ─── Rotation ─────────────────────────────────────────────────────────
         rotation_actions = await self._apply_rotation(conn, policy)
@@ -159,6 +178,146 @@ class SnapshotScheduler:
             duration_ms=int((time.monotonic() - t0) * 1000),
         )
         return backup
+
+    async def _push_snapshot_to_remotes(
+        self,
+        conn: asyncpg.Connection,
+        *,
+        backup: backups_repo.BackupRecord,
+        policy: GFSPolicy,
+    ) -> list[dict]:
+        """Push le snapshot fraîchement créé vers chaque cible de la policy.
+
+        - Parse `policy.remote_destinations_to_push` comme une liste d'UUID.
+          Les valeurs non-UUID (legacy "s3" du push hardcodé .env) sont
+          ignorées avec un warning au log — l'admin doit migrer en créant
+          une `remote_backup_connection` S3 et en remplaçant l'entrée.
+        - Pour chaque UUID : get_connection + creds + resolve_path("snapshots")
+          + upload_stream. Tout échec → `system_anomaly_event` (severity=warning),
+          on continue avec le remote suivant.
+        - Retourne une liste de dicts pour log structuré (pas un statut DB —
+          on ne stocke pas l'historique des push par snapshot pour l'instant ;
+          les anomalies suffisent côté UI).
+        """
+        results: list[dict] = []
+        file_path = Path(settings.backup_local_path) / backup.filename
+
+        for raw_dest in policy.remote_destinations_to_push:
+            try:
+                remote_id = UUID(str(raw_dest))
+            except (ValueError, TypeError):
+                # Legacy "s3" ou autre valeur non-UUID — on signale et on skip.
+                logger.warning(
+                    "snapshot_remote_dest_legacy_skipped",
+                    raw_destination=str(raw_dest),
+                    note="migrate to remote_backup_connection UUID",
+                )
+                results.append(
+                    {"destination": str(raw_dest), "success": False, "skipped": "legacy"}
+                )
+                continue
+
+            r = await self._push_snapshot_to_one_remote(
+                conn, backup=backup, remote_id=remote_id, file_path=file_path
+            )
+            results.append(r)
+        return results
+
+    async def _push_snapshot_to_one_remote(
+        self,
+        conn: asyncpg.Connection,
+        *,
+        backup: backups_repo.BackupRecord,
+        remote_id: UUID,
+        file_path: Path,
+    ) -> dict:
+        """Push vers UNE connexion. Génère une anomalie en cas d'échec et
+        retourne un dict {destination, success, error?, bytes?} pour le log."""
+        from app.api.v1.admin_backups import _stream_file_chunks  # réutilise le streamer
+
+        remote = await remote_svc.get_connection(conn, remote_id)
+        if remote is None:
+            await anomaly_svc.report(
+                conn,
+                severity="warning",
+                anomaly_type="snapshot_remote_not_found",
+                source="snapshot_remote_push",
+                source_ref_id=remote_id,
+                message=f"Snapshot push: remote connection {remote_id} not found (deleted?).",
+                metadata={"backup_id": str(backup.id), "remote_id": str(remote_id)},
+            )
+            return {"destination": str(remote_id), "success": False, "error": "remote_not_found"}
+
+        creds = await remote_svc.get_decrypted_credentials(conn, remote_id)
+        if creds is None:
+            await anomaly_svc.report(
+                conn,
+                severity="warning",
+                anomaly_type="snapshot_remote_no_credentials",
+                source="snapshot_remote_push",
+                source_ref_id=remote_id,
+                message=f"Snapshot push: remote {remote.name!r} has no stored credentials.",
+                metadata={"backup_id": str(backup.id), "remote_name": remote.name},
+            )
+            return {"destination": remote.name, "success": False, "error": "no_credentials"}
+
+        target_path = remote_svc.resolve_path(remote.config, remote.kind, "snapshots")
+        if not target_path:
+            await anomaly_svc.report(
+                conn,
+                severity="warning",
+                anomaly_type="snapshot_remote_no_snapshots_path",
+                source="snapshot_remote_push",
+                source_ref_id=remote_id,
+                message=(
+                    f"Snapshot push: remote {remote.name!r} has no 'snapshots' path "
+                    f"configured. Set remote_path_snapshots / prefix_snapshots in the "
+                    f"remote connection settings."
+                ),
+                metadata={"backup_id": str(backup.id), "remote_name": remote.name},
+            )
+            return {"destination": remote.name, "success": False, "error": "no_snapshots_path"}
+
+        if not file_path.exists():
+            await anomaly_svc.report(
+                conn,
+                severity="critical",
+                anomaly_type="snapshot_local_file_missing",
+                source="snapshot_remote_push",
+                source_ref_id=backup.id,
+                message=(
+                    f"Snapshot push: local file {file_path.name!r} missing on disk. "
+                    f"Cannot push to remote {remote.name!r}."
+                ),
+                metadata={"backup_id": str(backup.id), "filename": backup.filename},
+            )
+            return {"destination": remote.name, "success": False, "error": "local_file_missing"}
+
+        provider = get_provider(remote.kind, remote.config, creds)
+        try:
+            bytes_pushed = await provider.upload_stream(
+                target_path, backup.filename, _stream_file_chunks(file_path)
+            )
+        except RemoteBackupProviderError as exc:
+            await anomaly_svc.report(
+                conn,
+                severity="warning",
+                anomaly_type="snapshot_remote_push_failed",
+                source="snapshot_remote_push",
+                source_ref_id=remote_id,
+                message=(
+                    f"Snapshot push to remote {remote.name!r} failed: {exc}"
+                ),
+                metadata={
+                    "backup_id": str(backup.id),
+                    "remote_name": remote.name,
+                    "remote_kind": remote.kind,
+                    "error": str(exc),
+                },
+            )
+            return {"destination": remote.name, "success": False, "error": str(exc)}
+
+        return {"destination": remote.name, "success": True, "bytes": bytes_pushed}
 
     async def _apply_rotation(
         self, conn: asyncpg.Connection, policy: GFSPolicy

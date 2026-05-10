@@ -68,7 +68,7 @@ ssh -T git@github.com
 
 ```bash
 cd /opt
-git clone --branch main git@github.com:gaelgael5/harpocrate.git
+git clone --branch feat/local-admin-auth git@github.com:gaelgael5/harpocrate.git
 cd harpocrate
 ```
 

@@ -84,36 +84,37 @@ up de la stack) :
 Au premier run, il va :
 
 1. Détecter le repo, faire un `git pull` (idempotent)
-2. **Créer `.env` depuis `.env.example`** s'il n'existe pas → tu DOIS l'éditer
-   pour configurer au moins `HARPOCRATE_HMAC_KEY` et `POSTGRES_PASSWORD` (voir 3.3)
+2. **Créer `.env` depuis `.env.example`** s'il n'existe pas, en **générant
+   automatiquement les secrets aléatoires** (voir 3.3)
 3. Créer `data/postgres/` et `data/backups/` (gitignored, voir `.gitignore`)
 4. Builder `harpocrate-backend:dev` et `harpocrate-frontend:dev` localement
 5. `docker compose -f docker-compose-dev.yml up -d`
 
-Si c'est le premier run, **édite `.env` et relance** :
+### 3.3 Secrets auto-générés vs valeurs à éditer
 
-### 3.3 Configurer `.env`
+**Auto-générés à la création de `.env`** (chmod 600 appliqué) :
 
-Variables minimales à renseigner :
+| Variable | Génération |
+|---|---|
+| `POSTGRES_PASSWORD` | URL-safe 32 chars (`openssl rand` → `[A-Za-z0-9_-]`) |
+| `HARPOCRATE_HMAC_KEY` | base64 de 32 bytes aléatoires |
+| `HARPOCRATE_ADMIN_LOCAL_PASSWORD` | URL-safe 24 chars |
+| `HARPOCRATE_ADMIN_LOCAL_ENABLED` | `true` (admin local activé pour le dev) |
+
+Le password admin local est **affiché une fois dans la sortie** du script —
+copie-le ou récupère-le ensuite avec `grep ADMIN_LOCAL_PASSWORD .env`.
+
+**À éditer manuellement dans `.env`** si nécessaire :
 
 | Variable | Valeur |
 |---|---|
-| `POSTGRES_PASSWORD` | mot de passe Postgres (libre, mais change la valeur par défaut) |
-| `HARPOCRATE_HMAC_KEY` | générer : `python3 -c "import base64,os; print(base64.b64encode(os.urandom(32)).decode())"` |
 | `HARPOCRATE_PUBLIC_URL` | URL d'accès externe au backend (ex: `http://harpocrate-dev.home.lan`) |
-| `HARPOCRATE_KEYCLOAK_URL` | ton serveur Keycloak (ou laisser tel quel si tu utilises uniquement l'admin local) |
+| `HARPOCRATE_KEYCLOAK_URL` | ton serveur Keycloak (laisser tel quel si tu n'utilises que l'admin local) |
 | `HARPOCRATE_KEYCLOAK_REALM` | realm Keycloak |
 | `HARPOCRATE_KEYCLOAK_CLIENT_ID` | client ID OIDC |
+| `HARPOCRATE_LISTMONK_*` | si envoi mails de recovery (sinon vide = no-op) |
 
-**Auth admin local** (activé par défaut en dev pour break-glass) :
-
-| Variable | Valeur |
-|---|---|
-| `HARPOCRATE_ADMIN_LOCAL_ENABLED` | `true` |
-| `HARPOCRATE_ADMIN_LOCAL_USERNAME` | `admin` (ou autre) |
-| `HARPOCRATE_ADMIN_LOCAL_PASSWORD` | mot de passe en clair (chmod 600 sur `.env`) |
-
-Puis **relancer** :
+Si tu modifies `.env`, **relancer** :
 
 ```bash
 ./dev-deploy.sh

@@ -67,16 +67,65 @@ fi
 
 # ─── 2) .env ────────────────────────────────────────────────────────────────
 
+# Génère un secret URL-safe de N chars (base64-derived, sans +/=).
+# Utilisable directement dans une URL ou un DSN sans escape.
+gen_urlsafe() {
+  openssl rand -base64 48 | tr '+/' '-_' | tr -d '=' | head -c "${1:-24}"
+}
+
+# Génère une chaîne base64 standard d'exactement N bytes décodés.
+# Pour HARPOCRATE_HMAC_KEY (Pydantic Settings la décode → 32 bytes).
+gen_b64_bytes() {
+  openssl rand -base64 "${1:-32}" | tr -d '\n'
+}
+
+# Substitue la valeur d'une clé `KEY=...` dans un .env.
+# Délimiteur sed = `#` pour ne pas être gêné par `/` (présent dans base64).
+# Les valeurs générées ne contiennent ni `#` ni `&` (caractères spéciaux sed).
+set_env_value() {
+  local file="$1" key="$2" value="$3"
+  sed -i "s#^${key}=.*#${key}=${value}#" "$file"
+}
+
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
-    echo "[2/6] .env absent → création depuis .env.example"
+    echo "[2/6] .env absent → création depuis .env.example + génération secrets aléatoires"
     cp .env.example .env
-    echo "      ⚠  Édite .env pour configurer HARPOCRATE_HMAC_KEY, POSTGRES_PASSWORD, etc."
+
+    # Secrets auto-générés : tout ce qui PEUT être random sans casser
+    # l'usage. Les autres valeurs (KEYCLOAK_*, PUBLIC_URL, listmonk) restent
+    # à éditer manuellement par l'admin.
+    PG_PASS="$(gen_urlsafe 32)"
+    HMAC_KEY="$(gen_b64_bytes 32)"
+    ADMIN_PASS="$(gen_urlsafe 24)"
+
+    set_env_value .env "POSTGRES_PASSWORD" "$PG_PASS"
+    set_env_value .env "HARPOCRATE_HMAC_KEY" "$HMAC_KEY"
+    set_env_value .env "HARPOCRATE_ADMIN_LOCAL_PASSWORD" "$ADMIN_PASS"
+    # Active aussi l'admin local par défaut en dev (sinon le password
+    # généré ne sert à rien).
+    set_env_value .env "HARPOCRATE_ADMIN_LOCAL_ENABLED" "true"
+
+    # `.env` contient des secrets : restreindre les permissions.
+    chmod 600 .env
+
+    echo "      ✓ POSTGRES_PASSWORD            : généré ($(echo -n "$PG_PASS" | wc -c) chars)"
+    echo "      ✓ HARPOCRATE_HMAC_KEY          : généré (base64 de 32 bytes)"
+    echo "      ✓ HARPOCRATE_ADMIN_LOCAL_PASSWORD : généré ($(echo -n "$ADMIN_PASS" | wc -c) chars)"
+    echo "      ✓ HARPOCRATE_ADMIN_LOCAL_ENABLED : true (admin local activé pour le dev)"
+    echo
+    echo "      ⚠  Login admin local : admin / ${ADMIN_PASS}"
+    echo "         (récupérable plus tard dans .env — chmod 600)"
+    echo
+    echo "      ⚠  À ÉDITER MANUELLEMENT dans .env si nécessaire :"
+    echo "         - HARPOCRATE_KEYCLOAK_URL / REALM / CLIENT_ID  (si auth OIDC)"
+    echo "         - HARPOCRATE_PUBLIC_URL                         (URL externe d'accès)"
+    echo "         - HARPOCRATE_LISTMONK_*                         (si envoi mails recovery)"
   else
     echo "[2/6] ⚠  .env absent et .env.example introuvable — config requise pour démarrer"
   fi
 else
-  echo "[2/6] .env déjà présent."
+  echo "[2/6] .env déjà présent (secrets non régénérés)."
 fi
 
 # ─── 3) Dossiers data/ pour volumes Docker (ignorés par .gitignore) ─────────

@@ -134,6 +134,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     replication_refresh_task = asyncio.create_task(_replication_refresh_loop())
 
+    # LOT réplication itération 2 — purge horaire des observations > 7 jours.
+    async def _replication_purge_loop() -> None:
+        from app.services import streaming_replication as repl_svc
+        while True:
+            await asyncio.sleep(3600)
+            try:
+                async with pool.acquire() as conn:
+                    await repl_svc.purge_old_observations(conn)
+            except Exception as exc:
+                logger.warning("replication_purge_failed", error=str(exc))
+
+    replication_purge_task = asyncio.create_task(_replication_purge_loop())
+
     # LOT_57 — worker d'expiration des sessions de recovery (toutes les 5 min).
     async def _recovery_expire_loop() -> None:
         while True:
@@ -158,12 +171,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         purge_task.cancel()
         recovery_expire_task.cancel()
         replication_refresh_task.cancel()
+        replication_purge_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await purge_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await recovery_expire_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await replication_refresh_task
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await replication_purge_task
         await scheduler.stop()
         await scheduled_backups_scheduler.stop()
         await sync_svc.stop_sync_replication()

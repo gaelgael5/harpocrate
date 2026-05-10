@@ -21,6 +21,7 @@
   "auth": {
     "login": "Connexion",
     "loginWithKeycloak": "Se connecter avec Keycloak",
+    "no_mode_available": "Aucun mode d'authentification disponible. Configure Keycloak ou active l'admin local dans .env.",
     "loggingIn": "Connexion en cours...",
     "logout": "Déconnexion",
     "unlockVault": "Déverrouiller le coffre-fort",

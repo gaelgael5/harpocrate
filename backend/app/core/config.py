@@ -17,9 +17,13 @@ class Settings(BaseSettings):
     )
 
     db_dsn: str = Field(json_schema_extra={"is_secret": True})
-    keycloak_url: str
-    keycloak_realm: str
-    keycloak_client_id: str
+    # Keycloak OIDC : optionnel — si les 3 vars sont vides, le mode OIDC est
+    # masqué côté UI (cf. /v1/config/auth-modes) et `prefetch_jwks` est skippé
+    # au boot. L'auth admin local doit alors être activée pour qu'au moins un
+    # mode de connexion soit dispo (validator `_validate_at_least_one_auth`).
+    keycloak_url: str = ""
+    keycloak_realm: str = ""
+    keycloak_client_id: str = ""
     hmac_key: str = Field(json_schema_extra={"is_secret": True})
 
     kdf_memory_kb: int = Field(default=65536, ge=65536)
@@ -158,6 +162,14 @@ class Settings(BaseSettings):
     def s3_configured(self) -> bool:
         return bool(self.s3_bucket and self.s3_access_key_id and self.s3_secret_access_key)
 
+    @property
+    def keycloak_configured(self) -> bool:
+        """True si les 3 vars Keycloak sont remplies. Si False, le mode OIDC
+        est masqué côté UI et le prefetch JWKS est skippé au boot."""
+        return bool(
+            self.keycloak_url and self.keycloak_realm and self.keycloak_client_id
+        )
+
     def get_sensitive_fields(self) -> list[str]:
         """Retourne les noms des champs Settings marqués is_secret=True."""
         result = []
@@ -206,6 +218,19 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "admin_local_password must not be empty when admin_local_enabled=True"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_at_least_one_auth(self) -> Settings:
+        """Au moins un mode d'auth doit être dispo, sinon personne ne peut
+        se connecter. On accepte : keycloak configuré, OU admin local activé,
+        OU les deux."""
+        if not self.keycloak_configured and not self.admin_local_enabled:
+            raise ValueError(
+                "no auth mode available: configure keycloak_url + keycloak_realm "
+                "+ keycloak_client_id, OR set admin_local_enabled=True with "
+                "username/password"
+            )
         return self
 
 

@@ -40,7 +40,7 @@ export function LoginPage() {
   const [localSubmitting, setLocalSubmitting] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
 
-  const { localLoginAvailable } = useLocalLoginAvailable()
+  const { localLoginAvailable, oidcAvailable } = useLocalLoginAvailable()
 
   useEffect(() => {
     let cancelled = false
@@ -165,53 +165,67 @@ export function LoginPage() {
             <Alert color="red" variant="light" withCloseButton onClose={() => setLoginError(null)}>{loginError}</Alert>
           )}
 
-          {localLoginAvailable ? (
-            <Tabs defaultValue="keycloak" color="brand">
-              <Tabs.List>
-                <Tabs.Tab value="keycloak">Keycloak</Tabs.Tab>
-                <Tabs.Tab value="local">{t('auth.local_login.tab')}</Tabs.Tab>
-              </Tabs.List>
-
-              <Tabs.Panel value="keycloak" pt="md">
-                <Button fullWidth color="brand" onClick={() => void startLogin()}>
-                  {t('auth.loginWithKeycloak')}
-                </Button>
-              </Tabs.Panel>
-
-              <Tabs.Panel value="local" pt="md">
-                <form onSubmit={(e) => void handleLocalSubmit(e)}>
-                  <Stack gap="sm">
-                    <TextInput
-                      label={t('auth.local_login.username')}
-                      value={localUsername}
-                      onChange={(e) => setLocalUsername(e.currentTarget.value)}
-                      required
-                      data-testid="local-username"
-                    />
-                    <PasswordInput
-                      label={t('auth.local_login.password')}
-                      value={localPassword}
-                      onChange={(e) => setLocalPassword(e.currentTarget.value)}
-                      required
-                      data-testid="local-password"
-                    />
-                    {localError && (
-                      <Alert color="red" variant="light" data-testid="local-error">
-                        {localError}
-                      </Alert>
-                    )}
-                    <Button type="submit" fullWidth color="brand" loading={localSubmitting} data-testid="local-submit">
-                      {t('auth.local_login.submit')}
-                    </Button>
-                  </Stack>
-                </form>
-              </Tabs.Panel>
-            </Tabs>
-          ) : (
-            <Button fullWidth color="brand" onClick={() => void startLogin()}>
-              {t('auth.loginWithKeycloak')}
-            </Button>
-          )}
+          {/* Rendu selon les modes d'auth disponibles côté serveur :
+              - oidc + local → Tabs avec les deux
+              - oidc seul    → bouton Keycloak
+              - local seul   → form local (cas où Keycloak pas configuré dans .env)
+              Le validator backend garantit qu'au moins un des deux est dispo. */}
+          {(() => {
+            const localForm = (
+              <form onSubmit={(e) => void handleLocalSubmit(e)}>
+                <Stack gap="sm">
+                  <TextInput
+                    label={t('auth.local_login.username')}
+                    value={localUsername}
+                    onChange={(e) => setLocalUsername(e.currentTarget.value)}
+                    required
+                    data-testid="local-username"
+                  />
+                  <PasswordInput
+                    label={t('auth.local_login.password')}
+                    value={localPassword}
+                    onChange={(e) => setLocalPassword(e.currentTarget.value)}
+                    required
+                    data-testid="local-password"
+                  />
+                  {localError && (
+                    <Alert color="red" variant="light" data-testid="local-error">
+                      {localError}
+                    </Alert>
+                  )}
+                  <Button type="submit" fullWidth color="brand" loading={localSubmitting} data-testid="local-submit">
+                    {t('auth.local_login.submit')}
+                  </Button>
+                </Stack>
+              </form>
+            )
+            const keycloakBtn = (
+              <Button fullWidth color="brand" onClick={() => void startLogin()}>
+                {t('auth.loginWithKeycloak')}
+              </Button>
+            )
+            if (oidcAvailable && localLoginAvailable) {
+              return (
+                <Tabs defaultValue="keycloak" color="brand">
+                  <Tabs.List>
+                    <Tabs.Tab value="keycloak">Keycloak</Tabs.Tab>
+                    <Tabs.Tab value="local">{t('auth.local_login.tab')}</Tabs.Tab>
+                  </Tabs.List>
+                  <Tabs.Panel value="keycloak" pt="md">{keycloakBtn}</Tabs.Panel>
+                  <Tabs.Panel value="local" pt="md">{localForm}</Tabs.Panel>
+                </Tabs>
+              )
+            }
+            if (oidcAvailable) return keycloakBtn
+            if (localLoginAvailable) return localForm
+            // Cas théoriquement bloqué côté backend (validator). Si on y est,
+            // c'est que /v1/config/auth-modes est inaccessible : message neutre.
+            return (
+              <Alert color="orange" variant="light">
+                {t('auth.no_mode_available')}
+              </Alert>
+            )
+          })()}
         </Stack>
 
         <Text

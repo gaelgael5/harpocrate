@@ -54,17 +54,25 @@ async def test_inserts_when_absent() -> None:
 
 @pytest.mark.asyncio
 async def test_idempotent_when_already_system_user() -> None:
-    """Une row is_system=TRUE existante → pas de re-INSERT."""
+    """Une row is_system=TRUE existante → pas de re-INSERT, mais UPDATE
+    idempotent du keycloak_sub (no-op si déjà à 'local-admin', set sinon
+    pour les rows pré-unification créées avec NULL)."""
     from app.services import local_admin_bootstrap
 
     conn = MagicMock()
     conn.fetchrow = AsyncMock(return_value={"id": uuid4(), "is_system": True})
-    conn.fetchval = AsyncMock()  # ne devrait pas être appelé
+    conn.fetchval = AsyncMock()  # ne devrait PAS être appelé (pas d'INSERT)
+    conn.execute = AsyncMock(return_value="UPDATE 0")  # UPDATE de migration
     pool = _make_pool(conn)
 
     await local_admin_bootstrap.ensure_local_admin_user(pool)
 
-    assert conn.fetchval.await_count == 0
+    assert conn.fetchval.await_count == 0  # pas de nouvel INSERT
+    # L'UPDATE de migration douce est exécuté (idempotent : WHERE keycloak_sub
+    # IS NULL → 0 row affectée si déjà set).
+    assert conn.execute.await_count == 1
+    assert "UPDATE users" in conn.execute.await_args.args[0]
+    assert "keycloak_sub" in conn.execute.await_args.args[0]
 
 
 @pytest.mark.asyncio

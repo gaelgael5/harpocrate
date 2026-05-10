@@ -70,7 +70,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await init_pool()
     await apply_migrations()
-    await prefetch_jwks()
+    if settings.keycloak_configured:
+        await prefetch_jwks()
+    else:
+        logger.info("keycloak_not_configured_skipping_jwks_prefetch")
 
     pool = await get_pool()
     async with pool.acquire() as conn:

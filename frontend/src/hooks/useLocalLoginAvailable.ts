@@ -1,15 +1,18 @@
 /**
  * Hook TanStack Query — sonde GET /v1/config/auth-modes une seule fois au montage.
  *
- * Retourne { localLoginAvailable: boolean | undefined } :
+ * Retourne { localLoginAvailable, oidcAvailable } :
  * - undefined : probe en cours
- * - true      : local_login activé côté serveur
- * - false     : local_login désactivé ou endpoint inaccessible
+ * - true      : mode activé côté serveur
+ * - false     : mode désactivé ou endpoint inaccessible
  */
 import { useQuery } from '@tanstack/react-query'
 import { fetchAuthModes } from '@/lib/authLocalApi'
 
-export function useLocalLoginAvailable(): { localLoginAvailable: boolean | undefined } {
+export function useLocalLoginAvailable(): {
+  localLoginAvailable: boolean | undefined
+  oidcAvailable: boolean | undefined
+} {
   const { data, isPending } = useQuery({
     queryKey: ['auth-modes'],
     queryFn: fetchAuthModes,
@@ -18,6 +21,11 @@ export function useLocalLoginAvailable(): { localLoginAvailable: boolean | undef
     retry: false,
   })
 
-  if (isPending) return { localLoginAvailable: undefined }
-  return { localLoginAvailable: data?.local_login ?? false }
+  if (isPending) {
+    return { localLoginAvailable: undefined, oidcAvailable: undefined }
+  }
+  return {
+    localLoginAvailable: data?.local_login ?? false,
+    oidcAvailable: data?.oidc ?? false,
+  }
 }

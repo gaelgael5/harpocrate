@@ -21,6 +21,7 @@
   "auth": {
     "login": "Login",
     "loginWithKeycloak": "Login with Keycloak",
+    "no_mode_available": "No auth mode available. Configure Keycloak or enable local admin in .env.",
     "loggingIn": "Logging in...",
     "logout": "Logout",
     "unlockVault": "Unlock Vault",

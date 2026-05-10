@@ -239,6 +239,50 @@ export const RemoteBackupPushResultSchema = z.object({
 
 export type RemoteBackupPushResult = z.infer<typeof RemoteBackupPushResultSchema>
 
+// ─── Scheduled backups (cron-like) ───────────────────────────────────────────
+
+export const ScheduledBackupSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  cron_expression: z.string(),
+  remote_id: z.string().uuid().nullable(),
+  miss_threshold_minutes: z.number().int(),
+  enabled: z.boolean(),
+  description: z.string().nullable(),
+  next_run_at: z.string(),
+  last_run_at: z.string().nullable(),
+  last_run_status: z.enum(['ok', 'failed', 'skipped']).nullable(),
+  last_run_error: z.string().nullable(),
+  remote_id_disconnected_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+export type ScheduledBackup = z.infer<typeof ScheduledBackupSchema>
+
+export const ScheduledBackupListResponseSchema = z.object({
+  schedules: z.array(ScheduledBackupSchema),
+})
+
+export type ScheduledBackupListResponse = z.infer<typeof ScheduledBackupListResponseSchema>
+
+export const CronValidationResponseSchema = z.object({
+  valid: z.boolean(),
+  error: z.string().nullable(),
+  next_3_occurrences: z.array(z.string()),
+})
+
+export type CronValidationResponse = z.infer<typeof CronValidationResponseSchema>
+
+export const ScheduledBackupRunResultSchema = z.object({
+  status: z.enum(['ok', 'failed', 'skipped']),
+  error: z.string().nullable(),
+  backup_id: z.string().uuid().nullable(),
+  bytes_pushed: z.number().nullable(),
+})
+
+export type ScheduledBackupRunResult = z.infer<typeof ScheduledBackupRunResultSchema>
+
 // ─── Replication strategies (LOT_20) ─────────────────────────────────────────
 
 export const ReplicationStrategySchema = z.object({

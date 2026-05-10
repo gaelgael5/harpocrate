@@ -14,6 +14,7 @@ from app.api.v1 import (
     admin_backups,
     admin_maintenance,
     admin_remote_backups,
+    admin_scheduled_backups,
     admin_replication,
     admin_replication_sync,
     admin_secret_types,
@@ -49,6 +50,7 @@ from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.services import local_admin_bootstrap
 from app.services import replication as replication_svc
 from app.services import seed_types as seed_svc
+from app.services import scheduled_backups_scheduler as scheduled_sched_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import sync_replication_service as sync_svc
 from app.services import wallets as wallets_svc
@@ -97,6 +99,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:
         logger.warning("snapshot_scheduler_start_failed", error=str(exc))
 
+    # Sauvegardes planifiées (cron-like) — boucle in-process avec asyncio.Lock
+    # global pour sérialisation. Indépendant du snapshot scheduler ci-dessus.
+    scheduled_backups_scheduler = scheduled_sched_svc.init_scheduler(pool)
+    try:
+        await scheduled_backups_scheduler.start()
+    except Exception as exc:
+        logger.warning("scheduled_backups_scheduler_start_failed", error=str(exc))
+
     async def _wallet_purge_loop() -> None:
         while True:
             await asyncio.sleep(3600)
@@ -136,6 +146,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await recovery_expire_task
         await scheduler.stop()
+        await scheduled_backups_scheduler.stop()
         await sync_svc.stop_sync_replication()
         sync = get_cluster_sync()
         if sync is not None:
@@ -207,6 +218,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
+app.include_router(admin_scheduled_backups.router, prefix="/v1")
 app.include_router(admin_replication.router, prefix="/v1")
 app.include_router(admin_replication_sync.router, prefix="/v1")
 app.include_router(admin_snapshots.router, prefix="/v1")

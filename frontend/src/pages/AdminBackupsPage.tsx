@@ -37,6 +37,7 @@ import {
   pushBackupToRemote,
 } from '@/lib/adminApi'
 import type { Backup } from '@/schemas/admin'
+import { ScheduledBackupsPanel } from '@/components/ScheduledBackupsPanel'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -310,6 +311,8 @@ export function AdminBackupsPage() {
           </Button>
         </Stack>
       </Card>
+
+      <ScheduledBackupsPanel />
 
       {data?.backups.length === 0 ? (
         <Text c="dimmed">{t('admin.backups.noBackups')}</Text>

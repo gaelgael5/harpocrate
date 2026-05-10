@@ -19,6 +19,9 @@ import {
   RemoteBackupConnectionSchema,
   RemoteBackupTestResponseSchema,
   RemoteBackupPushResultSchema,
+  ScheduledBackupListResponseSchema,
+  CronValidationResponseSchema,
+  ScheduledBackupRunResultSchema,
   ReplicationStrategyListResponseSchema,
   ReplicationStatusResponseSchema,
   type MaintenanceStatus,
@@ -40,6 +43,9 @@ import {
   type RemoteBackupConnectionListResponse,
   type RemoteBackupTestResponse,
   type RemoteBackupPushResult,
+  type ScheduledBackupListResponse,
+  type CronValidationResponse,
+  type ScheduledBackupRunResult,
   type ReplicationStrategyListResponse,
   type ReplicationStatusResponse,
 } from '@/schemas/admin'
@@ -365,5 +371,64 @@ export async function activateReplicationStrategy(
     `/admin/replication/strategies/${strategyId}/activate`,
     {},
   )
+}
+
+// ─── Scheduled backups (cron-like) ───────────────────────────────────────────
+
+export async function fetchScheduledBackups(): Promise<ScheduledBackupListResponse> {
+  const raw = await api.get<unknown>('/admin/scheduled-backups')
+  return ScheduledBackupListResponseSchema.parse(raw)
+}
+
+export interface ScheduledBackupCreatePayload {
+  name: string
+  cron_expression: string
+  remote_id: string | null
+  miss_threshold_minutes: number
+  description?: string | null
+  enabled?: boolean
+}
+
+export async function createScheduledBackup(
+  body: ScheduledBackupCreatePayload,
+): Promise<{ id: string }> {
+  return api.post<{ id: string }>('/admin/scheduled-backups', body)
+}
+
+export interface ScheduledBackupPatchPayload {
+  name?: string
+  cron_expression?: string
+  /** Pour effacer : remote_id=null + set_remote_id=true. Pour ne pas toucher : omettre. */
+  remote_id?: string | null
+  set_remote_id?: boolean
+  miss_threshold_minutes?: number
+  description?: string | null
+  set_description?: boolean
+  enabled?: boolean
+}
+
+export async function updateScheduledBackup(
+  id: string,
+  body: ScheduledBackupPatchPayload,
+): Promise<{ updated: number }> {
+  return api.patch<{ updated: number }>(`/admin/scheduled-backups/${id}`, body)
+}
+
+export async function deleteScheduledBackup(id: string): Promise<void> {
+  await api.delete<void>(`/admin/scheduled-backups/${id}`)
+}
+
+export async function runScheduledBackupNow(id: string): Promise<ScheduledBackupRunResult> {
+  const raw = await api.post<unknown>(`/admin/scheduled-backups/${id}/run-now`, {})
+  return ScheduledBackupRunResultSchema.parse(raw)
+}
+
+export async function validateCronExpression(
+  cron_expression: string,
+): Promise<CronValidationResponse> {
+  const raw = await api.post<unknown>('/admin/scheduled-backups/validate-cron', {
+    cron_expression,
+  })
+  return CronValidationResponseSchema.parse(raw)
 }
 

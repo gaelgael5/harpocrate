@@ -17,6 +17,8 @@ import {
   Center,
   Modal,
   Divider,
+  MultiSelect,
+  Alert,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
@@ -27,8 +29,11 @@ import {
   updateSnapshotPolicy,
   triggerSnapshot,
   fetchSnapshotHistory,
+  fetchRemoteBackupConnections,
 } from '@/lib/adminApi'
 import type { SnapshotPolicy } from '@/schemas/admin'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -57,6 +62,33 @@ function PolicyModal({
   const [pushRemote, setPushRemote] = useState(policy.push_remote_after_snapshot)
   const [skipNoChange, setSkipNoChange] = useState(policy.skip_if_no_change)
 
+  // Initial : on garde uniquement les UUIDs valides (les legacy "s3" du
+  // push hardcodé .env sont filtrés — affichés en banner pour info).
+  const initialUuids = (policy.remote_destinations_to_push ?? []).filter((d) =>
+    UUID_RE.test(d),
+  )
+  const initialLegacy = (policy.remote_destinations_to_push ?? []).filter(
+    (d) => !UUID_RE.test(d),
+  )
+  const [destinationIds, setDestinationIds] = useState<string[]>(initialUuids)
+
+  // Liste des connexions remote disponibles (filtrées sur celles avec un
+  // path snapshots configuré — sinon le push échouera).
+  const { data: remotes } = useQuery({
+    queryKey: ['admin-remote-backups'],
+    queryFn: fetchRemoteBackupConnections,
+  })
+  const remoteOptions = (remotes?.connections ?? [])
+    .filter((c) => {
+      const cfg = c.config
+      const hasSnap =
+        c.kind === 's3'
+          ? Boolean(String(cfg.prefix_snapshots ?? '').trim())
+          : Boolean(String(cfg.remote_path_snapshots ?? '').trim())
+      return hasSnap
+    })
+    .map((c) => ({ value: c.id, label: `${c.name} (${c.kind})` }))
+
   const n = (v: number | string, def: number): number =>
     typeof v === 'number' ? v : def
 
@@ -72,7 +104,7 @@ function PolicyModal({
           yearly: n(yearly, 5),
         },
         push_remote_after_snapshot: pushRemote,
-        remote_destinations_to_push: policy.remote_destinations_to_push,
+        remote_destinations_to_push: destinationIds,
         skip_if_no_change: skipNoChange,
       }),
     onSuccess: () => {
@@ -109,6 +141,31 @@ function PolicyModal({
           checked={pushRemote}
           onChange={(e) => setPushRemote(e.currentTarget.checked)}
         />
+        {pushRemote && (
+          <>
+            <MultiSelect
+              label={t('snapshots.destinations')}
+              description={t('snapshots.destinationsHint')}
+              data={remoteOptions}
+              value={destinationIds}
+              onChange={setDestinationIds}
+              placeholder={
+                remoteOptions.length === 0
+                  ? t('snapshots.destinationsEmpty')
+                  : undefined
+              }
+              searchable
+              clearable
+            />
+            {initialLegacy.length > 0 && (
+              <Alert color="orange" variant="light">
+                {t('snapshots.legacyDestinationsWarning', {
+                  values: initialLegacy.join(', '),
+                })}
+              </Alert>
+            )}
+          </>
+        )}
         <Switch
           label={t('snapshots.skipNoChange')}
           checked={skipNoChange}

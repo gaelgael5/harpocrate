@@ -17,6 +17,7 @@ from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
 from app.db.repositories import anomalies as anomalies_repo
 from app.db.repositories import notification_events as notif_repo
+from app.services import system_anomalies as system_anomalies_svc
 
 router = APIRouter(prefix="/admin", tags=["admin-anomalies"])
 
@@ -62,6 +63,46 @@ async def acknowledge_anomaly(anomaly_id: int, admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
         ok = await anomalies_repo.acknowledge_admin(
+            conn, anomaly_id, by_user_id=admin.user_id
+        )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "anomaly_not_found_or_already_ack"},
+        )
+    return JSONResponse({"acknowledged": True})
+
+
+# ─── Anomalies système (push remote raté, etc.) ──────────────────────────────
+
+
+@router.get("/anomalies/system")
+async def list_system_anomalies(
+    admin: AdminJwt,
+    only_unacknowledged: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> JSONResponse:
+    """Liste les anomalies d'infrastructure (push remote raté, etc.).
+
+    Distincte de `/anomalies` qui couvre les anomalies par-utilisateur.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        items = await system_anomalies_svc.list_anomalies(
+            conn,
+            only_unacknowledged=only_unacknowledged,
+            limit=limit,
+        )
+    return JSONResponse({"anomalies": [a.to_dict() for a in items]})
+
+
+@router.post("/anomalies/system/{anomaly_id}/ack")
+async def acknowledge_system_anomaly(
+    anomaly_id: int, admin: AdminJwt
+) -> JSONResponse:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        ok = await system_anomalies_svc.acknowledge_anomaly(
             conn, anomaly_id, by_user_id=admin.user_id
         )
     if not ok:

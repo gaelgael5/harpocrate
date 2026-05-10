@@ -37,6 +37,19 @@ interface AnomalyRow {
   acknowledged_by_user_id: string | null
 }
 
+interface SystemAnomalyRow {
+  id: number
+  detected_at: string
+  severity: 'info' | 'warning' | 'critical'
+  anomaly_type: string
+  source: string
+  source_ref_id: string | null
+  message: string
+  metadata: Record<string, unknown> | null
+  acknowledged_at: string | null
+  acknowledged_by_user_id: string | null
+}
+
 interface NotificationEvent {
   event_type: 'sent' | 'delivery' | 'open' | 'click' | 'failed'
   received_at: string
@@ -110,6 +123,28 @@ export function AdminAnomaliesPage() {
     },
   })
 
+  // Anomalies système — push remote raté, etc.
+  const systemAnomalies = useQuery({
+    queryKey: ['admin-anomalies-system', onlyUnack],
+    queryFn: () =>
+      api.get<{ anomalies: SystemAnomalyRow[] }>(
+        `/admin/anomalies/system?only_unacknowledged=${onlyUnack}`,
+      ),
+  })
+
+  const ackSystemMut = useMutation({
+    mutationFn: (id: number) =>
+      api.post<{ acknowledged: boolean }>(`/admin/anomalies/system/${id}/ack`, {}),
+    onSuccess: () => {
+      notifications.show({ color: 'green', message: t('admin.anomalies.ackOk') })
+      void qc.invalidateQueries({ queryKey: ['admin-anomalies-system'] })
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    },
+  })
+
   return (
     <Stack>
       <Title order={2}>{t('admin.anomalies.title')}</Title>
@@ -120,6 +155,7 @@ export function AdminAnomaliesPage() {
       <Tabs defaultValue="anomalies">
         <Tabs.List>
           <Tabs.Tab value="anomalies">{t('admin.anomalies.tabAnomalies')}</Tabs.Tab>
+          <Tabs.Tab value="system">{t('admin.anomalies.tabSystem')}</Tabs.Tab>
           <Tabs.Tab value="sessions">{t('admin.anomalies.tabSessions')}</Tabs.Tab>
         </Tabs.List>
 
@@ -196,6 +232,95 @@ export function AdminAnomaliesPage() {
                               variant="light"
                               loading={ackMut.isPending}
                               onClick={() => ackMut.mutate(a.id)}
+                            >
+                              {t('admin.anomalies.ack')}
+                            </Button>
+                          )}
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+            </Stack>
+          </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="system" pt="md">
+          <Card withBorder>
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <Switch
+                  label={t('admin.anomalies.onlyUnack')}
+                  checked={onlyUnack}
+                  onChange={(e) => setOnlyUnack(e.currentTarget.checked)}
+                />
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  onClick={() =>
+                    void qc.invalidateQueries({ queryKey: ['admin-anomalies-system'] })
+                  }
+                >
+                  {t('common.refresh')}
+                </Button>
+              </Group>
+
+              {systemAnomalies.isLoading ? (
+                <Center py="xl">
+                  <Loader />
+                </Center>
+              ) : systemAnomalies.error ? (
+                <Alert color="red">{String(systemAnomalies.error)}</Alert>
+              ) : (systemAnomalies.data?.anomalies.length ?? 0) === 0 ? (
+                <Text c="dimmed" ta="center" py="md">
+                  {t('admin.anomalies.empty')}
+                </Text>
+              ) : (
+                <Table highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>{t('admin.anomalies.fieldDetectedAt')}</Table.Th>
+                      <Table.Th>{t('admin.anomalies.fieldSeverity')}</Table.Th>
+                      <Table.Th>{t('admin.anomalies.fieldSource')}</Table.Th>
+                      <Table.Th>{t('admin.anomalies.fieldType')}</Table.Th>
+                      <Table.Th>{t('admin.anomalies.fieldMessage')}</Table.Th>
+                      <Table.Th>{t('admin.anomalies.fieldAck')}</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {systemAnomalies.data?.anomalies.map((a) => (
+                      <Table.Tr key={a.id}>
+                        <Table.Td>
+                          <Text size="xs">{new Date(a.detected_at).toLocaleString()}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge color={SEVERITY_COLOR[a.severity]} variant="light">
+                            {a.severity}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Code style={{ fontSize: '0.7rem' }}>{a.source}</Code>
+                        </Table.Td>
+                        <Table.Td>
+                          <Code style={{ fontSize: '0.7rem' }}>{a.anomaly_type}</Code>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="xs" style={{ maxWidth: 400 }}>
+                            {a.message}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          {a.acknowledged_at ? (
+                            <Badge color="green" variant="outline">
+                              {new Date(a.acknowledged_at).toLocaleString()}
+                            </Badge>
+                          ) : (
+                            <Button
+                              size="xs"
+                              variant="light"
+                              loading={ackSystemMut.isPending}
+                              onClick={() => ackSystemMut.mutate(a.id)}
                             >
                               {t('admin.anomalies.ack')}
                             </Button>

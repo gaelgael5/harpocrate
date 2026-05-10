@@ -181,6 +181,16 @@ class ScheduledBackupsScheduler:
                 bytes_pushed=result.bytes_pushed,
                 next_run_at=next_run.isoformat(),
             )
+        elif result.status == "skipped":
+            # Skip "rien-à-sauver" est un comportement normal et attendu — info,
+            # pas warning. Évite de polluer les alertes de prod.
+            logger.info(
+                "scheduled_backup_skipped",
+                schedule_id=str(schedule.id),
+                schedule_name=schedule.name,
+                reason=result.error,
+                next_run_at=next_run.isoformat(),
+            )
         else:
             logger.warning(
                 "scheduled_backup_failed",

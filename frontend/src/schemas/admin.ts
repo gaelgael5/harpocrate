@@ -283,6 +283,53 @@ export const ScheduledBackupRunResultSchema = z.object({
 
 export type ScheduledBackupRunResult = z.infer<typeof ScheduledBackupRunResultSchema>
 
+// ─── Replication nodes (streaming async — LOT réplication itération 1) ──────
+
+export const ReplicationNodeSchema = z.object({
+  id: z.string().uuid(),
+  strategy_id: z.string().uuid(),
+  label: z.string(),
+  host: z.string(),
+  port: z.number().int(),
+  replication_user: z.string(),
+  application_name: z.string(),
+  role: z.enum(['standby_ro', 'standby_failover_ready', 'archive_only']),
+  notes: z.string().nullable(),
+  last_seen_at: z.string().nullable(),
+  last_state: z.enum(['streaming', 'catchup', 'disconnected', 'unknown']).nullable(),
+  last_lag_bytes: z.number().int().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+export type ReplicationNode = z.infer<typeof ReplicationNodeSchema>
+
+export const ReplicationNodeListResponseSchema = z.object({
+  nodes: z.array(ReplicationNodeSchema),
+})
+
+export type ReplicationNodeListResponse = z.infer<typeof ReplicationNodeListResponseSchema>
+
+export const ReplicationNodeBundleSchema = z.object({
+  node_id: z.string().uuid(),
+  replication_user: z.string(),
+  application_name: z.string(),
+  password: z.string(),
+  master_pg_hba_line: z.string(),
+  standby_pg_basebackup_command: z.string(),
+  standby_postgresql_auto_conf: z.string(),
+  standby_signal_command: z.string(),
+})
+
+export type ReplicationNodeBundle = z.infer<typeof ReplicationNodeBundleSchema>
+
+export const ReplicationNodeAddResponseSchema = z.object({
+  id: z.string().uuid(),
+  bundle: ReplicationNodeBundleSchema,
+})
+
+export type ReplicationNodeAddResponse = z.infer<typeof ReplicationNodeAddResponseSchema>
+
 // ─── Replication strategies (LOT_20) ─────────────────────────────────────────
 
 export const ReplicationStrategySchema = z.object({

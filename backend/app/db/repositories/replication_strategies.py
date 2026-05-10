@@ -88,19 +88,48 @@ async def activate_strategy(
     conn: asyncpg.Connection[asyncpg.Record],
     strategy_id: UUID,
 ) -> bool:
-    """Active une stratégie (et désactive toutes les autres) atomiquement."""
-    async with conn.transaction():
-        existing = await conn.fetchval(
-            "SELECT 1 FROM replication_strategies WHERE id = $1 AND enabled = TRUE",
-            strategy_id,
-        )
-        if existing is None:
-            return False
-        await conn.execute(
-            "UPDATE replication_strategies SET is_active = FALSE WHERE is_active = TRUE"
-        )
-        await conn.execute(
-            "UPDATE replication_strategies SET is_active = TRUE WHERE id = $1",
-            strategy_id,
-        )
+    """Active une stratégie. Plusieurs stratégies peuvent être actives en
+    parallèle (ex: streaming_async + s3_wal). Retourne False si la stratégie
+    n'existe pas ou n'est pas `enabled`.
+    """
+    existing = await conn.fetchval(
+        "SELECT 1 FROM replication_strategies WHERE id = $1 AND enabled = TRUE",
+        strategy_id,
+    )
+    if existing is None:
+        return False
+    await conn.execute(
+        "UPDATE replication_strategies SET is_active = TRUE WHERE id = $1",
+        strategy_id,
+    )
     return True
+
+
+async def deactivate_strategy(
+    conn: asyncpg.Connection[asyncpg.Record],
+    strategy_id: UUID,
+) -> bool:
+    """Désactive une stratégie sans toucher aux autres."""
+    result = await conn.execute(
+        "UPDATE replication_strategies SET is_active = FALSE WHERE id = $1",
+        strategy_id,
+    )
+    try:
+        return int(result.split(" ")[1]) > 0
+    except (IndexError, ValueError):
+        return False
+
+
+async def list_active(
+    conn: asyncpg.Connection[asyncpg.Record],
+) -> list[asyncpg.Record]:
+    """Liste TOUTES les stratégies actives (peut être vide ou contenir N rows)."""
+    return await conn.fetch(
+        """
+        SELECT id, type, label, description, config, enabled, is_active,
+               created_at, updated_at, created_by_user_id
+        FROM replication_strategies
+        WHERE is_active = TRUE
+        ORDER BY label ASC
+        """
+    )

@@ -118,6 +118,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     purge_task = asyncio.create_task(_wallet_purge_loop())
 
+    # LOT réplication itération 1 — refresh périodique de l'état des standby
+    # (lit pg_stat_replication côté master, met à jour replication_nodes).
+    # Toutes les 30s : assez serré pour voir les bascules, pas trop pour
+    # ne pas spammer le master.
+    async def _replication_refresh_loop() -> None:
+        from app.services import streaming_replication as repl_svc
+        while True:
+            await asyncio.sleep(30)
+            try:
+                async with pool.acquire() as conn:
+                    await repl_svc.refresh_nodes_state(conn)
+            except Exception as exc:
+                logger.warning("replication_refresh_failed", error=str(exc))
+
+    replication_refresh_task = asyncio.create_task(_replication_refresh_loop())
+
     # LOT_57 — worker d'expiration des sessions de recovery (toutes les 5 min).
     async def _recovery_expire_loop() -> None:
         while True:
@@ -141,10 +157,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("shutdown_initiated", instance_id=settings.instance_id)
         purge_task.cancel()
         recovery_expire_task.cancel()
+        replication_refresh_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await purge_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await recovery_expire_task
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await replication_refresh_task
         await scheduler.stop()
         await scheduled_backups_scheduler.stop()
         await sync_svc.stop_sync_replication()

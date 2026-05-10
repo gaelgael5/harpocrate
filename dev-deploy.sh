@@ -210,3 +210,26 @@ echo
 echo "Logs en direct :"
 echo "  docker compose -f ${COMPOSE_FILE} logs -f backend"
 echo "  docker compose -f ${COMPOSE_FILE} logs -f frontend"
+echo
+
+# ─── Affichage final : URL d'accès ──────────────────────────────────────────
+# On lit la PUBLIC_URL réelle dans .env (source de vérité). Fallback sur
+# l'IP eth0 si elle existe, sinon localhost.
+APP_URL=""
+if [ -f ".env" ]; then
+  APP_URL="$(awk -F'=' '/^HARPOCRATE_PUBLIC_URL=/ {print $2}' .env | tr -d '\r')"
+fi
+if [ -z "$APP_URL" ]; then
+  ETH0_IP_FINAL="$(detect_eth0_ip)"
+  if [ -n "$ETH0_IP_FINAL" ]; then
+    APP_URL="http://${ETH0_IP_FINAL}:8080"
+  else
+    APP_URL="http://localhost:8080"
+  fi
+fi
+
+cat <<EOF
+═════════════════════════════════════════════════════════════════
+  → Ouvre dans ton navigateur :   ${APP_URL}
+═════════════════════════════════════════════════════════════════
+EOF

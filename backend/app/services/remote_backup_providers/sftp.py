@@ -123,12 +123,43 @@ class SftpProvider:
             await conn.wait_closed()
 
     async def _ensure_remote_path(self, sftp: Any) -> None:
-        """Crée `remote_path` (et ses parents) s'il n'existe pas. No-op s'il existe."""
+        """Garantit que `remote_path` existe et est un dossier accessible.
+
+        Stratégie en deux étapes pour rester robuste face aux SFTP chrootés :
+          1) `stat(remote_path)` — si le dossier existe déjà, rien à faire (cas
+             d'un admin qui a créé le dossier à la main avec les bons droits)
+          2) sinon `makedirs(remote_path, exist_ok=True)` — création récursive
+             si l'utilisateur SFTP a les droits sur le parent
+
+        Si tout échoue, on enrichit le message avec le répertoire d'accueil
+        réel de l'utilisateur (`realpath('.')`). Ça révèle immédiatement un
+        chroot SFTP : si l'admin a configuré `remote_path=/srv/backups/...`
+        mais que l'user atterrit dans `/home/nas-admin`, il faut soit ajuster
+        le path à un dossier accessible depuis cette racine, soit créer
+        manuellement `/srv/backups/...` côté serveur avec write access.
+        """
+        try:
+            await sftp.stat(self._remote_path)
+            return
+        except (OSError, asyncssh.Error):
+            pass  # n'existe pas (ou inaccessible) — on tente de le créer
+
         try:
             await sftp.makedirs(self._remote_path, exist_ok=True)
+            return
         except (OSError, asyncssh.Error) as exc:
+            cwd = "?"
+            try:
+                cwd_raw = await sftp.realpath(".")
+                cwd = cwd_raw.decode() if isinstance(cwd_raw, bytes) else str(cwd_raw)
+            except Exception:  # noqa: BLE001 — best-effort enrichment
+                pass
             raise RemoteBackupProviderError(
-                f"SFTP cannot create remote_path={self._remote_path!r}: {exc}"
+                f"SFTP cannot prepare remote_path={self._remote_path!r}: {exc}. "
+                f"User home (after login) is {cwd!r}. "
+                f"Either create the directory on the server with write access "
+                f"for this user, or set remote_path to a directory accessible "
+                f"from {cwd!r} (chroot may restrict absolute paths)."
             ) from exc
 
     async def upload_stream(

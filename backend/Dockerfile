@@ -47,7 +47,8 @@ RUN pip install --no-cache-dir --upgrade pip \
     "jsonschema>=4.26,<5" \
     "asyncssh>=2.22.0" \
     "aiomqtt>=2.3.0" \
-    "aioftp>=0.21.4"
+    "aioftp>=0.21.4" \
+    "croniter>=2.0"
 
 # ATTENTION : la liste ci-dessus DOIT rester en sync avec backend/pyproject.toml.
 # Refactor à venir : faire lire pyproject.toml directement (pip install . avec

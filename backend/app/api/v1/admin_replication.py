@@ -203,6 +203,108 @@ async def reload_pg_hba(admin: AdminJwt) -> JSONResponse:
     return JSONResponse({"reloaded": True})
 
 
+# ─── (it2) test-connect / observations / lag-thresholds ────────────────────
+
+
+@router.post(
+    "/streaming/nodes/{node_id}/test-connect", response_class=JSONResponse
+)
+async def test_node_connect(node_id: UUID, admin: AdminJwt) -> JSONResponse:
+    """Ping TCP du standby host:port. Pas d'auth Postgres testée (le
+    password de réplication n'est pas stocké côté Harpocrate).
+
+    Retourne 200 systématique (le résultat ok/ko est dans le body) — même
+    logique que les test connect remote backups, pour ne pas se faire avaler
+    par un reverse-proxy qui transformerait un 5xx en page d'erreur générique.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await streaming_svc.test_node_connect(conn, node_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "node_not_found"},
+        )
+    return JSONResponse(result.to_dict())
+
+
+@router.get(
+    "/streaming/nodes/{node_id}/observations", response_class=JSONResponse
+)
+async def list_node_observations(
+    node_id: UUID,
+    admin: AdminJwt,
+    hours: int = 24,
+) -> JSONResponse:
+    """Historique des observations d'un node sur les `hours` dernières heures
+    (max 168 = 7 jours, la rétention de la table)."""
+    from datetime import datetime, timedelta, timezone
+
+    if hours <= 0 or hours > 168:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "hours must be in (0, 168]"},
+        )
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        node = await streaming_svc.get_node(conn, node_id)
+        if node is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "node_not_found"},
+            )
+        rows = await streaming_svc.list_observations(
+            conn, node_id=node_id, since=since
+        )
+    return JSONResponse(
+        {
+            "node": node.to_dict(),
+            "observations": [
+                {
+                    "observed_at": r["observed_at"].isoformat(),
+                    "state": r["state"],
+                    "lag_bytes": r["lag_bytes"],
+                }
+                for r in rows
+            ],
+        }
+    )
+
+
+class LagThresholdsBody(BaseModel):
+    warning_bytes: int = Field(ge=0)
+    critical_bytes: int = Field(ge=0)
+
+
+@router.get("/streaming/lag-thresholds", response_class=JSONResponse)
+async def get_lag_thresholds(admin: AdminJwt) -> JSONResponse:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        thresholds = await streaming_svc.get_lag_thresholds(conn)
+    return JSONResponse(thresholds.to_dict())
+
+
+@router.patch("/streaming/lag-thresholds", response_class=JSONResponse)
+async def set_lag_thresholds(
+    body: LagThresholdsBody, admin: AdminJwt
+) -> JSONResponse:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            new = await streaming_svc.set_lag_thresholds(
+                conn,
+                warning_bytes=body.warning_bytes,
+                critical_bytes=body.critical_bytes,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"error": "invalid_thresholds", "message": str(exc)},
+            ) from exc
+    return JSONResponse(new.to_dict())
+
+
 @router.get("/status", response_class=JSONResponse)
 async def replication_status(admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()

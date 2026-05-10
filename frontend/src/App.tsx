@@ -40,6 +40,7 @@ import { IntegrationPage } from '@/pages/IntegrationPage'
 import { AdminBackupsPage } from '@/pages/AdminBackupsPage'
 import { AdminRemoteBackupsPage } from '@/pages/AdminRemoteBackupsPage'
 import { AdminReplicationPage } from '@/pages/AdminReplicationPage'
+import { AdminReplicationNodeDetailPage } from '@/pages/AdminReplicationNodeDetailPage'
 import { AdminUsersPage } from '@/pages/AdminUsersPage'
 import { AdminSystemPage } from '@/pages/AdminSystemPage'
 import { AdminSnapshotsPage } from '@/pages/AdminSnapshotsPage'
@@ -204,6 +205,10 @@ export default function App() {
             <Route path="/admin/backups" element={<AdminBackupsPage />} />
             <Route path="/admin/backup-remotes" element={<AdminRemoteBackupsPage />} />
             <Route path="/admin/replication" element={<AdminReplicationPage />} />
+            <Route
+              path="/admin/replication/streaming/nodes/:nodeId"
+              element={<AdminReplicationNodeDetailPage />}
+            />
             <Route path="/admin/snapshots" element={<AdminSnapshotsPage />} />
             <Route path="/admin/secret-types" element={<AdminSecretTypesPage />} />
             <Route path="/admin/secret-types/new" element={<AdminSecretTypeCreatePage />} />

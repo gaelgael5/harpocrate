@@ -1,0 +1,118 @@
+###############################################################################
+# docker-compose-dev.yml — Stack DEV Harpocrate.
+#
+# Différences avec le docker-compose.yml de prod :
+#   - Images LOCALES (`harpocrate-backend:dev` / `harpocrate-frontend:dev`)
+#     buildées par `dev-deploy.sh` AVANT le `up`. Pas de pull GHCR.
+#   - Volumes de runtime mappés sur `./data/` (gitignored, voir .gitignore L160).
+#     Permet de rebuild les images sans perdre les données.
+#   - Admin local activable par défaut (auth break-glass pour le dev).
+#   - Bind RO sur ./apps.json, ./releases, ./db/init (édition côté repo,
+#     visible immédiatement dans le container).
+#
+# Usage :
+#   ./dev-deploy.sh                                 # build + up
+#   docker compose -f docker-compose-dev.yml ps     # statut
+#   docker compose -f docker-compose-dev.yml logs -f backend
+#   docker compose -f docker-compose-dev.yml down   # stop
+###############################################################################
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: harpocrate-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    image: harpocrate-backend:dev
+    container_name: harpocrate-backend
+    restart: unless-stopped
+    # Drain de 30s respecté par uvicorn (LOT 21A graceful shutdown) +
+    # marge de 5s pour les fermetures pool DB / cluster sync stop.
+    stop_grace_period: 35s
+    stop_signal: SIGTERM
+    environment:
+      HARPOCRATE_DB_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      HARPOCRATE_KEYCLOAK_URL: ${HARPOCRATE_KEYCLOAK_URL}
+      HARPOCRATE_KEYCLOAK_REALM: ${HARPOCRATE_KEYCLOAK_REALM}
+      HARPOCRATE_KEYCLOAK_CLIENT_ID: ${HARPOCRATE_KEYCLOAK_CLIENT_ID}
+      HARPOCRATE_HMAC_KEY: ${HARPOCRATE_HMAC_KEY}
+      HARPOCRATE_PUBLIC_URL: ${HARPOCRATE_PUBLIC_URL}
+      HARPOCRATE_LOG_LEVEL: ${HARPOCRATE_LOG_LEVEL:-DEBUG}
+      # Auth locale activée par défaut en DEV (break-glass).
+      HARPOCRATE_ADMIN_LOCAL_ENABLED: ${HARPOCRATE_ADMIN_LOCAL_ENABLED:-true}
+      HARPOCRATE_ADMIN_LOCAL_USERNAME: ${HARPOCRATE_ADMIN_LOCAL_USERNAME:-admin}
+      HARPOCRATE_ADMIN_LOCAL_PASSWORD: ${HARPOCRATE_ADMIN_LOCAL_PASSWORD:-}
+      HARPOCRATE_ADMIN_LOCAL_EMAIL: ${HARPOCRATE_ADMIN_LOCAL_EMAIL:-admin@harpocrate.local}
+      HARPOCRATE_ADMIN_LOCAL_DISPLAY_NAME: ${HARPOCRATE_ADMIN_LOCAL_DISPLAY_NAME:-Local Admin}
+      # Bandeau "DEV" visible dans l'UI pour ne pas confondre dev et prod.
+      HARPOCRATE_DEV_MODE: ${HARPOCRATE_DEV_MODE:-true}
+      HARPOCRATE_DEV_MODE_LABEL: ${HARPOCRATE_DEV_MODE_LABEL:-DEV}
+      # listmonk (LOT_57) — provider d'envoi de mails. Vide en dev par défaut
+      # (no-op silencieux : la recovery UI marche, aucun mail ne part).
+      HARPOCRATE_LISTMONK_URL: ${HARPOCRATE_LISTMONK_URL:-}
+      HARPOCRATE_LISTMONK_USER: ${HARPOCRATE_LISTMONK_USER:-}
+      HARPOCRATE_LISTMONK_TOKEN: ${HARPOCRATE_LISTMONK_TOKEN:-}
+      HARPOCRATE_LISTMONK_TEMPLATE_RECOVERY_FR: ${HARPOCRATE_LISTMONK_TEMPLATE_RECOVERY_FR:-4}
+      HARPOCRATE_LISTMONK_TEMPLATE_RECOVERY_EN: ${HARPOCRATE_LISTMONK_TEMPLATE_RECOVERY_EN:-5}
+      # Recovery passphrase tuning (defaults raisonnables).
+      HARPOCRATE_RECOVERY_SESSION_TTL_MINUTES: ${HARPOCRATE_RECOVERY_SESSION_TTL_MINUTES:-30}
+      HARPOCRATE_RECOVERY_MAX_ATTEMPTS: ${HARPOCRATE_RECOVERY_MAX_ATTEMPTS:-3}
+      HARPOCRATE_RECOVERY_ANOMALY_THRESHOLD: ${HARPOCRATE_RECOVERY_ANOMALY_THRESHOLD:-5}
+      HARPOCRATE_RECOVERY_ANOMALY_WINDOW_HOURS: ${HARPOCRATE_RECOVERY_ANOMALY_WINDOW_HOURS:-24}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Cross-app launcher menu — éditable côté repo sans rebuild.
+      - ./apps.json:/app/apps.json:ro
+      # Artefacts SDK Python + CLI bash — exposés via /v1/sdk/*.
+      - ./releases:/app/releases:ro
+      # Backups locaux .tar.age — persistent à travers les rebuilds d'images.
+      - ./data/backups:/var/lib/harpocrate/backups
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import urllib.request,sys;
+          r=urllib.request.urlopen('http://127.0.0.1:8000/v1/health',timeout=3);
+          sys.exit(0 if r.status==200 else 1)" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    image: harpocrate-frontend:dev
+    container_name: harpocrate-frontend
+    restart: unless-stopped
+    stop_grace_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+      - "0.0.0.0:8443:443"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:80/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

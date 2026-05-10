@@ -255,11 +255,33 @@ async def test_delete_node_returns_false_when_not_found(
 # ─── refresh_nodes_state ─────────────────────────────────────────────────────
 
 
+def _patch_it2_extras(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch les fonctions it2 (lag thresholds, record observation, anomaly)
+    pour qu'elles soient no-op : ces tests it1 ne testent que la mécanique
+    de refresh_nodes_state, pas l'historisation ni les anomalies."""
+    from app.services import streaming_replication as svc
+
+    async def _no_op_thresholds(_c: Any) -> Any:
+        return svc.LagThresholds(warning_bytes=10**12, critical_bytes=10**13)
+
+    async def _no_op_record(_c: Any, **kw: Any) -> int:
+        return 1
+
+    async def _no_op_check(_c: Any, **kw: Any) -> str | None:
+        return None
+
+    monkeypatch.setattr(svc, "get_lag_thresholds", _no_op_thresholds)
+    monkeypatch.setattr(svc, "record_observation", _no_op_record)
+    monkeypatch.setattr(svc, "check_lag_threshold", _no_op_check)
+
+
 @pytest.mark.asyncio
 async def test_refresh_state_marks_observed_nodes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.services import streaming_replication as svc
+
+    _patch_it2_extras(monkeypatch)
 
     pg_stat_rows = [
         {"application_name": "lxc_voisin", "state": "streaming", "lag_bytes": 1024},
@@ -268,12 +290,14 @@ async def test_refresh_state_marks_observed_nodes(
 
     db_node_voisin = {
         "id": UUID("55555555-0000-0000-0000-000000000001"),
+        "label": "lxc voisin",
         "application_name": "lxc_voisin",
         "last_seen_at": None,
         "last_state": None,
     }
     db_node_paris = {
         "id": UUID("55555555-0000-0000-0000-000000000002"),
+        "label": "paris",
         "application_name": "paris",
         "last_seen_at": None,
         "last_state": None,
@@ -313,10 +337,13 @@ async def test_refresh_state_marks_disappeared_nodes_as_disconnected(
     from datetime import datetime, timezone
     from app.services import streaming_replication as svc
 
+    _patch_it2_extras(monkeypatch)
+
     # pg_stat_replication ne renvoie rien, mais on a un node DB qu'on a déjà
     # vu (last_seen_at non NULL, last_state non 'disconnected').
     db_node = {
         "id": UUID("66666666-0000-0000-0000-000000000001"),
+        "label": "ghost",
         "application_name": "ghost",
         "last_seen_at": datetime(2026, 5, 9, 12, 0, 0, tzinfo=timezone.utc),
         "last_state": "streaming",
@@ -348,8 +375,11 @@ async def test_refresh_state_keeps_unknown_for_never_seen(
 ) -> None:
     from app.services import streaming_replication as svc
 
+    _patch_it2_extras(monkeypatch)
+
     db_node = {
         "id": UUID("77777777-0000-0000-0000-000000000001"),
+        "label": "never connected",
         "application_name": "never_connected",
         "last_seen_at": None,  # jamais vu
         "last_state": None,

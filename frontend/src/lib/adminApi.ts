@@ -425,6 +425,50 @@ export async function reloadPgHba(): Promise<{ reloaded: boolean }> {
   )
 }
 
+// ─── (it2) test connect / observations / lag thresholds ────────────────────
+
+import {
+  TcpPingResultSchema,
+  ReplicationNodeObservationsResponseSchema,
+  LagThresholdsSchema,
+  type TcpPingResult,
+  type ReplicationNodeObservationsResponse,
+  type LagThresholds,
+} from '@/schemas/admin'
+
+export async function testStreamingNodeConnect(id: string): Promise<TcpPingResult> {
+  const raw = await api.post<unknown>(
+    `/admin/replication/streaming/nodes/${id}/test-connect`,
+    {},
+  )
+  return TcpPingResultSchema.parse(raw)
+}
+
+export async function fetchStreamingNodeObservations(
+  id: string,
+  hours: number = 24,
+): Promise<ReplicationNodeObservationsResponse> {
+  const raw = await api.get<unknown>(
+    `/admin/replication/streaming/nodes/${id}/observations?hours=${hours}`,
+  )
+  return ReplicationNodeObservationsResponseSchema.parse(raw)
+}
+
+export async function fetchLagThresholds(): Promise<LagThresholds> {
+  const raw = await api.get<unknown>('/admin/replication/streaming/lag-thresholds')
+  return LagThresholdsSchema.parse(raw)
+}
+
+export async function updateLagThresholds(
+  body: LagThresholds,
+): Promise<LagThresholds> {
+  const raw = await api.patch<unknown>(
+    '/admin/replication/streaming/lag-thresholds',
+    body,
+  )
+  return LagThresholdsSchema.parse(raw)
+}
+
 // ─── Scheduled backups (cron-like) ───────────────────────────────────────────
 
 export async function fetchScheduledBackups(): Promise<ScheduledBackupListResponse> {

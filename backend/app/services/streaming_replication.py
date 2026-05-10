@@ -1,4 +1,4 @@
-"""Service streaming replication async (LOT réplication itération 1).
+"""Service streaming replication async (LOT réplication itérations 1-2).
 
 Approche : hors-app pour la mécanique basse niveau (`pg_basebackup`,
 `postgresql.auto.conf`, `pg_hba.conf`). L'admin exécute les commandes en
@@ -7,6 +7,10 @@ SSH sur ses serveurs. Harpocrate :
      existant, qui doit avoir le droit CREATEROLE)
   2. Génère un bundle de 4 snippets prêts à copier-coller
   3. Surveille `pg_stat_replication` pour montrer l'état (streaming/lag/...)
+  4. **(it 2)** Historise les observations dans `replication_node_observations`
+     et déclenche des `system_anomaly_events` quand le lag dépasse les seuils
+     configurables.
+  5. **(it 2)** Expose un test TCP de joignabilité du standby.
 
 Sécurité du password : généré aléatoirement (32 chars URL-safe), affiché
 UNE fois dans la modale d'ajout, jamais re-affichable. Pas stocké en clair
@@ -17,20 +21,36 @@ Pas de SSH dans cette itération — l'admin garde la main.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal
 from uuid import UUID
 
 import asyncpg
 import structlog
 
 from app.db.repositories import replication_nodes as nodes_repo
+from app.db.repositories import system_metadata as meta_repo
+from app.services import system_anomalies as anomaly_svc
 
 
 logger = structlog.get_logger(__name__)
+
+
+# Clé system_metadata des seuils de lag. Modifiable via l'API.
+LAG_THRESHOLDS_KEY = "replication_lag_thresholds"
+
+DEFAULT_LAG_THRESHOLDS: dict[str, int] = {
+    "warning_bytes": 64 * 1024 * 1024,    # 64 MB
+    "critical_bytes": 512 * 1024 * 1024,  # 512 MB
+}
+
+# Rétention de l'historique d'observations.
+OBSERVATIONS_RETENTION_DAYS = 7
 
 
 # ─── Génération du nom de rôle / application_name ────────────────────────────
@@ -361,9 +381,9 @@ async def delete_node(
 
 
 async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
-    """Lit `pg_stat_replication` côté master et met à jour `last_state`/
-    `last_lag_bytes`/`last_seen_at` pour chaque node DB qu'on retrouve par
-    `application_name`.
+    """Lit `pg_stat_replication` côté master, met à jour `last_state`/
+    `last_lag_bytes`/`last_seen_at`, historise dans observations et déclenche
+    une anomalie si le lag dépasse les seuils configurables.
 
     Pour les nodes DB qui n'apparaissent PAS dans pg_stat_replication, on
     marque `last_state='disconnected'` SI on les avait déjà vus avant
@@ -383,6 +403,7 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
     seen_app_names = {r["application_name"] for r in pg_stat_rows}
 
     now = datetime.now(timezone.utc)
+    thresholds = await get_lag_thresholds(conn)
     updated = 0
 
     # Mise à jour des nodes vus.
@@ -401,6 +422,21 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
             last_state=state,
             last_lag_bytes=lag,
         )
+        # (it2) historise + check seuil de lag
+        await record_observation(
+            conn,
+            node_id=node_row["id"],
+            state=state,
+            lag_bytes=lag,
+            observed_at=now,
+        )
+        await check_lag_threshold(
+            conn,
+            node_id=node_row["id"],
+            node_label=node_row["label"],
+            lag_bytes=lag,
+            thresholds=thresholds,
+        )
         updated += 1
 
     # Pour les nodes DB qui ne figurent plus dans pg_stat_replication mais
@@ -414,10 +450,20 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
         if n["last_seen_at"] is None:
             continue  # jamais connecté → on garde 'unknown'
         if n["last_state"] == "disconnected":
-            continue  # déjà marqué, pas la peine de re-écrire
+            # On historise quand même pour ne pas avoir de "trou" dans le
+            # graph de la page détaillée (lag_bytes=NULL côté disconnected).
+            await record_observation(
+                conn, node_id=n["id"], state="disconnected", lag_bytes=None,
+                observed_at=now,
+            )
+            continue
         await conn.execute(
             "UPDATE replication_nodes SET last_state = 'disconnected' WHERE id = $1",
             n["id"],
+        )
+        await record_observation(
+            conn, node_id=n["id"], state="disconnected", lag_bytes=None,
+            observed_at=now,
         )
         updated += 1
 
@@ -432,3 +478,270 @@ async def reload_pg_hba(conn: asyncpg.Connection) -> None:
     l'admin a modifié manuellement le fichier sur le master."""
     await conn.execute("SELECT pg_reload_conf()")
     logger.info("pg_hba_reloaded")
+
+
+# ─── (it2) TCP ping ───────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TcpPingResult:
+    ok: bool
+    latency_ms: float | None
+    error: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"ok": self.ok, "latency_ms": self.latency_ms, "error": self.error}
+
+
+async def tcp_ping(host: str, port: int, *, timeout: float = 2.0) -> TcpPingResult:
+    """Teste juste la joignabilité TCP du `host:port` depuis Harpocrate.
+
+    Pas d'auth Postgres : le password de réplication n'est pas stocké côté
+    Harpocrate (zero-knowledge). Ce check répond à la question "le réseau
+    me laisse-t-il atteindre le standby ?" — pas plus. La vraie validation
+    fonctionnelle (le standby reçoit-il les WAL ?) est faite par
+    `refresh_nodes_state` via `pg_stat_replication`.
+    """
+    loop = asyncio.get_running_loop()
+    t0 = loop.time()
+    try:
+        # asyncio.open_connection(host, port) ouvre un socket TCP.
+        # On ferme immédiatement après — pas de handshake protocolaire.
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host=host, port=port), timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        return TcpPingResult(ok=False, latency_ms=None, error=f"timeout after {timeout}s")
+    except OSError as exc:
+        return TcpPingResult(ok=False, latency_ms=None, error=str(exc))
+    latency = (loop.time() - t0) * 1000.0
+
+    # Cleanup propre du socket.
+    writer.close()
+    try:
+        await writer.wait_closed()
+    except Exception:  # noqa: BLE001 — best-effort cleanup
+        pass
+    return TcpPingResult(ok=True, latency_ms=round(latency, 2), error=None)
+
+
+async def test_node_connect(
+    conn: asyncpg.Connection, node_id: UUID
+) -> TcpPingResult | None:
+    """Récupère le node + lance tcp_ping. None si node introuvable."""
+    node = await get_node(conn, node_id)
+    if node is None:
+        return None
+    return await tcp_ping(node.host, node.port)
+
+
+# ─── (it2) Observations + purge ─────────────────────────────────────────────
+
+
+async def record_observation(
+    conn: asyncpg.Connection,
+    *,
+    node_id: UUID,
+    state: str,
+    lag_bytes: int | None,
+    observed_at: datetime | None = None,
+) -> int:
+    """Insère une row dans `replication_node_observations`. Pas de dédoublonnage :
+    chaque tick crée une row (la purge gère le volume)."""
+    return await conn.fetchval(
+        """
+        INSERT INTO replication_node_observations (node_id, observed_at, state, lag_bytes)
+        VALUES ($1, COALESCE($2, NOW()), $3, $4)
+        RETURNING id
+        """,
+        node_id,
+        observed_at,
+        state,
+        lag_bytes,
+    )
+
+
+async def list_observations(
+    conn: asyncpg.Connection,
+    *,
+    node_id: UUID,
+    since: datetime,
+    limit: int = 5000,
+) -> list[asyncpg.Record]:
+    """Liste les observations d'un node depuis `since`, ordre chronologique."""
+    return await conn.fetch(
+        """
+        SELECT observed_at, state, lag_bytes
+        FROM replication_node_observations
+        WHERE node_id = $1 AND observed_at >= $2
+        ORDER BY observed_at ASC
+        LIMIT $3
+        """,
+        node_id,
+        since,
+        limit,
+    )
+
+
+async def purge_old_observations(
+    conn: asyncpg.Connection,
+    *,
+    days: int = OBSERVATIONS_RETENTION_DAYS,
+) -> int:
+    """Supprime les observations plus anciennes que `days` jours. Retourne
+    le nombre de rows supprimées."""
+    result = await conn.execute(
+        """
+        DELETE FROM replication_node_observations
+        WHERE observed_at < NOW() - $1::interval
+        """,
+        f"{days} days",
+    )
+    try:
+        deleted = int(result.split(" ")[1])
+    except (IndexError, ValueError):
+        deleted = 0
+    if deleted > 0:
+        logger.info(
+            "replication_observations_purged",
+            deleted=deleted,
+            retention_days=days,
+        )
+    return deleted
+
+
+# ─── (it2) Seuils de lag ─────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class LagThresholds:
+    warning_bytes: int
+    critical_bytes: int
+
+    def to_dict(self) -> dict[str, int]:
+        return {
+            "warning_bytes": self.warning_bytes,
+            "critical_bytes": self.critical_bytes,
+        }
+
+
+async def get_lag_thresholds(conn: asyncpg.Connection) -> LagThresholds:
+    raw = await meta_repo.get_value(conn, LAG_THRESHOLDS_KEY)
+    if raw is None:
+        return LagThresholds(**DEFAULT_LAG_THRESHOLDS)
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    return LagThresholds(
+        warning_bytes=int(raw.get("warning_bytes", DEFAULT_LAG_THRESHOLDS["warning_bytes"])),
+        critical_bytes=int(raw.get("critical_bytes", DEFAULT_LAG_THRESHOLDS["critical_bytes"])),
+    )
+
+
+async def set_lag_thresholds(
+    conn: asyncpg.Connection,
+    *,
+    warning_bytes: int,
+    critical_bytes: int,
+) -> LagThresholds:
+    if warning_bytes < 0 or critical_bytes < 0:
+        raise ValueError("lag thresholds must be non-negative")
+    if warning_bytes > critical_bytes:
+        # On tolère l'inversion mais on remonte une erreur claire — sinon
+        # check_lag_threshold ne déclencherait jamais le seuil critical.
+        raise ValueError("warning_bytes must be <= critical_bytes")
+    new = LagThresholds(
+        warning_bytes=warning_bytes, critical_bytes=critical_bytes
+    )
+    await meta_repo.set_value(conn, LAG_THRESHOLDS_KEY, new.to_dict())
+    logger.info(
+        "replication_lag_thresholds_updated",
+        warning_bytes=warning_bytes,
+        critical_bytes=critical_bytes,
+    )
+    return new
+
+
+# ─── (it2) Détection de drift ────────────────────────────────────────────────
+
+
+_ANOMALY_TYPE_BY_SEVERITY: dict[str, str] = {
+    "warning": "replication_lag_warning",
+    "critical": "replication_lag_critical",
+}
+
+
+async def _has_open_lag_anomaly(
+    conn: asyncpg.Connection,
+    *,
+    node_id: UUID,
+    severity: Literal["warning", "critical"],
+) -> bool:
+    """Hystérésis : retourne True si une anomalie de cette severity existe
+    déjà pour ce node ET n'est pas acquittée. Évite le spam d'anomalies à
+    chaque tick tant que le lag reste haut."""
+    anomaly_type = _ANOMALY_TYPE_BY_SEVERITY[severity]
+    row = await conn.fetchval(
+        """
+        SELECT 1 FROM system_anomaly_events
+        WHERE source = 'replication_lag'
+          AND source_ref_id = $1
+          AND anomaly_type = $2
+          AND acknowledged_at IS NULL
+        LIMIT 1
+        """,
+        node_id,
+        anomaly_type,
+    )
+    return row is not None
+
+
+async def check_lag_threshold(
+    conn: asyncpg.Connection,
+    *,
+    node_id: UUID,
+    node_label: str,
+    lag_bytes: int | None,
+    thresholds: LagThresholds,
+) -> str | None:
+    """Crée une anomalie système si le lag dépasse un seuil ET qu'aucune
+    anomalie ouverte n'existe déjà pour ce (node, severity).
+
+    Retourne la severity déclenchée ('warning'|'critical') ou None.
+    Le seuil critical prime sur le seuil warning : on ne crée pas les deux
+    pour un même tick.
+    """
+    if lag_bytes is None:
+        return None
+
+    severity: Literal["warning", "critical"] | None = None
+    if lag_bytes >= thresholds.critical_bytes:
+        severity = "critical"
+    elif lag_bytes >= thresholds.warning_bytes:
+        severity = "warning"
+    if severity is None:
+        return None
+
+    if await _has_open_lag_anomaly(conn, node_id=node_id, severity=severity):
+        return severity  # déjà signalé, pas la peine de re-créer
+
+    await anomaly_svc.report(
+        conn,
+        severity=severity,
+        anomaly_type=_ANOMALY_TYPE_BY_SEVERITY[severity],
+        source="replication_lag",
+        source_ref_id=node_id,
+        message=(
+            f"Standby {node_label!r} replication lag is "
+            f"{lag_bytes / (1024 * 1024):.1f} MB "
+            f"(threshold {severity}: "
+            f"{(thresholds.critical_bytes if severity == 'critical' else thresholds.warning_bytes) / (1024 * 1024):.1f} MB)"
+        ),
+        metadata={
+            "node_id": str(node_id),
+            "node_label": node_label,
+            "lag_bytes": lag_bytes,
+            "warning_bytes": thresholds.warning_bytes,
+            "critical_bytes": thresholds.critical_bytes,
+        },
+    )
+    return severity

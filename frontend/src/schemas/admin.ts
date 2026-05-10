@@ -330,6 +330,40 @@ export const ReplicationNodeAddResponseSchema = z.object({
 
 export type ReplicationNodeAddResponse = z.infer<typeof ReplicationNodeAddResponseSchema>
 
+// (it2) test connect / observations / lag thresholds
+
+export const TcpPingResultSchema = z.object({
+  ok: z.boolean(),
+  latency_ms: z.number().nullable(),
+  error: z.string().nullable(),
+})
+
+export type TcpPingResult = z.infer<typeof TcpPingResultSchema>
+
+export const ReplicationNodeObservationSchema = z.object({
+  observed_at: z.string(),
+  state: z.enum(['streaming', 'catchup', 'disconnected', 'unknown']),
+  lag_bytes: z.number().int().nullable(),
+})
+
+export type ReplicationNodeObservation = z.infer<typeof ReplicationNodeObservationSchema>
+
+export const ReplicationNodeObservationsResponseSchema = z.object({
+  node: ReplicationNodeSchema,
+  observations: z.array(ReplicationNodeObservationSchema),
+})
+
+export type ReplicationNodeObservationsResponse = z.infer<
+  typeof ReplicationNodeObservationsResponseSchema
+>
+
+export const LagThresholdsSchema = z.object({
+  warning_bytes: z.number().int().nonnegative(),
+  critical_bytes: z.number().int().nonnegative(),
+})
+
+export type LagThresholds = z.infer<typeof LagThresholdsSchema>
+
 // ─── Replication strategies (LOT_20) ─────────────────────────────────────────
 
 export const ReplicationStrategySchema = z.object({

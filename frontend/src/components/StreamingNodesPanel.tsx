@@ -7,8 +7,9 @@
  * - Modale du bundle : affiche les 4 snippets à copier-coller (UNE seule fois)
  * - Bouton "Reload pg_hba.conf" après modif manuelle côté master
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link as RouterLink } from 'react-router-dom'
 import {
   Alert,
   Badge,
@@ -38,14 +39,19 @@ import { useTranslation } from 'react-i18next'
 import {
   addStreamingNode,
   deleteStreamingNode,
+  fetchLagThresholds,
   fetchStreamingNodes,
   reloadPgHba,
+  testStreamingNodeConnect,
+  updateLagThresholds,
   type AddStreamingNodePayload,
 } from '@/lib/adminApi'
 import { ApiError } from '@/lib/api-client'
 import type {
+  LagThresholds,
   ReplicationNode,
   ReplicationNodeBundle,
+  TcpPingResult,
 } from '@/schemas/admin'
 
 
@@ -75,6 +81,10 @@ export function StreamingNodesPanel() {
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
   const [bundleShown, setBundleShown] = useState<ReplicationNodeBundle | null>(null)
+  const [thresholdsOpen, setThresholdsOpen] = useState(false)
+  // Map node_id → dernier résultat de test connect (affiché inline jusqu'au
+  // prochain test). Réinitialisé au refetch global.
+  const [pingResults, setPingResults] = useState<Record<string, TcpPingResult>>({})
 
   const nodes = useQuery({
     queryKey: ['admin-streaming-nodes'],
@@ -116,6 +126,17 @@ export function StreamingNodesPanel() {
     },
   })
 
+  const testConnectMut = useMutation({
+    mutationFn: testStreamingNodeConnect,
+    onSuccess: (result, nodeId) => {
+      setPingResults((prev) => ({ ...prev, [nodeId]: result }))
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    },
+  })
+
   function confirmDelete(node: ReplicationNode) {
     modals.openConfirmModal({
       title: t('admin.replication.streaming.deleteConfirmTitle'),
@@ -141,6 +162,13 @@ export function StreamingNodesPanel() {
         <Group justify="space-between">
           <Title order={4}>{t('admin.replication.streaming.title')}</Title>
           <Group gap="xs">
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => setThresholdsOpen(true)}
+            >
+              {t('admin.replication.streaming.editThresholds')}
+            </Button>
             <Tooltip label={t('admin.replication.streaming.reloadHint')}>
               <Button
                 size="xs"
@@ -201,9 +229,22 @@ export function StreamingNodesPanel() {
                     </Stack>
                   </Table.Td>
                   <Table.Td>
-                    <Text size="sm" ff="monospace">
-                      {n.host}:{n.port}
-                    </Text>
+                    <Stack gap={2}>
+                      <Text size="sm" ff="monospace">
+                        {n.host}:{n.port}
+                      </Text>
+                      {pingResults[n.id] && (
+                        <Text
+                          size="xs"
+                          c={pingResults[n.id]?.ok ? 'green' : 'red'}
+                          title={pingResults[n.id]?.error ?? undefined}
+                        >
+                          {pingResults[n.id]?.ok
+                            ? `✓ TCP ${pingResults[n.id]?.latency_ms}ms`
+                            : `✗ ${pingResults[n.id]?.error}`}
+                        </Text>
+                      )}
+                    </Stack>
                   </Table.Td>
                   <Table.Td>
                     <Badge variant="light">{n.role}</Badge>
@@ -226,14 +267,35 @@ export function StreamingNodesPanel() {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="red"
-                      onClick={() => confirmDelete(n)}
-                    >
-                      {t('common.delete')}
-                    </Button>
+                    <Group gap="xs" justify="flex-end">
+                      <Button
+                        size="xs"
+                        variant="light"
+                        loading={
+                          testConnectMut.isPending &&
+                          testConnectMut.variables === n.id
+                        }
+                        onClick={() => testConnectMut.mutate(n.id)}
+                      >
+                        {t('admin.replication.streaming.testConnect')}
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        component={RouterLink}
+                        to={`/admin/replication/streaming/nodes/${n.id}`}
+                      >
+                        {t('admin.replication.streaming.details')}
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={() => confirmDelete(n)}
+                      >
+                        {t('common.delete')}
+                      </Button>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -255,10 +317,129 @@ export function StreamingNodesPanel() {
           bundle={bundleShown}
           onClose={() => setBundleShown(null)}
         />
+
+        <ThresholdsModal
+          opened={thresholdsOpen}
+          onClose={() => setThresholdsOpen(false)}
+        />
       </Stack>
     </Card>
   )
 }
+
+// ─── Modale seuils de lag ────────────────────────────────────────────────────
+
+function ThresholdsModal({
+  opened,
+  onClose,
+}: {
+  opened: boolean
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const current = useQuery({
+    queryKey: ['admin-streaming-lag-thresholds'],
+    queryFn: fetchLagThresholds,
+    enabled: opened,
+  })
+
+  const form = useForm<LagThresholds>({
+    initialValues: {
+      warning_bytes: current.data?.warning_bytes ?? 67108864,
+      critical_bytes: current.data?.critical_bytes ?? 536870912,
+    },
+    validate: {
+      warning_bytes: (v) => (v < 0 ? t('common.required') : null),
+      critical_bytes: (v, values) =>
+        v < values.warning_bytes
+          ? t('admin.replication.streaming.thresholdsCriticalLessThanWarning')
+          : null,
+    },
+  })
+
+  // Synchronise le form avec la valeur fetchée. setValues est stable (Mantine
+  // useForm), pas besoin de le mettre dans deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (current.data) {
+      form.setValues({
+        warning_bytes: current.data.warning_bytes,
+        critical_bytes: current.data.critical_bytes,
+      })
+    }
+  }, [current.data?.warning_bytes, current.data?.critical_bytes])
+
+  const saveMut = useMutation({
+    mutationFn: updateLagThresholds,
+    onSuccess: () => {
+      notifications.show({
+        color: 'green',
+        message: t('admin.replication.streaming.thresholdsSaved'),
+      })
+      void qc.invalidateQueries({ queryKey: ['admin-streaming-lag-thresholds'] })
+      onClose()
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    },
+  })
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={t('admin.replication.streaming.thresholdsTitle')}
+      size="md"
+    >
+      <form onSubmit={form.onSubmit((v) => saveMut.mutate(v))}>
+        <Stack gap="sm">
+          <Alert color="blue" variant="light">
+            {t('admin.replication.streaming.thresholdsHint')}
+          </Alert>
+
+          {current.isLoading ? (
+            <Center py="md">
+              <Loader size="sm" />
+            </Center>
+          ) : (
+            <>
+              <NumberInput
+                label={t('admin.replication.streaming.thresholdWarningBytes')}
+                description={t(
+                  'admin.replication.streaming.thresholdWarningHint',
+                )}
+                min={0}
+                step={1024 * 1024}
+                {...form.getInputProps('warning_bytes')}
+              />
+              <NumberInput
+                label={t('admin.replication.streaming.thresholdCriticalBytes')}
+                description={t(
+                  'admin.replication.streaming.thresholdCriticalHint',
+                )}
+                min={0}
+                step={1024 * 1024}
+                {...form.getInputProps('critical_bytes')}
+              />
+            </>
+          )}
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="subtle" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" loading={saveMut.isPending}>
+              {t('common.save')}
+            </Button>
+          </Group>
+        </Stack>
+      </form>
+    </Modal>
+  )
+}
+
 
 interface AddFormValues {
   label: string

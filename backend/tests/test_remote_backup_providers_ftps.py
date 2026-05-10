@@ -58,13 +58,19 @@ def test_init_invalid_port_type() -> None:
 def test_init_accepts_valid_config() -> None:
     from app.services.remote_backup_providers.ftps import FtpsProvider
     p = FtpsProvider(
-        config={"host": "ftp.test", "port": 990, "remote_path": "/backups", "use_tls": True},
+        config={"host": "ftp.test", "port": 990, "use_tls": True},
         credentials={"username": "u", "password": "p"},
     )
     assert p._host == "ftp.test"
     assert p._port == 990
-    assert p._remote_path == "/backups"
     assert p._use_tls is True
+
+
+def test_normalize_path_defaults_to_dot() -> None:
+    from app.services.remote_backup_providers.ftps import FtpsProvider
+    assert FtpsProvider._normalize_path("") == "."
+    assert FtpsProvider._normalize_path("   ") == "."
+    assert FtpsProvider._normalize_path("/foo") == "/foo"
 
 
 def test_factory_creates_correct_provider() -> None:

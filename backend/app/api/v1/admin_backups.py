@@ -318,10 +318,27 @@ async def push_backup_to_remote(
             detail={"error": "file_missing", "message": "Backup file not found on disk"},
         )
 
+    # Le push manuel d'un backup utilise toujours le path "full". Si la connexion
+    # n'a pas de path full configuré (ex: connexion dédiée aux snapshots),
+    # on refuse — sinon on push à la racine du remote, ce qui n'est jamais
+    # ce que l'admin veut.
+    target_path = remote_svc.resolve_path(remote.config, remote.kind, "full")
+    if not target_path:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "no_full_path_configured",
+                "message": (
+                    f"Remote connection {remote.name!r} has no 'full' path configured. "
+                    f"Edit the connection and set the full backup path."
+                ),
+            },
+        )
+
     provider = get_provider(remote.kind, remote.config, creds)
     try:
         bytes_sent = await provider.upload_stream(
-            record.filename, _stream_file_chunks(file_path)
+            target_path, record.filename, _stream_file_chunks(file_path)
         )
     except RemoteBackupProviderError as exc:
         # Log explicite : sans ça, le statut renvoyé par FastAPI n'apparaît

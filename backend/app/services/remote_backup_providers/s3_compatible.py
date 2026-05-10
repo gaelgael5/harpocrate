@@ -4,15 +4,20 @@ Couvre AWS S3, Cloudflare R2, Backblaze B2, Scaleway Object Storage, OVH Object
 Storage et tout service exposant l'API S3. La distinction se fait via
 `config.endpoint_url` + `config.region` + éventuellement `config.path_style`.
 
+Le `prefix` (clef de path) est passé en argument à test_connection / upload_stream
+(pas dans config). Une même connexion peut donc cibler plusieurs prefixes
+(snapshots, full).
+
 Format des dictionnaires attendus :
 
 config = {
     "endpoint_url": "https://s3.fr-par.scw.cloud",  # vide pour AWS S3
     "region":       "fr-par",                        # requis
     "bucket":       "harpocrate-backups",            # requis
-    "prefix":       "node-paris/",                   # optionnel
     "path_style":   true,                             # true pour R2/B2/MinIO
     "object_lock":  true,                             # info uniquement
+    # Les prefixes cible (prefix_snapshots, prefix_full) sont stockés dans
+    # le config côté API mais ne sont PAS lus par le provider.
 }
 
 credentials = {
@@ -54,7 +59,6 @@ class S3CompatibleProvider:
         self._region = region
 
         self._endpoint_url = config.get("endpoint_url") or None
-        self._prefix = str(config.get("prefix", "") or "").lstrip("/")
         self._path_style = bool(config.get("path_style", False))
 
         access = str(credentials.get("access_key_id", "")).strip()
@@ -88,11 +92,25 @@ class S3CompatibleProvider:
             kwargs["endpoint_url"] = self._endpoint_url
         return boto3.client(**kwargs)
 
-    def _key_for(self, filename: str) -> str:
-        return f"{self._prefix}{filename}" if self._prefix else filename
+    @staticmethod
+    def _normalize_prefix(prefix: str) -> str:
+        """`/foo/bar/` → `foo/bar/`, `''` reste `''`. Garantit le `/` final si non vide."""
+        cleaned = (prefix or "").strip().lstrip("/")
+        if cleaned and not cleaned.endswith("/"):
+            cleaned += "/"
+        return cleaned
 
-    async def test_connection(self) -> None:
-        """head_bucket → vérifie auth + accès au bucket."""
+    def _key_for(self, prefix: str, filename: str) -> str:
+        normalized = self._normalize_prefix(prefix)
+        return f"{normalized}{filename}" if normalized else filename
+
+    async def test_connection(self, path: str) -> None:
+        """head_bucket → vérifie auth + accès au bucket. Le `path` (prefix) est
+        validé par construction : les prefixes S3 n'ont pas besoin d'exister
+        avant écriture (ils sont implicites). On valide juste le bucket.
+        """
+        # On normalise pour cohérence/log, mais aucun appel S3 sur le prefix.
+        _ = self._normalize_prefix(path)
 
         def _check() -> None:
             try:
@@ -107,6 +125,7 @@ class S3CompatibleProvider:
 
     async def upload_stream(
         self,
+        path: str,
         remote_filename: str,
         source: AsyncIterator[bytes],
     ) -> int:
@@ -125,7 +144,7 @@ class S3CompatibleProvider:
                     bytes_written += len(chunk)
                 tmp.flush()
 
-                key = self._key_for(remote_filename)
+                key = self._key_for(path, remote_filename)
 
                 def _upload() -> None:
                     try:

@@ -375,13 +375,16 @@ async def test_pull_s3_success(monkeypatch: pytest.MonkeyPatch) -> None:
 _REMOTE_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
 
 
-def _fake_remote_dto() -> Any:
+def _fake_remote_dto(*, with_full_path: bool = True) -> Any:
     """DTO RemoteBackupConnection mocké (ne contient JAMAIS les credentials)."""
     dto = MagicMock()
     dto.id = _REMOTE_ID
     dto.name = "OVH backup"
     dto.kind = "sftp"
-    dto.config = {"host": "sftp.test", "port": 22, "remote_path": "/backups"}
+    config: dict[str, Any] = {"host": "sftp.test", "port": 22}
+    if with_full_path:
+        config["remote_path_full"] = "/backups/full"
+    dto.config = config
     return dto
 
 
@@ -535,7 +538,8 @@ async def test_push_remote_success(
 
     captured: dict[str, Any] = {}
 
-    async def _consume(remote_filename: str, source: Any) -> int:
+    async def _consume(target_path: str, remote_filename: str, source: Any) -> int:
+        captured["target_path"] = target_path
         captured["filename"] = remote_filename
         total = 0
         async for chunk in source:
@@ -560,3 +564,37 @@ async def test_push_remote_success(
     assert body["remote_filename"] == fake["filename"]
     assert body["bytes_sent"] == len(payload)
     assert captured["filename"] == fake["filename"]
+    assert captured["target_path"] == "/backups/full"
+
+
+@pytest.mark.asyncio
+async def test_push_remote_returns_422_when_no_full_path_configured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """POST .../push-to-remote/... → 422 si la connexion n'a pas de remote_path_full."""
+    from app.core import config as cfg
+    from app.services import remote_backup_connections as remote_svc
+
+    monkeypatch.setattr(cfg.settings, "backup_local_path", str(tmp_path))
+    fake = _fake_backup_row()
+    (tmp_path / fake["filename"]).write_bytes(b"x")
+
+    async def _ok_conn(c: Any, cid: uuid.UUID) -> Any:
+        # connexion sans remote_path_full configuré
+        return _fake_remote_dto(with_full_path=False)
+
+    async def _ok_creds(c: Any, cid: uuid.UUID) -> dict[str, Any]:
+        return {"username": "u", "password": "p"}
+
+    monkeypatch.setattr(remote_svc, "get_connection", _ok_conn)
+    monkeypatch.setattr(remote_svc, "get_decrypted_credentials", _ok_creds)
+
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=fake)
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.post(
+            f"/v1/admin/backups/{_BACKUP_ID}/push-to-remote/{_REMOTE_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["error"] == "no_full_path_configured"

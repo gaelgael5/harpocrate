@@ -1,12 +1,17 @@
 """Provider SFTP via asyncssh — streaming upload vers un serveur SSH/SFTP distant.
 
+Le `path` est passé en argument à test_connection / upload_stream (pas dans config).
+Une même connexion peut donc cibler plusieurs paths (snapshots, full).
+
 Format des dictionnaires attendus :
 
 config = {
-    "host": "sftp.example.com",     # requis
-    "port": 22,                       # défaut 22
-    "remote_path": "/backups/harpo",  # requis (dossier où poser les fichiers)
+    "host": "sftp.example.com",            # requis
+    "port": 22,                            # défaut 22
     "host_key_fingerprint": "SHA256:...",  # optionnel — si présent, pinning de la host key
+    # Les paths cible (remote_path_snapshots, remote_path_full) sont stockés
+    # dans le config côté API mais ne sont PAS lus par le provider — ils sont
+    # passés explicitement par le caller à chaque opération.
 }
 
 credentials = {
@@ -42,7 +47,6 @@ class SftpProvider:
         except (TypeError, ValueError) as exc:
             raise ValueError(f"SFTP config: 'port' must be an integer (got {port_raw!r})") from exc
 
-        self._remote_path = str(config.get("remote_path", "")).strip() or "."
         self._host_key_fp = config.get("host_key_fingerprint") or None
 
         self._username = str(credentials.get("username", "")).strip()
@@ -100,52 +104,53 @@ class SftpProvider:
                 )
         return conn
 
-    async def test_connection(self) -> None:
-        """Ouvre une connexion SFTP, garantit l'existence du remote_path, le liste, ferme.
+    async def test_connection(self, path: str) -> None:
+        """Ouvre une connexion SFTP, garantit l'existence de `path`, le liste, ferme.
 
-        Si le `remote_path` n'existe pas, on tente de le créer (récursivement).
-        Si l'admin a déclaré la connexion vers ce dossier, c'est qu'il veut
-        qu'on l'utilise — on le crée au besoin. Si la création échoue
-        (permission denied, parent inaccessible, etc.), le message est explicite.
+        Si `path` n'existe pas, on tente de le créer (récursivement). Si la
+        création échoue (permission denied, parent inaccessible, etc.), le
+        message d'erreur inclut le `realpath('.')` du user pour révéler un
+        éventuel chroot SFTP.
         """
+        normalized = self._normalize_path(path)
         conn = await self._open_connection()
         try:
             async with conn.start_sftp_client() as sftp:
-                await self._ensure_remote_path(sftp)
+                await self._ensure_path(sftp, normalized)
                 try:
-                    await sftp.listdir(self._remote_path)
+                    await sftp.listdir(normalized)
                 except (OSError, asyncssh.Error) as exc:
                     raise RemoteBackupProviderError(
-                        f"SFTP cannot list remote_path={self._remote_path!r}: {exc}"
+                        f"SFTP cannot list path={normalized!r}: {exc}"
                     ) from exc
         finally:
             conn.close()
             await conn.wait_closed()
 
-    async def _ensure_remote_path(self, sftp: Any) -> None:
-        """Garantit que `remote_path` existe et est un dossier accessible.
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """Normalise un path utilisateur vers une forme exploitable côté SFTP."""
+        cleaned = (path or "").strip()
+        return cleaned or "."
+
+    async def _ensure_path(self, sftp: Any, path: str) -> None:
+        """Garantit que `path` existe et est un dossier accessible.
 
         Stratégie en deux étapes pour rester robuste face aux SFTP chrootés :
-          1) `stat(remote_path)` — si le dossier existe déjà, rien à faire (cas
-             d'un admin qui a créé le dossier à la main avec les bons droits)
-          2) sinon `makedirs(remote_path, exist_ok=True)` — création récursive
-             si l'utilisateur SFTP a les droits sur le parent
+          1) `stat(path)` — si le dossier existe déjà, rien à faire
+          2) sinon `makedirs(path, exist_ok=True)` — création récursive
 
-        Si tout échoue, on enrichit le message avec le répertoire d'accueil
-        réel de l'utilisateur (`realpath('.')`). Ça révèle immédiatement un
-        chroot SFTP : si l'admin a configuré `remote_path=/srv/backups/...`
-        mais que l'user atterrit dans `/home/nas-admin`, il faut soit ajuster
-        le path à un dossier accessible depuis cette racine, soit créer
-        manuellement `/srv/backups/...` côté serveur avec write access.
+        Si tout échoue, on enrichit le message avec `realpath('.')` (le home
+        d'arrivée du user). Ça révèle immédiatement un chroot SFTP.
         """
         try:
-            await sftp.stat(self._remote_path)
+            await sftp.stat(path)
             return
         except (OSError, asyncssh.Error):
             pass  # n'existe pas (ou inaccessible) — on tente de le créer
 
         try:
-            await sftp.makedirs(self._remote_path, exist_ok=True)
+            await sftp.makedirs(path, exist_ok=True)
             return
         except (OSError, asyncssh.Error) as exc:
             cwd = "?"
@@ -155,26 +160,28 @@ class SftpProvider:
             except Exception:  # noqa: BLE001 — best-effort enrichment
                 pass
             raise RemoteBackupProviderError(
-                f"SFTP cannot prepare remote_path={self._remote_path!r}: {exc}. "
+                f"SFTP cannot prepare path={path!r}: {exc}. "
                 f"User home (after login) is {cwd!r}. "
                 f"Either create the directory on the server with write access "
-                f"for this user, or set remote_path to a directory accessible "
+                f"for this user, or set the path to a directory accessible "
                 f"from {cwd!r} (chroot may restrict absolute paths)."
             ) from exc
 
     async def upload_stream(
         self,
+        path: str,
         remote_filename: str,
         source: AsyncIterator[bytes],
     ) -> int:
-        """Streame `source` vers `<remote_path>/<remote_filename>` sur le serveur distant.
+        """Streame `source` vers `<path>/<remote_filename>` côté distant.
 
         Retourne le nombre total d'octets envoyés.
         """
         if "/" in remote_filename or "\\" in remote_filename:
             raise ValueError("remote_filename must not contain path separators")
 
-        full_path = f"{self._remote_path.rstrip('/')}/{remote_filename}"
+        normalized = self._normalize_path(path)
+        full_path = f"{normalized.rstrip('/')}/{remote_filename}"
 
         conn = await self._open_connection()
         bytes_written = 0
@@ -182,7 +189,7 @@ class SftpProvider:
             async with conn.start_sftp_client() as sftp:
                 # Garantit que le dossier de destination existe — sinon `open(..., "wb")`
                 # échoue avec "No such file" car SFTP ne crée pas les parents implicitement.
-                await self._ensure_remote_path(sftp)
+                await self._ensure_path(sftp, normalized)
                 try:
                     async with await sftp.open(full_path, "wb") as remote_file:
                         async for chunk in source:

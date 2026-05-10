@@ -278,13 +278,49 @@ export async function pushBackupToRemote(
   return RemoteBackupPushResultSchema.parse(raw)
 }
 
-export async function testRemoteBackupConnection(id: string): Promise<RemoteBackupTestResponse> {
-  // Le backend renvoie toujours 200 — le résultat (ok:true ou ok:false avec message)
-  // est dans le body. Cela évite que Cloudflare avale un 5xx et masque l'erreur du
-  // provider (page d'erreur générique au lieu du vrai message). Le catch reste
-  // utile en filet de sécurité pour les vraies erreurs réseau / timeout.
+// ─── Test de connexion (deux endpoints, deux usages) ────────────────────────
+//
+// Le backend renvoie TOUJOURS 200 — le résultat (ok:true ou ok:false avec
+// message) est dans le body. Évite que Cloudflare avale un 5xx et masque
+// l'erreur du provider. Le catch reste utile pour les vraies erreurs réseau.
+
+export interface TestRemoteBackupNewPayload {
+  kind: 'sftp' | 's3' | 'ftps'
+  config: Record<string, unknown>
+  credentials: Record<string, unknown>
+  path: string
+}
+
+/** Teste un path avec config + creds fournis (création / nouveaux creds). */
+export async function testRemoteBackupConnectionConfig(
+  body: TestRemoteBackupNewPayload,
+): Promise<RemoteBackupTestResponse> {
   try {
-    const raw = await api.post<unknown>(`/admin/backup-remotes/${id}/test`, {})
+    const raw = await api.post<unknown>('/admin/backup-remotes/test', body)
+    return RemoteBackupTestResponseSchema.parse(raw)
+  } catch (err) {
+    const e = err as { code?: string; message?: string }
+    return {
+      ok: false,
+      error: e.code ?? 'test_failed',
+      message: e.message ?? 'Connection test failed',
+    }
+  }
+}
+
+export interface TestRemoteBackupStoredPayload {
+  path: string
+  /** Optionnel : surcharge le `config` stocké en DB (test sans sauvegarder). */
+  config?: Record<string, unknown>
+}
+
+/** Teste un path avec creds stockés en DB (édition sans resaisir creds). */
+export async function testRemoteBackupConnectionStored(
+  id: string,
+  body: TestRemoteBackupStoredPayload,
+): Promise<RemoteBackupTestResponse> {
+  try {
+    const raw = await api.post<unknown>(`/admin/backup-remotes/${id}/test`, body)
     return RemoteBackupTestResponseSchema.parse(raw)
   } catch (err) {
     const e = err as { code?: string; message?: string }

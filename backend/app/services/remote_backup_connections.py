@@ -6,19 +6,51 @@ Le service garantit que les credentials sont :
     via les endpoints publics même si un dev oublie de filtrer)
   - déchiffrés uniquement par `get_decrypted_credentials()` (utilisé par les providers
     pour ouvrir une connexion réelle)
+
+Modèle des paths : chaque connexion stocke deux paths cible (snapshots, full)
+dans son `config`. Le helper `resolve_path()` les extrait de manière uniforme
+peu importe le `kind` (SFTP/FTPS utilisent `remote_path_*`, S3 utilise
+`prefix_*`). Les deux paths sont nullables : une connexion peut n'être
+utilisable que pour un seul des deux usages.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import asyncpg
 
 from app.db.repositories import remote_backup_connections as repo
 from app.services import remote_backup_crypto as crypto
+
+
+PathUsage = Literal["snapshots", "full"]
+
+
+def resolve_path(config: dict[str, Any], kind: str, usage: PathUsage) -> str | None:
+    """Retourne le path stocké pour un usage donné, ou None si non configuré.
+
+    Convention de clés selon le kind :
+      - sftp/ftps : `remote_path_snapshots` / `remote_path_full`
+      - s3        : `prefix_snapshots`      / `prefix_full`
+
+    Une chaîne vide ou whitespace-only est traitée comme "non configuré"
+    (retourne None) — sinon on aurait un faux positif côté `has_path_X`.
+    """
+    if kind in ("sftp", "ftps"):
+        key = f"remote_path_{usage}"
+    elif kind == "s3":
+        key = f"prefix_{usage}"
+    else:
+        return None
+    raw = config.get(key)
+    if raw is None:
+        return None
+    cleaned = str(raw).strip()
+    return cleaned or None
 
 
 @dataclass(frozen=True)

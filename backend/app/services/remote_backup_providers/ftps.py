@@ -1,12 +1,14 @@
 """Provider FTPS via aioftp (LOT_55).
 
 Streaming natif async — pas de tampon disque local.
+Le `path` est passé en argument à test_connection / upload_stream (pas dans config).
 
 config = {
-    "host":        "ftp.example.com",   # requis
-    "port":        21,                    # défaut 21
-    "remote_path": "/backups/harpo",      # requis
-    "use_tls":     true,                  # défaut true (FTPS explicit)
+    "host":    "ftp.example.com",  # requis
+    "port":    21,                  # défaut 21
+    "use_tls": true,                # défaut true (FTPS explicit au transport)
+    # Les paths cible (remote_path_snapshots, remote_path_full) sont stockés
+    # dans le config côté API mais ne sont PAS lus par le provider.
 }
 
 credentials = {
@@ -42,7 +44,6 @@ class FtpsProvider:
                 f"FTPS config: 'port' must be an integer (got {port_raw!r})"
             ) from exc
 
-        self._remote_path = str(config.get("remote_path", "")).strip() or "."
         self._use_tls = bool(config.get("use_tls", True))
 
         username = str(credentials.get("username", "")).strip()
@@ -54,13 +55,19 @@ class FtpsProvider:
         self._username = username
         self._password = password
 
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        cleaned = (path or "").strip()
+        return cleaned or "."
+
     def _client_kwargs(self) -> dict[str, Any]:
         # aioftp 0.21+ : ssl=True active FTPS implicit. Pour explicit, on
         # se connecte normalement et on émet AUTH TLS — non géré ici (compat
         # MVP). Si use_tls=True, on utilise TLS au transport.
         return {"ssl": self._use_tls} if self._use_tls else {}
 
-    async def test_connection(self) -> None:
+    async def test_connection(self, path: str) -> None:
+        normalized = self._normalize_path(path)
         try:
             async with aioftp.Client.context(
                 self._host,
@@ -69,22 +76,24 @@ class FtpsProvider:
                 self._password,
                 **self._client_kwargs(),
             ) as client:
-                await client.change_directory(self._remote_path)
+                await client.change_directory(normalized)
                 # Liste le dossier pour vérifier les droits
                 await client.list()
         except Exception as exc:
             raise RemoteBackupProviderError(
-                f"FTPS connection failed: {exc}"
+                f"FTPS test on path={normalized!r} failed: {exc}"
             ) from exc
 
     async def upload_stream(
         self,
+        path: str,
         remote_filename: str,
         source: AsyncIterator[bytes],
     ) -> int:
         if "/" in remote_filename or "\\" in remote_filename:
             raise ValueError("remote_filename must not contain path separators")
 
+        normalized = self._normalize_path(path)
         bytes_written = 0
         try:
             async with aioftp.Client.context(
@@ -94,13 +103,13 @@ class FtpsProvider:
                 self._password,
                 **self._client_kwargs(),
             ) as client:
-                await client.change_directory(self._remote_path)
+                await client.change_directory(normalized)
                 async with client.upload_stream(remote_filename) as stream:
                     async for chunk in source:
                         await stream.write(chunk)
                         bytes_written += len(chunk)
         except Exception as exc:
             raise RemoteBackupProviderError(
-                f"FTPS upload of {remote_filename!r} failed: {exc}"
+                f"FTPS upload of {remote_filename!r} to path={normalized!r} failed: {exc}"
             ) from exc
         return bytes_written

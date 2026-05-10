@@ -73,9 +73,10 @@ def _make_provider() -> SftpProvider:
 
 
 @pytest.mark.asyncio
-async def test_test_connection_success() -> None:
-    """test_connection ouvre, ensure dir, list, ferme — sans lever."""
+async def test_test_connection_success_dir_already_exists() -> None:
+    """test_connection : stat OK → pas de makedirs, listdir OK, ferme — sans lever."""
     sftp_mock = MagicMock()
+    sftp_mock.stat = AsyncMock(return_value=MagicMock())
     sftp_mock.makedirs = AsyncMock(return_value=None)
     sftp_mock.listdir = AsyncMock(return_value=[])
     sftp_ctx = MagicMock()
@@ -90,9 +91,34 @@ async def test_test_connection_success() -> None:
     with patch("asyncssh.connect", AsyncMock(return_value=conn_mock)):
         await _make_provider().test_connection()
 
-    sftp_mock.makedirs.assert_awaited_once_with("/dest", exist_ok=True)
+    sftp_mock.stat.assert_awaited_once_with("/dest")
+    sftp_mock.makedirs.assert_not_awaited()
     sftp_mock.listdir.assert_awaited_once_with("/dest")
     conn_mock.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_test_connection_success_creates_missing_dir() -> None:
+    """test_connection : stat échoue → makedirs OK, listdir OK — sans lever."""
+    sftp_mock = MagicMock()
+    sftp_mock.stat = AsyncMock(side_effect=OSError("no such file"))
+    sftp_mock.makedirs = AsyncMock(return_value=None)
+    sftp_mock.listdir = AsyncMock(return_value=[])
+    sftp_ctx = MagicMock()
+    sftp_ctx.__aenter__ = AsyncMock(return_value=sftp_mock)
+    sftp_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    conn_mock = MagicMock()
+    conn_mock.start_sftp_client = MagicMock(return_value=sftp_ctx)
+    conn_mock.close = MagicMock()
+    conn_mock.wait_closed = AsyncMock()
+
+    with patch("asyncssh.connect", AsyncMock(return_value=conn_mock)):
+        await _make_provider().test_connection()
+
+    sftp_mock.stat.assert_awaited_once_with("/dest")
+    sftp_mock.makedirs.assert_awaited_once_with("/dest", exist_ok=True)
+    sftp_mock.listdir.assert_awaited_once_with("/dest")
 
 
 @pytest.mark.asyncio
@@ -107,8 +133,9 @@ async def test_test_connection_wraps_oserror_into_provider_error() -> None:
 
 @pytest.mark.asyncio
 async def test_test_connection_wraps_listdir_failure() -> None:
-    """Un échec de listdir (après makedirs OK) → RemoteBackupProviderError avec mention du path."""
+    """Un échec de listdir (après stat OK) → RemoteBackupProviderError avec mention du path."""
     sftp_mock = MagicMock()
+    sftp_mock.stat = AsyncMock(return_value=MagicMock())
     sftp_mock.makedirs = AsyncMock(return_value=None)
     sftp_mock.listdir = AsyncMock(side_effect=OSError("permission denied"))
     sftp_ctx = MagicMock()
@@ -128,10 +155,12 @@ async def test_test_connection_wraps_listdir_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_test_connection_wraps_makedirs_failure() -> None:
-    """Un échec de makedirs (permission denied sur parent) → RemoteBackupProviderError."""
+async def test_test_connection_wraps_makedirs_failure_with_cwd_hint() -> None:
+    """stat KO + makedirs KO → erreur enrichie avec le cwd (révèle un chroot SFTP)."""
     sftp_mock = MagicMock()
+    sftp_mock.stat = AsyncMock(side_effect=OSError("no such file"))
     sftp_mock.makedirs = AsyncMock(side_effect=OSError("permission denied"))
+    sftp_mock.realpath = AsyncMock(return_value="/home/nas-admin")
     sftp_mock.listdir = AsyncMock(return_value=[])
     sftp_ctx = MagicMock()
     sftp_ctx.__aenter__ = AsyncMock(return_value=sftp_mock)
@@ -144,7 +173,36 @@ async def test_test_connection_wraps_makedirs_failure() -> None:
 
     with (
         patch("asyncssh.connect", AsyncMock(return_value=conn_mock)),
-        pytest.raises(RemoteBackupProviderError, match="cannot create remote_path"),
+        pytest.raises(RemoteBackupProviderError) as exc_info,
+    ):
+        await _make_provider().test_connection()
+
+    msg = str(exc_info.value)
+    assert "cannot prepare remote_path" in msg
+    assert "/dest" in msg
+    assert "/home/nas-admin" in msg  # cwd hint pour révéler le chroot
+    assert "permission denied" in msg
+
+
+@pytest.mark.asyncio
+async def test_test_connection_makedirs_failure_realpath_also_fails() -> None:
+    """Si realpath échoue aussi, on renvoie quand même une erreur claire avec cwd='?'."""
+    sftp_mock = MagicMock()
+    sftp_mock.stat = AsyncMock(side_effect=OSError("no such file"))
+    sftp_mock.makedirs = AsyncMock(side_effect=OSError("permission denied"))
+    sftp_mock.realpath = AsyncMock(side_effect=OSError("realpath failed"))
+    sftp_ctx = MagicMock()
+    sftp_ctx.__aenter__ = AsyncMock(return_value=sftp_mock)
+    sftp_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    conn_mock = MagicMock()
+    conn_mock.start_sftp_client = MagicMock(return_value=sftp_ctx)
+    conn_mock.close = MagicMock()
+    conn_mock.wait_closed = AsyncMock()
+
+    with (
+        patch("asyncssh.connect", AsyncMock(return_value=conn_mock)),
+        pytest.raises(RemoteBackupProviderError, match="cannot prepare remote_path"),
     ):
         await _make_provider().test_connection()
 
@@ -159,6 +217,7 @@ async def test_upload_stream_writes_all_chunks_and_returns_total() -> None:
     remote_file.__aexit__ = AsyncMock(return_value=None)
 
     sftp_mock = MagicMock()
+    sftp_mock.stat = AsyncMock(return_value=MagicMock())
     sftp_mock.makedirs = AsyncMock(return_value=None)
     sftp_mock.open = AsyncMock(return_value=remote_file)
     sftp_ctx = MagicMock()
@@ -179,7 +238,8 @@ async def test_upload_stream_writes_all_chunks_and_returns_total() -> None:
 
     assert total == len(b"hello world!")
     assert b"".join(written) == b"hello world!"
-    sftp_mock.makedirs.assert_awaited_once_with("/dest", exist_ok=True)
+    sftp_mock.stat.assert_awaited_once_with("/dest")
+    sftp_mock.makedirs.assert_not_awaited()  # stat OK → pas de makedirs
     sftp_mock.open.assert_awaited_once_with("/dest/backup.tar.gz", "wb")
 
 

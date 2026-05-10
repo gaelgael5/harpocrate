@@ -25,6 +25,30 @@ COMPOSE_FILE="docker-compose-dev.yml"
 # branche courante du repo (pas de switch automatique).
 TARGET_BRANCH="${1:-}"
 
+# ─── 0) Pré-requis : Docker installé ─────────────────────────────────────────
+
+if ! command -v docker >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+✗ Docker n'est pas installé sur ce serveur.
+
+Installer Docker sur Debian/Ubuntu :
+    curl -fsSL https://get.docker.com | sh
+    sudo systemctl enable --now docker
+
+Ou si tu utilises un LXC Proxmox, le recréer avec le flag --docker :
+    bash <(wget -qO- .../create-lxc.sh) <CTID> harpocrate-dev --docker
+
+Puis relancer ./dev-deploy.sh.
+EOF
+  exit 1
+fi
+
+if ! docker compose version >/dev/null 2>&1; then
+  echo "✗ Docker Compose v2 manquant (commande 'docker compose' absente)." >&2
+  echo "  Installer le plugin compose : sudo apt install docker-compose-plugin" >&2
+  exit 1
+fi
+
 # ─── 1) Positionnement dans le repo ─────────────────────────────────────────
 
 if [ -d ".git" ]; then
@@ -87,6 +111,13 @@ set_env_value() {
   sed -i "s#^${key}=.*#${key}=${value}#" "$file"
 }
 
+# Détecte l'IPv4 de l'interface eth0. Retourne vide si l'interface n'existe
+# pas (ex: serveur où l'interface s'appelle ens18, enp0s3, etc.).
+detect_eth0_ip() {
+  ip -4 -o addr show dev eth0 2>/dev/null \
+    | awk '{print $4}' | cut -d/ -f1 | head -1
+}
+
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
     echo "[2/6] .env absent → création depuis .env.example + génération secrets aléatoires"
@@ -106,6 +137,15 @@ if [ ! -f ".env" ]; then
     # généré ne sert à rien).
     set_env_value .env "HARPOCRATE_ADMIN_LOCAL_ENABLED" "true"
 
+    # PUBLIC_URL : URL externe d'accès au frontend (port 8080 du compose dev).
+    # On utilise l'IP de eth0 — l'admin pourra remplacer par un hostname plus
+    # tard s'il a un reverse-proxy / DNS local.
+    ETH0_IP="$(detect_eth0_ip)"
+    if [ -n "$ETH0_IP" ]; then
+      PUBLIC_URL="http://${ETH0_IP}:8080"
+      set_env_value .env "HARPOCRATE_PUBLIC_URL" "$PUBLIC_URL"
+    fi
+
     # `.env` contient des secrets : restreindre les permissions.
     chmod 600 .env
 
@@ -113,13 +153,17 @@ if [ ! -f ".env" ]; then
     echo "      ✓ HARPOCRATE_HMAC_KEY          : généré (base64 de 32 bytes)"
     echo "      ✓ HARPOCRATE_ADMIN_LOCAL_PASSWORD : généré ($(echo -n "$ADMIN_PASS" | wc -c) chars)"
     echo "      ✓ HARPOCRATE_ADMIN_LOCAL_ENABLED : true (admin local activé pour le dev)"
+    if [ -n "$ETH0_IP" ]; then
+      echo "      ✓ HARPOCRATE_PUBLIC_URL        : ${PUBLIC_URL} (IP eth0 détectée)"
+    else
+      echo "      ⚠  HARPOCRATE_PUBLIC_URL : eth0 non détectée — édite .env manuellement"
+    fi
     echo
     echo "      ⚠  Login admin local : admin / ${ADMIN_PASS}"
     echo "         (récupérable plus tard dans .env — chmod 600)"
     echo
     echo "      ⚠  À ÉDITER MANUELLEMENT dans .env si nécessaire :"
     echo "         - HARPOCRATE_KEYCLOAK_URL / REALM / CLIENT_ID  (si auth OIDC)"
-    echo "         - HARPOCRATE_PUBLIC_URL                         (URL externe d'accès)"
     echo "         - HARPOCRATE_LISTMONK_*                         (si envoi mails recovery)"
   else
     echo "[2/6] ⚠  .env absent et .env.example introuvable — config requise pour démarrer"

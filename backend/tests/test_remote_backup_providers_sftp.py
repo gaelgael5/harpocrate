@@ -54,12 +54,17 @@ def test_init_invalid_port_type() -> None:
 
 def test_init_accepts_valid_password_auth() -> None:
     p = SftpProvider(
-        config={"host": "h", "port": 22, "remote_path": "/x"},
+        config={"host": "h", "port": 22},
         credentials={"username": "u", "password": "p"},
     )
     assert p._host == "h"
     assert p._port == 22
-    assert p._remote_path == "/x"
+
+
+def test_normalize_path_defaults_to_dot() -> None:
+    assert SftpProvider._normalize_path("") == "."
+    assert SftpProvider._normalize_path("   ") == "."
+    assert SftpProvider._normalize_path("/foo") == "/foo"
 
 
 # ─── Comportement réseau (mock asyncssh) ──────────────────────────────────────
@@ -67,7 +72,7 @@ def test_init_accepts_valid_password_auth() -> None:
 
 def _make_provider() -> SftpProvider:
     return SftpProvider(
-        config={"host": "sftp.test", "port": 2222, "remote_path": "/dest"},
+        config={"host": "sftp.test", "port": 2222},
         credentials={"username": "alice", "password": "wonderland"},
     )
 
@@ -89,7 +94,7 @@ async def test_test_connection_success_dir_already_exists() -> None:
     conn_mock.wait_closed = AsyncMock()
 
     with patch("asyncssh.connect", AsyncMock(return_value=conn_mock)):
-        await _make_provider().test_connection()
+        await _make_provider().test_connection("/dest")
 
     sftp_mock.stat.assert_awaited_once_with("/dest")
     sftp_mock.makedirs.assert_not_awaited()
@@ -114,7 +119,7 @@ async def test_test_connection_success_creates_missing_dir() -> None:
     conn_mock.wait_closed = AsyncMock()
 
     with patch("asyncssh.connect", AsyncMock(return_value=conn_mock)):
-        await _make_provider().test_connection()
+        await _make_provider().test_connection("/dest")
 
     sftp_mock.stat.assert_awaited_once_with("/dest")
     sftp_mock.makedirs.assert_awaited_once_with("/dest", exist_ok=True)
@@ -128,7 +133,7 @@ async def test_test_connection_wraps_oserror_into_provider_error() -> None:
         patch("asyncssh.connect", AsyncMock(side_effect=OSError("network unreachable"))),
         pytest.raises(RemoteBackupProviderError, match="connection failed"),
     ):
-        await _make_provider().test_connection()
+        await _make_provider().test_connection("/dest")
 
 
 @pytest.mark.asyncio
@@ -149,9 +154,9 @@ async def test_test_connection_wraps_listdir_failure() -> None:
 
     with (
         patch("asyncssh.connect", AsyncMock(return_value=conn_mock)),
-        pytest.raises(RemoteBackupProviderError, match="remote_path"),
+        pytest.raises(RemoteBackupProviderError, match="path"),
     ):
-        await _make_provider().test_connection()
+        await _make_provider().test_connection("/dest")
 
 
 @pytest.mark.asyncio
@@ -175,10 +180,10 @@ async def test_test_connection_wraps_makedirs_failure_with_cwd_hint() -> None:
         patch("asyncssh.connect", AsyncMock(return_value=conn_mock)),
         pytest.raises(RemoteBackupProviderError) as exc_info,
     ):
-        await _make_provider().test_connection()
+        await _make_provider().test_connection("/dest")
 
     msg = str(exc_info.value)
-    assert "cannot prepare remote_path" in msg
+    assert "cannot prepare path" in msg
     assert "/dest" in msg
     assert "/home/nas-admin" in msg  # cwd hint pour révéler le chroot
     assert "permission denied" in msg
@@ -202,9 +207,9 @@ async def test_test_connection_makedirs_failure_realpath_also_fails() -> None:
 
     with (
         patch("asyncssh.connect", AsyncMock(return_value=conn_mock)),
-        pytest.raises(RemoteBackupProviderError, match="cannot prepare remote_path"),
+        pytest.raises(RemoteBackupProviderError, match="cannot prepare path"),
     ):
-        await _make_provider().test_connection()
+        await _make_provider().test_connection("/dest")
 
 
 @pytest.mark.asyncio
@@ -234,7 +239,7 @@ async def test_upload_stream_writes_all_chunks_and_returns_total() -> None:
             yield chunk
 
     with patch("asyncssh.connect", AsyncMock(return_value=conn_mock)):
-        total = await _make_provider().upload_stream("backup.tar.gz", source())
+        total = await _make_provider().upload_stream("/dest", "backup.tar.gz", source())
 
     assert total == len(b"hello world!")
     assert b"".join(written) == b"hello world!"
@@ -245,11 +250,11 @@ async def test_upload_stream_writes_all_chunks_and_returns_total() -> None:
 
 @pytest.mark.asyncio
 async def test_upload_stream_rejects_path_separators_in_filename() -> None:
-    """Sécurité : le filename ne doit pas contenir de '/' (le remote_path est fixé en config)."""
+    """Sécurité : le filename ne doit pas contenir de '/' (le path est passé séparément)."""
 
     async def empty_source() -> Any:
         if False:
             yield b""
 
     with pytest.raises(ValueError, match="path separators"):
-        await _make_provider().upload_stream("../etc/passwd", empty_source())
+        await _make_provider().upload_stream("/dest", "../etc/passwd", empty_source())

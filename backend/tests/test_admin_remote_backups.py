@@ -245,7 +245,11 @@ async def test_test_endpoint_returns_ok_on_success() -> None:
     try:
         conn = MagicMock()
         async with _client(_make_pool(conn)) as cli:
-            r = await cli.post(f"/v1/admin/backup-remotes/{_CONN_ID}/test", headers=_admin_header())
+            r = await cli.post(
+                f"/v1/admin/backup-remotes/{_CONN_ID}/test",
+                headers=_admin_header(),
+                json={"path": "/snapshots"},
+            )
     finally:
         svc.get_connection = orig_get  # type: ignore[assignment]
         svc.get_decrypted_credentials = orig_creds  # type: ignore[assignment]
@@ -291,7 +295,11 @@ async def test_test_endpoint_returns_200_with_ok_false_on_provider_error() -> No
     try:
         conn = MagicMock()
         async with _client(_make_pool(conn)) as cli:
-            r = await cli.post(f"/v1/admin/backup-remotes/{_CONN_ID}/test", headers=_admin_header())
+            r = await cli.post(
+                f"/v1/admin/backup-remotes/{_CONN_ID}/test",
+                headers=_admin_header(),
+                json={"path": "/snapshots"},
+            )
     finally:
         svc.get_connection = orig_get  # type: ignore[assignment]
         svc.get_decrypted_credentials = orig_creds  # type: ignore[assignment]
@@ -304,6 +312,97 @@ async def test_test_endpoint_returns_200_with_ok_false_on_provider_error() -> No
     assert body["ok"] is False
     assert body["error"] == "test_failed"
     assert "Connection refused" in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_test_with_provided_creds_endpoint_ok() -> None:
+    """POST /test (sans id) : config + creds + path dans le body, provider OK → ok:true."""
+    fake_provider = MagicMock()
+    fake_provider.test_connection = AsyncMock(return_value=None)
+
+    def fake_get_provider(kind: str, config: dict, credentials: dict) -> Any:
+        return fake_provider
+
+    from app.api.v1 import admin_remote_backups as ar
+
+    orig_factory = ar.get_provider
+    ar.get_provider = fake_get_provider  # type: ignore[assignment]
+    try:
+        conn = MagicMock()
+        async with _client(_make_pool(conn)) as cli:
+            r = await cli.post(
+                "/v1/admin/backup-remotes/test",
+                headers=_admin_header(),
+                json={
+                    "kind": "sftp",
+                    "config": {"host": "h", "port": 22},
+                    "credentials": {"username": "u", "password": "p"},
+                    "path": "/full",
+                },
+            )
+    finally:
+        ar.get_provider = orig_factory  # type: ignore[assignment]
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True}
+    fake_provider.test_connection.assert_awaited_once_with("/full")
+
+
+@pytest.mark.asyncio
+async def test_test_with_provided_creds_endpoint_provider_error() -> None:
+    """POST /test (sans id) : provider lève → 200 avec ok:false et message lisible."""
+    from app.services.remote_backup_providers import RemoteBackupProviderError
+
+    fake_provider = MagicMock()
+    fake_provider.test_connection = AsyncMock(
+        side_effect=RemoteBackupProviderError("Permission denied")
+    )
+
+    def fake_get_provider(kind: str, config: dict, credentials: dict) -> Any:
+        return fake_provider
+
+    from app.api.v1 import admin_remote_backups as ar
+
+    orig_factory = ar.get_provider
+    ar.get_provider = fake_get_provider  # type: ignore[assignment]
+    try:
+        conn = MagicMock()
+        async with _client(_make_pool(conn)) as cli:
+            r = await cli.post(
+                "/v1/admin/backup-remotes/test",
+                headers=_admin_header(),
+                json={
+                    "kind": "sftp",
+                    "config": {"host": "h", "port": 22},
+                    "credentials": {"username": "u", "password": "p"},
+                    "path": "/snapshots",
+                },
+            )
+    finally:
+        ar.get_provider = orig_factory  # type: ignore[assignment]
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False
+    assert "Permission denied" in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_test_with_provided_creds_endpoint_invalid_kind_rejected_by_pydantic() -> None:
+    """POST /test : kind inconnu → 422 (Pydantic field_validator)."""
+    conn = MagicMock()
+    async with _client(_make_pool(conn)) as cli:
+        r = await cli.post(
+            "/v1/admin/backup-remotes/test",
+            headers=_admin_header(),
+            json={
+                "kind": "azure-blob",
+                "config": {},
+                "credentials": {},
+                "path": "/x",
+            },
+        )
+    assert r.status_code == 422, r.text
 
 
 @pytest.mark.asyncio

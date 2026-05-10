@@ -49,6 +49,34 @@ class RemoteBackupUpdate(BaseModel):
     credentials: dict[str, Any] | None = None
 
 
+class RemoteBackupTestNew(BaseModel):
+    """Body pour tester un path avec credentials fournis (création / nouveaux creds)."""
+
+    kind: str
+    config: dict[str, Any]
+    credentials: dict[str, Any]
+    path: str = Field(min_length=1)
+
+    @field_validator("kind")
+    @classmethod
+    def _validate_kind(cls, v: str) -> str:
+        if v not in _ALLOWED_KINDS:
+            raise ValueError(f"kind must be one of {sorted(_ALLOWED_KINDS)}")
+        return v
+
+
+class RemoteBackupTestStored(BaseModel):
+    """Body pour tester un path en réutilisant les credentials stockés en DB.
+
+    Pratique en édition : l'admin n'a pas resaisi les creds (zero-knowledge —
+    on ne les ré-affiche jamais), mais veut tester un nouveau path. Le `config`
+    optionnel permet aussi de tester un host modifié sans avoir à sauver d'abord.
+    """
+
+    path: str = Field(min_length=1)
+    config: dict[str, Any] | None = None
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 
@@ -140,9 +168,53 @@ async def delete_remote_backup(connection_id: UUID, admin: AdminJwt) -> Response
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _test_response(ok: bool, error: str | None = None, message: str | None = None) -> JSONResponse:
+    """Helper — wrap les retours du test en 200 (jamais 5xx, voir commentaire ci-dessous).
+
+    Pourquoi 200 systématique :
+      - sémantiquement la requête HTTP a abouti, le résultat (positif ou
+        négatif) est dans le body : c'est un payload, pas une erreur transport
+      - Cloudflare avale les 5xx et affiche sa page générique, masquant le
+        message d'erreur du provider que l'admin a besoin de voir
+    """
+    if ok:
+        return JSONResponse({"ok": True}, status_code=status.HTTP_200_OK)
+    return JSONResponse(
+        {"ok": False, "error": error or "test_failed", "message": message or ""},
+        status_code=status.HTTP_200_OK,
+    )
+
+
+@router.post("/test", response_class=JSONResponse)
+async def test_remote_backup_with_provided_creds(
+    body: RemoteBackupTestNew, admin: AdminJwt
+) -> JSONResponse:
+    """Teste un path avec config + creds fournis dans le body.
+
+    Usage : création d'une connexion (avant sauvegarde), ou édition après
+    resaisie des credentials. Aucun accès DB — tout vient du body.
+    """
+    try:
+        provider = get_provider(body.kind, body.config, body.credentials)
+    except ValueError as exc:
+        return _test_response(False, error="invalid_config", message=str(exc))
+
+    try:
+        await provider.test_connection(body.path)
+    except RemoteBackupProviderError as exc:
+        return _test_response(False, error="test_failed", message=str(exc))
+    return _test_response(True)
+
+
 @router.post("/{connection_id}/test", response_class=JSONResponse)
-async def test_remote_backup(connection_id: UUID, admin: AdminJwt) -> JSONResponse:
-    """Teste la connexion : ouvre une connexion SFTP, vérifie l'accès au remote_path, ferme."""
+async def test_remote_backup_with_stored_creds(
+    connection_id: UUID, body: RemoteBackupTestStored, admin: AdminJwt
+) -> JSONResponse:
+    """Teste un path avec creds stockés en DB. Le `config` peut être surchargé.
+
+    Usage : édition d'une connexion existante (creds non resaisis car
+    zero-knowledge), test d'un path avec ou sans modif du config.
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
         item = await svc.get_connection(conn, connection_id)
@@ -152,23 +224,21 @@ async def test_remote_backup(connection_id: UUID, admin: AdminJwt) -> JSONRespon
                 detail={"error": "connection_not_found"},
             )
         creds = await svc.get_decrypted_credentials(conn, connection_id)
-    if creds is None:  # pragma: no cover — déjà filtré juste avant
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "connection_not_found"},
+    if creds is None:
+        return _test_response(
+            False,
+            error="no_credentials",
+            message="Connection has no stored credentials. Save credentials first.",
         )
 
-    provider = get_provider(item.kind, item.config, creds)
+    config_to_use = body.config if body.config is not None else item.config
     try:
-        await provider.test_connection()
+        provider = get_provider(item.kind, config_to_use, creds)
+    except ValueError as exc:
+        return _test_response(False, error="invalid_config", message=str(exc))
+
+    try:
+        await provider.test_connection(body.path)
     except RemoteBackupProviderError as exc:
-        # 200 + ok:false (et non 502) car :
-        #  - sémantiquement la requête HTTP a abouti, le résultat (négatif)
-        #    est dans le body : c'est un payload, pas une erreur de transport
-        #  - Cloudflare avale les 502 et affiche sa page générique, masquant
-        #    le message d'erreur du provider que l'admin a besoin de voir
-        return JSONResponse(
-            {"ok": False, "error": "test_failed", "message": str(exc)},
-            status_code=status.HTTP_200_OK,
-        )
-    return JSONResponse({"ok": True})
+        return _test_response(False, error="test_failed", message=str(exc))
+    return _test_response(True)

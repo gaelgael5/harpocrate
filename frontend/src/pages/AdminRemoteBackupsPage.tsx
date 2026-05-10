@@ -2,8 +2,14 @@
  * AdminRemoteBackupsPage — gestion des connexions de backup distantes (LOT L2).
  *
  * Permet de créer, lister, modifier, supprimer et tester une connexion vers un
- * serveur SFTP distant. Les credentials sont chiffrés côté serveur (AES-GCM
- * via clef dérivée de HMAC_KEY) et ne sont jamais retournés en clair par l'API.
+ * serveur SFTP/S3/FTPS distant. Les credentials sont chiffrés côté serveur
+ * (AES-GCM via clef dérivée de HMAC_KEY) et ne sont jamais retournés en clair.
+ *
+ * Modèle des paths : chaque connexion stocke deux paths cible — un pour les
+ * snapshots automatiques, un pour les fulls manuels. Les deux sont optionnels
+ * (une connexion peut n'être utilisable que pour un seul des deux usages).
+ * Le bouton "Tester" est désormais à côté de chaque champ path : on teste
+ * exactement le path qu'on configure, sans avoir à sauvegarder d'abord.
  */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -26,6 +32,7 @@ import {
   Select,
   Switch,
   Badge,
+  ActionIcon,
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { modals } from '@mantine/modals'
@@ -37,16 +44,15 @@ import {
   createRemoteBackupConnection,
   updateRemoteBackupConnection,
   deleteRemoteBackupConnection,
-  testRemoteBackupConnection,
+  testRemoteBackupConnectionConfig,
+  testRemoteBackupConnectionStored,
   type RemoteBackupCreatePayload,
+  type TestRemoteBackupNewPayload,
 } from '@/lib/adminApi'
 import { ApiError } from '@/lib/api-client'
 import type { RemoteBackupConnection } from '@/schemas/admin'
 
 // ─── Form values pour le modal create/edit ────────────────────────────────────
-//
-// Form unifié pour les 3 kinds (sftp / s3 / ftps). Les champs non-pertinents
-// sont simplement masqués selon le kind sélectionné.
 
 type Kind = 'sftp' | 's3' | 'ftps'
 
@@ -58,7 +64,8 @@ interface FormValues {
   // SFTP + FTPS shared
   host: string
   port: number | string
-  remote_path: string
+  remote_path_snapshots: string
+  remote_path_full: string
   username: string
   password: string
   // SFTP only
@@ -70,12 +77,13 @@ interface FormValues {
   use_tls: boolean
   // S3 only
   s3_provider: S3Provider
-  s3_r2_account_id: string  // pour R2 uniquement, sert à construire l'endpoint
+  s3_r2_account_id: string
   s3_bucket: string
   s3_region: string
-  s3_endpoint_url: string  // édité directement uniquement si provider=custom
-  s3_prefix: string
-  s3_path_style: boolean   // édité directement uniquement si provider=custom
+  s3_endpoint_url: string
+  s3_prefix_snapshots: string
+  s3_prefix_full: string
+  s3_path_style: boolean
   s3_access_key_id: string
   s3_secret_access_key: string
 }
@@ -85,7 +93,8 @@ const DEFAULT_FORM: FormValues = {
   kind: 'sftp',
   host: '',
   port: 22,
-  remote_path: '/',
+  remote_path_snapshots: '',
+  remote_path_full: '',
   username: '',
   password: '',
   host_key_fingerprint: '',
@@ -98,7 +107,8 @@ const DEFAULT_FORM: FormValues = {
   s3_bucket: '',
   s3_region: 'us-east-1',
   s3_endpoint_url: '',
-  s3_prefix: '',
+  s3_prefix_snapshots: '',
+  s3_prefix_full: '',
   s3_path_style: false,
   s3_access_key_id: '',
   s3_secret_access_key: '',
@@ -108,14 +118,11 @@ const DEFAULT_FORM: FormValues = {
 
 interface S3ProviderSpec {
   label: string
-  /** true si l'utilisateur doit saisir l'endpoint à la main (custom uniquement). */
   endpointEditable: boolean
-  /** Construit l'URL d'endpoint à partir des inputs utilisateur. Vide pour AWS. */
   buildEndpoint: (region: string, accountId: string) => string
   defaultRegion: string
   regionPlaceholder: string
   pathStyle: boolean
-  /** true si on doit afficher le champ Account ID (R2 uniquement). */
   needsAccountId: boolean
 }
 
@@ -123,7 +130,7 @@ const S3_PROVIDERS: Record<S3Provider, S3ProviderSpec> = {
   aws: {
     label: 'AWS S3',
     endpointEditable: false,
-    buildEndpoint: () => '',  // AWS utilise l'endpoint par défaut du SDK
+    buildEndpoint: () => '',
     defaultRegion: 'us-east-1',
     regionPlaceholder: 'ex: eu-west-3, us-east-1, ap-southeast-1',
     pathStyle: false,
@@ -172,7 +179,7 @@ const S3_PROVIDERS: Record<S3Provider, S3ProviderSpec> = {
   custom: {
     label: 'Autre (S3-compatible custom)',
     endpointEditable: true,
-    buildEndpoint: () => '',  // saisi à la main
+    buildEndpoint: () => '',
     defaultRegion: 'us-east-1',
     regionPlaceholder: 'région de ton service',
     pathStyle: true,
@@ -180,7 +187,6 @@ const S3_PROVIDERS: Record<S3Provider, S3ProviderSpec> = {
   },
 }
 
-/** Détecte le provider S3 depuis un endpoint connu (pour reload d'une connexion existante). */
 function detectS3Provider(endpoint: string): S3Provider {
   const e = endpoint.toLowerCase().trim()
   if (!e || e.endsWith('.amazonaws.com')) return 'aws'
@@ -191,38 +197,74 @@ function detectS3Provider(endpoint: string): S3Provider {
   return 'custom'
 }
 
-/** Extrait l'account_id depuis une endpoint R2 (https://<id>.r2.cloudflarestorage.com). */
 function extractR2AccountId(endpoint: string): string {
   const m = endpoint.match(/^https?:\/\/([^.]+)\.r2\.cloudflarestorage\.com\/?$/i)
   return m?.[1] ?? ''
 }
 
 /**
- * Type retourné en mode édition : `credentials` absent ⇒ on ne retouche pas
- * les credentials côté serveur (le backend conserve le blob chiffré existant).
- * Le cast vers `RemoteBackupCreatePayload` au call-site est sûr en création
- * (la validation form garantit que tous les champs sont remplis) et toléré
- * en update (Pydantic `RemoteBackupUpdate` accepte tous les champs optionnels).
+ * En édition : `credentials` absent ⇒ on ne retouche pas les credentials côté
+ * serveur (le backend conserve le blob chiffré existant). Le cast vers
+ * `RemoteBackupCreatePayload` au call-site est sûr en création (la validation
+ * form garantit que tous les champs sont remplis) et toléré en update.
  */
 type FormPayload = Omit<RemoteBackupCreatePayload, 'credentials'> & {
   credentials?: Record<string, unknown>
 }
 
+/**
+ * Construit le `config` à envoyer pour un kind SFTP/FTPS donné, à partir des
+ * valeurs du formulaire. Les paths vides ne sont PAS injectés (les deux paths
+ * sont optionnels — `resolve_path()` côté backend traite l'absence et la
+ * chaîne vide de la même manière).
+ */
+function buildSftpFtpsConfig(values: FormValues): Record<string, unknown> {
+  const defaultPort = values.kind === 'ftps' ? 21 : 22
+  const config: Record<string, unknown> = {
+    host: values.host.trim(),
+    port: typeof values.port === 'number' ? values.port : parseInt(String(values.port), 10) || defaultPort,
+  }
+  if (values.remote_path_snapshots.trim()) {
+    config.remote_path_snapshots = values.remote_path_snapshots.trim()
+  }
+  if (values.remote_path_full.trim()) {
+    config.remote_path_full = values.remote_path_full.trim()
+  }
+  if (values.kind === 'sftp' && values.host_key_fingerprint.trim()) {
+    config.host_key_fingerprint = values.host_key_fingerprint.trim()
+  }
+  if (values.kind === 'ftps') {
+    config.use_tls = values.use_tls
+  }
+  return config
+}
+
+function buildS3Config(values: FormValues): Record<string, unknown> {
+  const spec = S3_PROVIDERS[values.s3_provider]
+  const endpoint = spec.endpointEditable
+    ? values.s3_endpoint_url.trim()
+    : spec.buildEndpoint(values.s3_region, values.s3_r2_account_id)
+  const config: Record<string, unknown> = {
+    bucket: values.s3_bucket.trim(),
+    region: values.s3_region.trim(),
+    path_style: spec.endpointEditable ? values.s3_path_style : spec.pathStyle,
+  }
+  if (endpoint) {
+    config.endpoint_url = endpoint
+  }
+  if (values.s3_prefix_snapshots.trim()) {
+    config.prefix_snapshots = values.s3_prefix_snapshots.trim()
+  }
+  if (values.s3_prefix_full.trim()) {
+    config.prefix_full = values.s3_prefix_full.trim()
+  }
+  return config
+}
+
 function buildPayload(values: FormValues, isEditing: boolean): FormPayload {
   const name = values.name.trim()
   if (values.kind === 'sftp') {
-    const config: Record<string, unknown> = {
-      host: values.host.trim(),
-      port: typeof values.port === 'number' ? values.port : parseInt(String(values.port), 10) || 22,
-      remote_path: values.remote_path.trim() || '/',
-    }
-    if (values.host_key_fingerprint.trim()) {
-      config.host_key_fingerprint = values.host_key_fingerprint.trim()
-    }
-    // En édition : si l'utilisateur n'a rien saisi, on omet `credentials` du
-    // payload pour conserver les valeurs chiffrées existantes côté serveur.
-    // Sans cette omission, on enverrait `{username: '', password: ''}` qui
-    // écraserait les vrais credentials et casserait l'auth SFTP.
+    const config = buildSftpFtpsConfig(values)
     const secretField =
       values.auth_method === 'password' ? values.password : values.private_key
     const credentialsTouched =
@@ -245,12 +287,7 @@ function buildPayload(values: FormValues, isEditing: boolean): FormPayload {
     return { name, kind: 'sftp', config, credentials }
   }
   if (values.kind === 'ftps') {
-    const config: Record<string, unknown> = {
-      host: values.host.trim(),
-      port: typeof values.port === 'number' ? values.port : parseInt(String(values.port), 10) || 21,
-      remote_path: values.remote_path.trim() || '/',
-      use_tls: values.use_tls,
-    }
+    const config = buildSftpFtpsConfig(values)
     const credentialsTouched =
       values.username.trim() !== '' || values.password !== ''
     if (isEditing && !credentialsTouched) {
@@ -266,22 +303,8 @@ function buildPayload(values: FormValues, isEditing: boolean): FormPayload {
       },
     }
   }
-  // s3 — l'endpoint et le path-style sont dérivés du provider sélectionné
-  const spec = S3_PROVIDERS[values.s3_provider]
-  const endpoint = spec.endpointEditable
-    ? values.s3_endpoint_url.trim()
-    : spec.buildEndpoint(values.s3_region, values.s3_r2_account_id)
-  const config: Record<string, unknown> = {
-    bucket: values.s3_bucket.trim(),
-    region: values.s3_region.trim(),
-    path_style: spec.endpointEditable ? values.s3_path_style : spec.pathStyle,
-  }
-  if (endpoint) {
-    config.endpoint_url = endpoint
-  }
-  if (values.s3_prefix.trim()) {
-    config.prefix = values.s3_prefix.trim()
-  }
+  // s3
+  const config = buildS3Config(values)
   const s3CredentialsTouched =
     values.s3_access_key_id.trim() !== '' || values.s3_secret_access_key !== ''
   if (isEditing && !s3CredentialsTouched) {
@@ -295,6 +318,42 @@ function buildPayload(values: FormValues, isEditing: boolean): FormPayload {
       access_key_id: values.s3_access_key_id.trim(),
       secret_access_key: values.s3_secret_access_key,
     },
+  }
+}
+
+/**
+ * Extrait les credentials du formulaire courant pour un test.
+ * Retourne null si les creds ne sont pas (re)saisis : le caller doit alors
+ * utiliser l'endpoint "stored" (avec id) au lieu de l'endpoint "config".
+ */
+function extractCredentialsForTest(values: FormValues): Record<string, unknown> | null {
+  if (values.kind === 'sftp') {
+    const secret =
+      values.auth_method === 'password' ? values.password : values.private_key
+    if (!values.username.trim() || !secret) return null
+    const creds: Record<string, unknown> = {
+      username: values.username.trim(),
+      auth_method: values.auth_method,
+    }
+    if (values.auth_method === 'password') {
+      creds.password = values.password
+    } else {
+      creds.private_key = values.private_key
+      if (values.private_key_passphrase) {
+        creds.private_key_passphrase = values.private_key_passphrase
+      }
+    }
+    return creds
+  }
+  if (values.kind === 'ftps') {
+    if (!values.username.trim() || !values.password) return null
+    return { username: values.username.trim(), password: values.password }
+  }
+  // s3
+  if (!values.s3_access_key_id.trim() || !values.s3_secret_access_key) return null
+  return {
+    access_key_id: values.s3_access_key_id.trim(),
+    secret_access_key: values.s3_secret_access_key,
   }
 }
 
@@ -330,10 +389,6 @@ export function AdminRemoteBackupsPage() {
       updateRemoteBackupConnection(args.id, {
         name: args.payload.name,
         config: args.payload.config,
-        // credentials sont updated SEULEMENT si l'admin re-saisit (sinon on
-        // garde l'existant). buildPayload omet `credentials` du FormPayload
-        // dans ce cas, donc envoyer args.payload.credentials (= undefined)
-        // signifie côté serveur "ne pas toucher au blob chiffré".
         credentials: args.payload.credentials,
       }),
     onSuccess: () => {
@@ -357,22 +412,6 @@ export function AdminRemoteBackupsPage() {
     onError: (err) => {
       const msg = err instanceof ApiError ? err.message : String(err)
       notifications.show({ color: 'red', title: t('common.error'), message: msg })
-    },
-  })
-
-  const testMut = useMutation({
-    mutationFn: testRemoteBackupConnection,
-    onSuccess: (result) => {
-      if (result.ok) {
-        notifications.show({ color: 'green', message: t('admin.remoteBackups.testSuccess') })
-      } else {
-        notifications.show({
-          color: 'red',
-          title: t('admin.remoteBackups.testFailed'),
-          message: result.message,
-          autoClose: 8000,
-        })
-      }
     },
   })
 
@@ -436,7 +475,7 @@ export function AdminRemoteBackupsPage() {
                 <Table.Th>{t('admin.remoteBackups.colName')}</Table.Th>
                 <Table.Th>{t('admin.remoteBackups.colKind')}</Table.Th>
                 <Table.Th>{t('admin.remoteBackups.colHost')}</Table.Th>
-                <Table.Th>{t('admin.remoteBackups.colPath')}</Table.Th>
+                <Table.Th>{t('admin.remoteBackups.colPaths')}</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -455,20 +494,10 @@ export function AdminRemoteBackupsPage() {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Text size="sm" ff="monospace">
-                      {String(c.config.remote_path ?? '')}
-                    </Text>
+                    <PathsCell connection={c} />
                   </Table.Td>
                   <Table.Td>
                     <Group gap="xs" justify="flex-end">
-                      <Button
-                        size="xs"
-                        variant="light"
-                        loading={testMut.isPending && testMut.variables === c.id}
-                        onClick={() => testMut.mutate(c.id)}
-                      >
-                        {t('admin.remoteBackups.test')}
-                      </Button>
                       <Button size="xs" variant="subtle" onClick={() => openEdit(c)}>
                         {t('common.edit')}
                       </Button>
@@ -490,10 +519,6 @@ export function AdminRemoteBackupsPage() {
       )}
 
       <ConnectionFormModal
-        // Force le remount à chaque changement de cible : useForm n'évalue
-        // initialValues qu'au premier mount, donc sans `key` le formulaire
-        // resterait sur DEFAULT_FORM quand on clique "Modifier" après une
-        // ouverture en mode "Créer".
         key={editTarget?.id ?? 'create'}
         opened={modalOpen}
         onClose={() => {
@@ -505,8 +530,6 @@ export function AdminRemoteBackupsPage() {
           if (editTarget) {
             updateMut.mutate({ id: editTarget.id, payload })
           } else {
-            // En création, `buildPayload(_, false)` ne passe jamais dans la
-            // branche d'omission de `credentials` — le cast est sûr ici.
             createMut.mutate(payload as RemoteBackupCreatePayload)
           }
         }}
@@ -516,7 +539,41 @@ export function AdminRemoteBackupsPage() {
   )
 }
 
-// ─── Modal create/edit (3 kinds) ─────────────────────────────────────────────
+/**
+ * Affiche les deux paths d'une connexion (snapshots et full) avec une pastille
+ * "non configuré" si vide. Le path effectivement utilisé dépend du kind :
+ *   - sftp/ftps : remote_path_snapshots / remote_path_full
+ *   - s3        : prefix_snapshots      / prefix_full
+ */
+function PathsCell({ connection }: { connection: RemoteBackupConnection }) {
+  const { t } = useTranslation()
+  const cfg = connection.config
+  const isS3 = connection.kind === 's3'
+  const snapshots = String((isS3 ? cfg.prefix_snapshots : cfg.remote_path_snapshots) ?? '')
+  const full = String((isS3 ? cfg.prefix_full : cfg.remote_path_full) ?? '')
+  return (
+    <Stack gap={2}>
+      <Text size="xs">
+        <Text component="span" c="dimmed">snapshots:</Text>{' '}
+        {snapshots ? (
+          <Text component="span" ff="monospace">{snapshots}</Text>
+        ) : (
+          <Text component="span" c="dimmed" fs="italic">{t('admin.remoteBackups.pathNotConfigured')}</Text>
+        )}
+      </Text>
+      <Text size="xs">
+        <Text component="span" c="dimmed">full:</Text>{' '}
+        {full ? (
+          <Text component="span" ff="monospace">{full}</Text>
+        ) : (
+          <Text component="span" c="dimmed" fs="italic">{t('admin.remoteBackups.pathNotConfigured')}</Text>
+        )}
+      </Text>
+    </Stack>
+  )
+}
+
+// ─── Modal create/edit ───────────────────────────────────────────────────────
 
 function ConnectionFormModal({
   opened,
@@ -539,7 +596,6 @@ function ConnectionFormModal({
           ...DEFAULT_FORM,
           name: editTarget.name,
           kind: editTarget.kind,
-          // Champs SFTP/FTPS
           host: String(editTarget.config.host ?? ''),
           port:
             typeof editTarget.config.port === 'number'
@@ -547,19 +603,20 @@ function ConnectionFormModal({
               : editTarget.kind === 'ftps'
                 ? 21
                 : 22,
-          remote_path: String(editTarget.config.remote_path ?? '/'),
+          remote_path_snapshots: String(editTarget.config.remote_path_snapshots ?? ''),
+          remote_path_full: String(editTarget.config.remote_path_full ?? ''),
           host_key_fingerprint: String(editTarget.config.host_key_fingerprint ?? ''),
           use_tls:
             typeof editTarget.config.use_tls === 'boolean'
               ? editTarget.config.use_tls
               : true,
-          // Champs S3 — détecte le provider depuis l'endpoint stocké
           s3_provider: detectS3Provider(String(editTarget.config.endpoint_url ?? '')),
           s3_r2_account_id: extractR2AccountId(String(editTarget.config.endpoint_url ?? '')),
           s3_bucket: String(editTarget.config.bucket ?? ''),
           s3_region: String(editTarget.config.region ?? 'us-east-1'),
           s3_endpoint_url: String(editTarget.config.endpoint_url ?? ''),
-          s3_prefix: String(editTarget.config.prefix ?? ''),
+          s3_prefix_snapshots: String(editTarget.config.prefix_snapshots ?? ''),
+          s3_prefix_full: String(editTarget.config.prefix_full ?? ''),
           s3_path_style: Boolean(editTarget.config.path_style ?? false),
         }
       : DEFAULT_FORM,
@@ -568,7 +625,6 @@ function ConnectionFormModal({
       host: (v, values) =>
         values.kind !== 's3' && !v.trim() ? t('common.required') : null,
       username: (v, values) =>
-        // En édition, username vide signale "garder l'existant" (cf. buildPayload).
         values.kind !== 's3' && !editTarget && !v.trim() ? t('common.required') : null,
       password: (v, values) =>
         values.kind === 'sftp' && values.auth_method === 'password' && !editTarget && !v
@@ -626,10 +682,8 @@ function ConnectionFormModal({
             description={editTarget ? t('admin.remoteBackups.kindLockedHint') : undefined}
           />
 
-          {/* LOT_57.fix : indicateur visuel de l'état des credentials.
-              Les champs username/password ne se repeuplent jamais (zero-
-              knowledge), donc l'admin a besoin d'un feedback explicite
-              pour savoir si la connexion a déjà des identifiants stockés. */}
+          {/* Indicateur visuel de l'état des credentials (zero-knowledge :
+              les champs ne se repeuplent jamais). */}
           {editTarget && (
             editTarget.has_credentials ? (
               <Alert color="green" variant="light">
@@ -642,9 +696,15 @@ function ConnectionFormModal({
             )
           )}
 
-          {form.values.kind === 'sftp' && <SftpFields form={form} editing={editTarget !== null} />}
-          {form.values.kind === 'ftps' && <FtpsFields form={form} editing={editTarget !== null} />}
-          {form.values.kind === 's3' && <S3Fields form={form} editing={editTarget !== null} />}
+          {form.values.kind === 'sftp' && (
+            <SftpFields form={form} editing={editTarget !== null} editTarget={editTarget} />
+          )}
+          {form.values.kind === 'ftps' && (
+            <FtpsFields form={form} editing={editTarget !== null} editTarget={editTarget} />
+          )}
+          {form.values.kind === 's3' && (
+            <S3Fields form={form} editing={editTarget !== null} editTarget={editTarget} />
+          )}
 
           <Group justify="flex-end" mt="md">
             <Button variant="subtle" onClick={onClose}>
@@ -660,12 +720,125 @@ function ConnectionFormModal({
   )
 }
 
+// ─── PathFieldWithTest : input de path + bouton Tester + résultat inline ────
+
+interface PathTestResult {
+  ok: boolean
+  message: string
+}
+
+function PathFieldWithTest({
+  label,
+  description,
+  pathValue,
+  onPathChange,
+  form,
+  editTarget,
+}: {
+  label: string
+  description?: string
+  pathValue: string
+  onPathChange: (v: string) => void
+  form: ReturnType<typeof useForm<FormValues>>
+  editTarget: RemoteBackupConnection | null
+}) {
+  const { t } = useTranslation()
+  const [result, setResult] = useState<PathTestResult | null>(null)
+  const [testing, setTesting] = useState(false)
+
+  async function runTest() {
+    if (!pathValue.trim()) {
+      setResult({ ok: false, message: t('admin.remoteBackups.pathEmptyForTest') })
+      return
+    }
+    setTesting(true)
+    setResult(null)
+    try {
+      const config =
+        form.values.kind === 's3' ? buildS3Config(form.values) : buildSftpFtpsConfig(form.values)
+      const credentials = extractCredentialsForTest(form.values)
+
+      // Si l'admin n'a pas (re)saisi les creds en édition, on tape l'endpoint
+      // "stored" qui réutilise les creds chiffrés en DB. Sinon on tape
+      // l'endpoint "config" avec les creds du formulaire (création ou
+      // resaisie en édition).
+      const r =
+        editTarget && credentials === null
+          ? await testRemoteBackupConnectionStored(editTarget.id, {
+              path: pathValue.trim(),
+              config,
+            })
+          : credentials === null
+            ? { ok: false as const, error: 'no_credentials', message: t('admin.remoteBackups.fillCredsForTest') }
+            : await testRemoteBackupConnectionConfig({
+                kind: form.values.kind,
+                config,
+                credentials,
+                path: pathValue.trim(),
+              } satisfies TestRemoteBackupNewPayload)
+
+      if (r.ok) {
+        setResult({ ok: true, message: t('admin.remoteBackups.testSuccess') })
+      } else {
+        setResult({ ok: false, message: r.message || t('admin.remoteBackups.testFailed') })
+      }
+    } catch (err) {
+      setResult({
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <Stack gap={4}>
+      <Group gap="xs" align="end" wrap="nowrap">
+        <TextInput
+          label={label}
+          description={description}
+          value={pathValue}
+          onChange={(e) => {
+            onPathChange(e.currentTarget.value)
+            setResult(null)
+          }}
+          style={{ flex: 1 }}
+        />
+        <ActionIcon
+          variant="light"
+          size="lg"
+          loading={testing}
+          onClick={() => void runTest()}
+          aria-label={t('admin.remoteBackups.test')}
+          title={t('admin.remoteBackups.test')}
+        >
+          {/* Loupe simple en SVG inline pour éviter une dep d'icônes */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </ActionIcon>
+      </Group>
+      {result && (
+        <Alert color={result.ok ? 'green' : 'orange'} variant="light" py={6}>
+          <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>
+            {result.message}
+          </Text>
+        </Alert>
+      )}
+    </Stack>
+  )
+}
+
 function SftpFields({
   form,
   editing,
+  editTarget,
 }: {
   form: ReturnType<typeof useForm<FormValues>>
   editing: boolean
+  editTarget: RemoteBackupConnection | null
 }) {
   const { t } = useTranslation()
   return (
@@ -683,11 +856,21 @@ function SftpFields({
           {...form.getInputProps('port')}
         />
       </Group>
-      <TextInput
-        label={t('admin.remoteBackups.fieldRemotePath')}
-        description={t('admin.remoteBackups.fieldRemotePathHint')}
-        required
-        {...form.getInputProps('remote_path')}
+      <PathFieldWithTest
+        label={t('admin.remoteBackups.fieldPathSnapshots')}
+        description={t('admin.remoteBackups.fieldPathSnapshotsHint')}
+        pathValue={form.values.remote_path_snapshots}
+        onPathChange={(v) => form.setFieldValue('remote_path_snapshots', v)}
+        form={form}
+        editTarget={editTarget}
+      />
+      <PathFieldWithTest
+        label={t('admin.remoteBackups.fieldPathFull')}
+        description={t('admin.remoteBackups.fieldPathFullHint')}
+        pathValue={form.values.remote_path_full}
+        onPathChange={(v) => form.setFieldValue('remote_path_full', v)}
+        form={form}
+        editTarget={editTarget}
       />
       <TextInput
         label={t('admin.remoteBackups.fieldFingerprint')}
@@ -737,9 +920,11 @@ function SftpFields({
 function FtpsFields({
   form,
   editing,
+  editTarget,
 }: {
   form: ReturnType<typeof useForm<FormValues>>
   editing: boolean
+  editTarget: RemoteBackupConnection | null
 }) {
   const { t } = useTranslation()
   return (
@@ -757,11 +942,21 @@ function FtpsFields({
           {...form.getInputProps('port')}
         />
       </Group>
-      <TextInput
-        label={t('admin.remoteBackups.fieldRemotePath')}
-        description={t('admin.remoteBackups.fieldRemotePathHint')}
-        required
-        {...form.getInputProps('remote_path')}
+      <PathFieldWithTest
+        label={t('admin.remoteBackups.fieldPathSnapshots')}
+        description={t('admin.remoteBackups.fieldPathSnapshotsHint')}
+        pathValue={form.values.remote_path_snapshots}
+        onPathChange={(v) => form.setFieldValue('remote_path_snapshots', v)}
+        form={form}
+        editTarget={editTarget}
+      />
+      <PathFieldWithTest
+        label={t('admin.remoteBackups.fieldPathFull')}
+        description={t('admin.remoteBackups.fieldPathFullHint')}
+        pathValue={form.values.remote_path_full}
+        onPathChange={(v) => form.setFieldValue('remote_path_full', v)}
+        form={form}
+        editTarget={editTarget}
       />
       <Switch
         label={t('admin.remoteBackups.fieldUseTls')}
@@ -786,9 +981,11 @@ function FtpsFields({
 function S3Fields({
   form,
   editing,
+  editTarget,
 }: {
   form: ReturnType<typeof useForm<FormValues>>
   editing: boolean
+  editTarget: RemoteBackupConnection | null
 }) {
   const { t } = useTranslation()
   const provider: S3Provider = form.values.s3_provider
@@ -810,8 +1007,6 @@ function S3Fields({
           const next = v as S3Provider
           const nextSpec = S3_PROVIDERS[next]
           form.setFieldValue('s3_provider', next)
-          // Préfille la région avec le défaut du provider sélectionné
-          // sauf si l'utilisateur a déjà saisi quelque chose de pertinent
           form.setFieldValue('s3_region', nextSpec.defaultRegion)
         }}
       />
@@ -832,19 +1027,29 @@ function S3Fields({
         {...form.getInputProps('s3_bucket')}
       />
 
-      <Group grow>
-        <TextInput
-          label={t('admin.remoteBackups.fieldS3Region')}
-          placeholder={spec.regionPlaceholder}
-          required
-          {...form.getInputProps('s3_region')}
-        />
-        <TextInput
-          label={t('admin.remoteBackups.fieldS3Prefix')}
-          description={t('admin.remoteBackups.fieldS3PrefixHint')}
-          {...form.getInputProps('s3_prefix')}
-        />
-      </Group>
+      <TextInput
+        label={t('admin.remoteBackups.fieldS3Region')}
+        placeholder={spec.regionPlaceholder}
+        required
+        {...form.getInputProps('s3_region')}
+      />
+
+      <PathFieldWithTest
+        label={t('admin.remoteBackups.fieldS3PrefixSnapshots')}
+        description={t('admin.remoteBackups.fieldS3PrefixSnapshotsHint')}
+        pathValue={form.values.s3_prefix_snapshots}
+        onPathChange={(v) => form.setFieldValue('s3_prefix_snapshots', v)}
+        form={form}
+        editTarget={editTarget}
+      />
+      <PathFieldWithTest
+        label={t('admin.remoteBackups.fieldS3PrefixFull')}
+        description={t('admin.remoteBackups.fieldS3PrefixFullHint')}
+        pathValue={form.values.s3_prefix_full}
+        onPathChange={(v) => form.setFieldValue('s3_prefix_full', v)}
+        form={form}
+        editTarget={editTarget}
+      />
 
       {spec.endpointEditable && (
         <>

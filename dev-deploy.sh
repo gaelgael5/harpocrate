@@ -118,6 +118,42 @@ detect_eth0_ip() {
     | awk '{print $4}' | cut -d/ -f1 | head -1
 }
 
+# Détecte le port HÔTE mappé sur le port 443 (HTTPS) du service frontend.
+# Source de vérité = le compose, pas l'image (l'image expose des ports
+# internes via Dockerfile EXPOSE — le mapping host n'est défini que par
+# le compose ou la CLI `docker run -p`).
+#
+# Stratégie en cascade :
+#   1) Runtime : `docker compose port frontend 443` (si les containers
+#      tournent déjà). Source de vérité absolue.
+#   2) Compose YAML : grep sur le mapping `"...:NNNN:443"`. Fonctionne
+#      avant le up.
+#   3) Fallback : 8443 (valeur du compose dev par défaut).
+detect_frontend_https_port() {
+  local port=""
+
+  # Source 1 : runtime (containers up)
+  if docker compose -f "$COMPOSE_FILE" ps -q frontend 2>/dev/null | grep -q .; then
+    port=$(docker compose -f "$COMPOSE_FILE" port frontend 443 2>/dev/null \
+           | awk -F: '{print $NF}' | head -1)
+    if [ -n "$port" ]; then
+      echo "$port"
+      return
+    fi
+  fi
+
+  # Source 2 : compose YAML (avant le up)
+  port=$(grep -oE '"[0-9.]+:[0-9]+:443"' "$COMPOSE_FILE" 2>/dev/null \
+         | head -1 | awk -F: '{print $2}')
+  if [ -n "$port" ]; then
+    echo "$port"
+    return
+  fi
+
+  # Fallback
+  echo "8443"
+}
+
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
     echo "[2/6] .env absent → création depuis .env.example + génération secrets aléatoires"
@@ -137,12 +173,13 @@ if [ ! -f ".env" ]; then
     # généré ne sert à rien).
     set_env_value .env "HARPOCRATE_ADMIN_LOCAL_ENABLED" "true"
 
-    # PUBLIC_URL : URL externe d'accès au frontend (port 8080 du compose dev).
-    # On utilise l'IP de eth0 — l'admin pourra remplacer par un hostname plus
-    # tard s'il a un reverse-proxy / DNS local.
+    # PUBLIC_URL : URL externe d'accès au frontend en HTTPS. On résout le
+    # port directement depuis le compose (pas hardcodé) — si tu changes le
+    # mapping de port côté compose, le script suit automatiquement.
     ETH0_IP="$(detect_eth0_ip)"
+    HTTPS_PORT="$(detect_frontend_https_port)"
     if [ -n "$ETH0_IP" ]; then
-      PUBLIC_URL="http://${ETH0_IP}:8080"
+      PUBLIC_URL="https://${ETH0_IP}:${HTTPS_PORT}"
       set_env_value .env "HARPOCRATE_PUBLIC_URL" "$PUBLIC_URL"
     fi
 
@@ -220,11 +257,14 @@ if [ -f ".env" ]; then
   APP_URL="$(awk -F'=' '/^HARPOCRATE_PUBLIC_URL=/ {print $2}' .env | tr -d '\r')"
 fi
 if [ -z "$APP_URL" ]; then
+  # À ce stade les containers tournent : detect_frontend_https_port utilise
+  # directement `docker compose port` → source de vérité runtime.
+  HTTPS_PORT_FINAL="$(detect_frontend_https_port)"
   ETH0_IP_FINAL="$(detect_eth0_ip)"
   if [ -n "$ETH0_IP_FINAL" ]; then
-    APP_URL="http://${ETH0_IP_FINAL}:8080"
+    APP_URL="https://${ETH0_IP_FINAL}:${HTTPS_PORT_FINAL}"
   else
-    APP_URL="http://localhost:8080"
+    APP_URL="https://localhost:${HTTPS_PORT_FINAL}"
   fi
 fi
 

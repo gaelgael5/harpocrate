@@ -144,7 +144,9 @@ curl http://127.0.0.1:8000/v1/health
 # → {"status":"ok"}
 ```
 
-Accès UI : <http://localhost:8080> (ou via reverse-proxy si tu en as un devant).
+Accès UI : `https://<ip-eth0>:8443` (cert auto-signé en dev — accepter
+l'avertissement navigateur). Le port 8080 redirige automatiquement vers HTTPS.
+L'URL exacte est affichée à la fin de `dev-deploy.sh`.
 
 Logs :
 

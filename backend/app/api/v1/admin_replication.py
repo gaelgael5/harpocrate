@@ -14,6 +14,7 @@ Auth : AdminJwt uniquement.
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field
 from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
 from app.db.repositories import replication_strategies as strat_repo
+from app.db.repositories import system_metadata as meta_repo
 from app.services import replication as svc
 from app.services import streaming_replication as streaming_svc
 
@@ -35,9 +37,11 @@ async def list_strategies(admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await strat_repo.list_strategies(conn)
-    return JSONResponse({
-        "strategies": [svc.row_to_dict(r) for r in rows],
-    })
+    return JSONResponse(
+        {
+            "strategies": [svc.row_to_dict(r) for r in rows],
+        }
+    )
 
 
 @router.post(
@@ -107,9 +111,7 @@ async def list_streaming_nodes(admin: AdminJwt) -> JSONResponse:
     status_code=status.HTTP_201_CREATED,
     response_class=JSONResponse,
 )
-async def add_streaming_node(
-    body: AddNodeRequest, admin: AdminJwt
-) -> JSONResponse:
+async def add_streaming_node(body: AddNodeRequest, admin: AdminJwt) -> JSONResponse:
     """Ajoute un standby et retourne le bundle de config (1 fois — le password
     n'est plus jamais ré-affichable après cette réponse)."""
     pool = await get_pool()
@@ -223,9 +225,7 @@ async def reload_pg_hba(admin: AdminJwt) -> JSONResponse:
 # ─── (it2) test-connect / observations / lag-thresholds ────────────────────
 
 
-@router.post(
-    "/streaming/nodes/{node_id}/test-connect", response_class=JSONResponse
-)
+@router.post("/streaming/nodes/{node_id}/test-connect", response_class=JSONResponse)
 async def test_node_connect(node_id: UUID, admin: AdminJwt) -> JSONResponse:
     """Ping TCP du standby host:port. Pas d'auth Postgres testée (le
     password de réplication n'est pas stocké côté Harpocrate).
@@ -245,9 +245,7 @@ async def test_node_connect(node_id: UUID, admin: AdminJwt) -> JSONResponse:
     return JSONResponse(result.to_dict())
 
 
-@router.get(
-    "/streaming/nodes/{node_id}/observations", response_class=JSONResponse
-)
+@router.get("/streaming/nodes/{node_id}/observations", response_class=JSONResponse)
 async def list_node_observations(
     node_id: UUID,
     admin: AdminJwt,
@@ -255,14 +253,14 @@ async def list_node_observations(
 ) -> JSONResponse:
     """Historique des observations d'un node sur les `hours` dernières heures
     (max 168 = 7 jours, la rétention de la table)."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     if hours <= 0 or hours > 168:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "hours must be in (0, 168]"},
         )
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(UTC) - timedelta(hours=hours)
     pool = await get_pool()
     async with pool.acquire() as conn:
         node = await streaming_svc.get_node(conn, node_id)
@@ -271,9 +269,7 @@ async def list_node_observations(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "node_not_found"},
             )
-        rows = await streaming_svc.list_observations(
-            conn, node_id=node_id, since=since
-        )
+        rows = await streaming_svc.list_observations(conn, node_id=node_id, since=since)
     return JSONResponse(
         {
             "node": node.to_dict(),
@@ -303,9 +299,7 @@ async def get_lag_thresholds(admin: AdminJwt) -> JSONResponse:
 
 
 @router.patch("/streaming/lag-thresholds", response_class=JSONResponse)
-async def set_lag_thresholds(
-    body: LagThresholdsBody, admin: AdminJwt
-) -> JSONResponse:
+async def set_lag_thresholds(body: LagThresholdsBody, admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
         try:
@@ -322,6 +316,15 @@ async def set_lag_thresholds(
     return JSONResponse(new.to_dict())
 
 
+@router.get("/standby-of", response_class=JSONResponse)
+async def get_standby_of(admin: AdminJwt) -> JSONResponse:
+    """Retourne l'URL du master si cette instance est asservie, sinon None."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        value = await meta_repo.get_value(conn, "replication.is_standby_of")
+    return JSONResponse({"is_standby_of": value})
+
+
 @router.get("/status", response_class=JSONResponse)
 async def replication_status(admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
@@ -332,7 +335,9 @@ async def replication_status(admin: AdminJwt) -> JSONResponse:
 
     row, strategy = active
     live_status = await strategy.get_status()
-    return JSONResponse({
-        "strategy": svc.row_to_dict(row),
-        "live": live_status,
-    })
+    return JSONResponse(
+        {
+            "strategy": svc.row_to_dict(row),
+            "live": live_status,
+        }
+    )

@@ -1,4 +1,5 @@
 """FastAPI app — lifespan gère le pool asyncpg, JWKS, cluster sync (LOT_21A)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,11 +15,12 @@ from app.api.v1 import (
     admin_backups,
     admin_maintenance,
     admin_remote_backups,
-    admin_scheduled_backups,
     admin_replication,
     admin_replication_sync,
+    admin_scheduled_backups,
     admin_secret_types,
     admin_snapshots,
+    admin_ssh_terminal,
     admin_system,
     api_key_openapi,
     api_keys,
@@ -49,8 +51,8 @@ from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.services import local_admin_bootstrap
 from app.services import replication as replication_svc
-from app.services import seed_types as seed_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
+from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import sync_replication_service as sync_svc
 from app.services import wallets as wallets_svc
@@ -127,6 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ne pas spammer le master.
     async def _replication_refresh_loop() -> None:
         from app.services import streaming_replication as repl_svc
+
         while True:
             await asyncio.sleep(30)
             try:
@@ -140,6 +143,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # LOT réplication itération 2 — purge horaire des observations > 7 jours.
     async def _replication_purge_loop() -> None:
         from app.services import streaming_replication as repl_svc
+
         while True:
             await asyncio.sleep(3600)
             try:
@@ -221,9 +225,8 @@ async def _invalid_secret_path_handler(_request: Request, exc: InvalidSecretPath
 @app.middleware("http")
 async def _cluster_middleware(request: Request, call_next: object) -> Response:
     import typing
-    _call_next = typing.cast(
-        "typing.Callable[[Request], typing.Awaitable[Response]]", call_next
-    )
+
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
     return await cluster_coherence_middleware(request, _call_next)
 
 
@@ -232,9 +235,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
     """Log HTTP requests. Body NEVER read or logged for /secrets paths."""
     import typing
 
-    _call_next = typing.cast(
-        "typing.Callable[[Request], typing.Awaitable[Response]]", call_next
-    )
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
     path = request.url.path
     is_secrets_path = "/secrets" in path
     body_logged = not is_secrets_path
@@ -255,6 +256,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
 
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
+app.include_router(admin_ssh_terminal.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
 app.include_router(admin_scheduled_backups.router, prefix="/v1")
 app.include_router(admin_replication.router, prefix="/v1")

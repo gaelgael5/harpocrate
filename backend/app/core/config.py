@@ -90,6 +90,7 @@ class Settings(BaseSettings):
             return v
         import os
         import socket
+
         return f"{socket.gethostname()}-{os.getpid()}"
 
     # ─── Auth locale (alternative à Keycloak OIDC) ────────────────────────────
@@ -150,13 +151,20 @@ class Settings(BaseSettings):
     recovery_anomaly_threshold: int = Field(default=5, ge=1)
     recovery_anomaly_window_hours: int = Field(default=24, ge=1)
 
+    # ─── SSH terminal admin (LOT 1) ───────────────────────────────────────────
+    # Durée d'inactivité avant fermeture automatique de la session SSH (secondes).
+    # Défaut 30 min ; ajustable sans redémarrage via var d'env.
+    ssh_terminal_idle_timeout_seconds: int = Field(default=1800, ge=60)
+    # Durée de validité d'un code de pairing (LOT 2).
+    pairing_code_ttl_seconds: int = Field(default=600, ge=30)
+    # Nombre max de tentatives de saisie du code de pairing avant invalidation.
+    pairing_max_attempts: int = Field(default=3, ge=1)
+
     @property
     def keycloak_configured(self) -> bool:
         """True si les 3 vars Keycloak sont remplies. Si False, le mode OIDC
         est masqué côté UI et le prefetch JWKS est skippé au boot."""
-        return bool(
-            self.keycloak_url and self.keycloak_realm and self.keycloak_client_id
-        )
+        return bool(self.keycloak_url and self.keycloak_realm and self.keycloak_client_id)
 
     def get_sensitive_fields(self) -> list[str]:
         """Retourne les noms des champs Settings marqués is_secret=True."""

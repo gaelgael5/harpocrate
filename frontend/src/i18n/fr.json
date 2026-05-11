@@ -724,6 +724,13 @@
           "completed": "Appairage terminé. Le standby va répliquer.",
           "expired": "Code expiré. Recommence l'opération.",
           "failed": "L'appairage a échoué."
+        },
+        "becomeStandby": {
+          "title": "Devenir standby d'une autre instance",
+          "subtitle": "Saisis l'URL du master Harpocrate et le code 4 chiffres qu'il t'a transmis.",
+          "masterUrl": "URL du master",
+          "code": "Code 4 chiffres",
+          "submit": "Démarrer l'appairage"
         }
       },
       "streaming": {

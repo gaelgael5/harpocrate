@@ -9,7 +9,7 @@
  * Les stratégies futures (harpocrate_sync, s3_wal) sont listées mais désactivées
  * tant que leur backend n'est pas implémenté.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Stack,
   Title,
@@ -22,32 +22,35 @@ import {
   Alert,
   Table,
   Switch,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { useTranslation } from 'react-i18next'
+  Button,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import {
   fetchReplicationStrategies,
   fetchReplicationStatus,
   activateReplicationStrategy,
   deactivateReplicationStrategy,
-} from '@/lib/adminApi'
-import { ApiError } from '@/lib/api-client'
-import { StreamingNodesPanel } from '@/components/StreamingNodesPanel'
-import { PostgresInfoPanel } from '@/components/PostgresInfoPanel'
+} from "@/lib/adminApi";
+import { ApiError } from "@/lib/api-client";
+import { StreamingNodesPanel } from "@/components/StreamingNodesPanel";
+import { PostgresInfoPanel } from "@/components/PostgresInfoPanel";
 
 function StatusBadge({ status }: { status: string }) {
-  const color = status === 'ok' ? 'green' : status === 'degraded' ? 'orange' : 'red'
-  return <Badge color={color}>{status}</Badge>
+  const color =
+    status === "ok" ? "green" : status === "degraded" ? "orange" : "red";
+  return <Badge color={color}>{status}</Badge>;
 }
 
 function NodesTable({ nodes }: { nodes: Array<Record<string, unknown>> }) {
-  const { t } = useTranslation()
-  if (nodes.length === 0) return null
+  const { t } = useTranslation();
+  if (nodes.length === 0) return null;
   return (
     <Card withBorder>
       <Stack gap="xs">
-        <Title order={5}>{t('admin.replication.nodes')}</Title>
+        <Title order={5}>{t("admin.replication.nodes")}</Title>
         <Table striped>
           <Table.Thead>
             <Table.Tr>
@@ -64,13 +67,13 @@ function NodesTable({ nodes }: { nodes: Array<Record<string, unknown>> }) {
               <Table.Tr key={i}>
                 <Table.Td>
                   <Text size="xs" ff="monospace">
-                    {String(n.url ?? '')}
+                    {String(n.url ?? "")}
                   </Text>
                 </Table.Td>
-                <Table.Td>{String(n.role ?? '—')}</Table.Td>
-                <Table.Td>{String(n.state ?? '—')}</Table.Td>
-                <Table.Td>{String(n.timeline ?? '—')}</Table.Td>
-                <Table.Td>{n.lag != null ? String(n.lag) : '—'}</Table.Td>
+                <Table.Td>{String(n.role ?? "—")}</Table.Td>
+                <Table.Td>{String(n.state ?? "—")}</Table.Td>
+                <Table.Td>{String(n.timeline ?? "—")}</Table.Td>
+                <Table.Td>{n.lag != null ? String(n.lag) : "—"}</Table.Td>
                 <Table.Td>
                   {n.healthy ? (
                     <Badge color="green">✓</Badge>
@@ -84,23 +87,23 @@ function NodesTable({ nodes }: { nodes: Array<Record<string, unknown>> }) {
         </Table>
       </Stack>
     </Card>
-  )
+  );
 }
 
 export function AdminReplicationPage() {
-  const { t } = useTranslation()
-  const qc = useQueryClient()
+  const { t } = useTranslation();
+  const qc = useQueryClient();
 
   const statusQuery = useQuery({
-    queryKey: ['admin-replication-status'],
+    queryKey: ["admin-replication-status"],
     queryFn: fetchReplicationStatus,
     refetchInterval: 15_000,
-  })
+  });
 
   const strategiesQuery = useQuery({
-    queryKey: ['admin-replication-strategies'],
+    queryKey: ["admin-replication-strategies"],
     queryFn: fetchReplicationStrategies,
-  })
+  });
 
   // Multi-actives autorisé : Switch indépendant par stratégie. activate/
   // deactivate sont deux endpoints distincts mais on les unifie ici pour
@@ -109,32 +112,41 @@ export function AdminReplicationPage() {
   const toggleMut = useMutation({
     mutationFn: async (args: { id: string; enable: boolean }) => {
       if (args.enable) {
-        await activateReplicationStrategy(args.id)
+        await activateReplicationStrategy(args.id);
       } else {
-        await deactivateReplicationStrategy(args.id)
+        await deactivateReplicationStrategy(args.id);
       }
     },
     onSuccess: (_data, args) => {
       notifications.show({
-        color: 'green',
+        color: "green",
         message: args.enable
-          ? t('admin.replication.activateSuccess')
-          : t('admin.replication.deactivateSuccess'),
-      })
-      void qc.invalidateQueries({ queryKey: ['admin-replication-status'] })
-      void qc.invalidateQueries({ queryKey: ['admin-replication-strategies'] })
+          ? t("admin.replication.activateSuccess")
+          : t("admin.replication.deactivateSuccess"),
+      });
+      void qc.invalidateQueries({ queryKey: ["admin-replication-status"] });
+      void qc.invalidateQueries({ queryKey: ["admin-replication-strategies"] });
     },
     onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+      const msg = err instanceof ApiError ? err.message : String(err);
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: msg,
+      });
     },
-  })
+  });
 
   return (
     <Stack>
-      <Title order={2}>{t('admin.replication.title')}</Title>
+      <Group justify="space-between">
+        <Title order={2}>{t("admin.replication.title")}</Title>
+        <Button component={Link} to="/admin/become-standby" variant="light">
+          {t("admin.replication.pairing.becomeStandby.title")}
+        </Button>
+      </Group>
       <Text c="dimmed" size="sm">
-        {t('admin.replication.subtitle')}
+        {t("admin.replication.subtitle")}
       </Text>
 
       {/* État temps réel */}
@@ -147,14 +159,14 @@ export function AdminReplicationPage() {
         <Alert color="red">
           {statusQuery.error instanceof ApiError
             ? statusQuery.error.message
-            : t('common.error')}
+            : t("common.error")}
         </Alert>
       )}
       {statusQuery.data && (
         <Card withBorder>
           <Stack>
             <Group justify="space-between">
-              <Title order={4}>{t('admin.replication.activeStrategy')}</Title>
+              <Title order={4}>{t("admin.replication.activeStrategy")}</Title>
               {statusQuery.data.live && (
                 <StatusBadge status={statusQuery.data.live.status} />
               )}
@@ -162,7 +174,7 @@ export function AdminReplicationPage() {
             {statusQuery.data.strategy ? (
               <>
                 <Text>
-                  <strong>{statusQuery.data.strategy.label}</strong>{' '}
+                  <strong>{statusQuery.data.strategy.label}</strong>{" "}
                   <Text span c="dimmed" size="sm">
                     ({statusQuery.data.strategy.type})
                   </Text>
@@ -177,7 +189,9 @@ export function AdminReplicationPage() {
                 )}
               </>
             ) : (
-              <Alert color="orange">{t('admin.replication.noActiveStrategy')}</Alert>
+              <Alert color="orange">
+                {t("admin.replication.noActiveStrategy")}
+              </Alert>
             )}
           </Stack>
         </Card>
@@ -187,9 +201,11 @@ export function AdminReplicationPage() {
       {strategiesQuery.data && (
         <Card withBorder>
           <Stack>
-            <Title order={4}>{t('admin.replication.availableStrategies')}</Title>
+            <Title order={4}>
+              {t("admin.replication.availableStrategies")}
+            </Title>
             <Text size="sm" c="dimmed">
-              {t('admin.replication.multiActiveHint')}
+              {t("admin.replication.multiActiveHint")}
             </Text>
             <Stack gap="md">
               {strategiesQuery.data.strategies.map((s) => (
@@ -200,7 +216,9 @@ export function AdminReplicationPage() {
                         <Text fw={600}>{s.label}</Text>
                         <Badge variant="light">{s.type}</Badge>
                         {!s.enabled && (
-                          <Badge color="gray">{t('admin.replication.disabled')}</Badge>
+                          <Badge color="gray">
+                            {t("admin.replication.disabled")}
+                          </Badge>
                         )}
                       </Group>
                       {s.description && (
@@ -212,8 +230,8 @@ export function AdminReplicationPage() {
                     <Switch
                       label={
                         s.is_active
-                          ? t('admin.replication.active')
-                          : t('admin.replication.inactive')
+                          ? t("admin.replication.active")
+                          : t("admin.replication.inactive")
                       }
                       checked={s.is_active}
                       disabled={!s.enabled || toggleMut.isPending}
@@ -239,5 +257,5 @@ export function AdminReplicationPage() {
       {/* Streaming async — gestion des standby */}
       <StreamingNodesPanel />
     </Stack>
-  )
+  );
 }

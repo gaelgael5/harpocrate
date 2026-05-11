@@ -723,6 +723,13 @@
           "completed": "Pairing complete. The standby will replicate.",
           "expired": "Code expired. Retry the operation.",
           "failed": "Pairing failed."
+        },
+        "becomeStandby": {
+          "title": "Become a standby of another instance",
+          "subtitle": "Enter the URL of the Harpocrate master and the 4-digit code it gave you.",
+          "masterUrl": "Master URL",
+          "code": "4-digit code",
+          "submit": "Start pairing"
         }
       },
       "streaming": {

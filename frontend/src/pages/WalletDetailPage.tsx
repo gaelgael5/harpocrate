@@ -32,6 +32,7 @@ import { invalidateWalletQueries } from '@/lib/walletQueries'
 import { fetchWalletEnvironments } from '@/lib/walletEnvironmentsApi'
 import { FolderTree } from '@/components/FolderTree'
 import { exportWallet } from '@/lib/exportImportApi'
+import { BulkImportSecretsModal } from '@/components/BulkImportSecretsModal'
 import { WalletItemSchema } from '@/schemas/wallets'
 import { type SecretListItem } from '@/schemas/secrets'
 import { useSessionStore } from '@/stores/session'
@@ -189,6 +190,7 @@ export function WalletDetailPage() {
   const queryClient = useQueryClient()
   const currentUser = useSessionStore((s) => s.user)
   const [currentPath, setCurrentPath] = useState('/')
+  const [bulkImportOpen, setBulkImportOpen] = useState(false)
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/wallets/${walletId ?? ''}`),
@@ -424,6 +426,12 @@ export function WalletDetailPage() {
                 {t('apiKeys.apiKeysButton')}
               </Button>
               <Button
+                variant="outline"
+                onClick={() => setBulkImportOpen(true)}
+              >
+                {t('wallets.bulkImport.button')}
+              </Button>
+              <Button
                 onClick={() =>
                   navigate(`/wallets/${walletId ?? ''}/secrets/new`, {
                     state: { prefixPath },
@@ -535,6 +543,21 @@ export function WalletDetailPage() {
           </Group>
         </Tabs.Panel>
       </Tabs>
+
+      <BulkImportSecretsModal
+        walletId={walletId ?? ''}
+        opened={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        onImported={() => {
+          void queryClient.invalidateQueries({ queryKey: ['wallet-tree', walletId] })
+          void queryClient.invalidateQueries({
+            queryKey: ['wallet-secrets-path', walletId],
+          })
+          void queryClient.invalidateQueries({
+            queryKey: ['wallet-secrets-names', walletId],
+          })
+        }}
+      />
     </Stack>
   )
 }

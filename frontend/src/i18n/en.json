@@ -177,6 +177,28 @@
       "success": "Export downloaded",
       "error": "Export error"
     },
+    "bulkImport": {
+      "button": "Bulk import",
+      "title": "Bulk import secrets",
+      "pasteHint": "Paste your content: .env (KEY=VALUE), flat JSON ({\"KEY\":\"value\"}), or Harpocrate format ({\"format\":\"harpocrate-bulk-import\",\"secrets\":[…]}). Format is auto-detected.",
+      "pastePlaceholder": "FOO=bar\nDATABASE_URL=postgres://...\n# or\n{\"FOO\":\"bar\"}",
+      "detected": "Format {{format}} detected — {{count}} secret(s) to import",
+      "next": "Next →",
+      "reviewHint": "Review names and check secrets to import. Conflicts are highlighted in orange — uncheck \"Override\" to keep the existing one.",
+      "colInclude": "Import",
+      "colName": "Name",
+      "colValue": "Value (preview)",
+      "colType": "Type",
+      "colOverride": "Conflict",
+      "colAction": "Action",
+      "colDetail": "Detail",
+      "overrideLabel": "Override",
+      "newSecret": "new",
+      "importBtn": "Import {{count}} secret(s)",
+      "doneTitle": "Import done",
+      "doneMessage": "Created: {{created}} · Updated: {{updated}} · Skipped: {{skipped}} · Failed: {{failed}}",
+      "reportSummary": "Created: {{created}} · Updated: {{updated}} · Skipped: {{skipped}} · Failed: {{failed}}"
+    },
     "import": {
       "button": "Import",
       "title": "Import a vault",

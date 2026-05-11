@@ -178,6 +178,28 @@
       "success": "Export téléchargé",
       "error": "Erreur lors de l'export"
     },
+    "bulkImport": {
+      "button": "Import en masse",
+      "title": "Importer des secrets en masse",
+      "pasteHint": "Colle ton contenu : .env (KEY=VALUE), JSON plat ({\"KEY\":\"value\"}), ou format Harpocrate ({\"format\":\"harpocrate-bulk-import\",\"secrets\":[…]}). Le format est auto-détecté.",
+      "pastePlaceholder": "FOO=bar\nDATABASE_URL=postgres://...\n# ou\n{\"FOO\":\"bar\"}",
+      "detected": "Format {{format}} détecté — {{count}} secret(s) à importer",
+      "next": "Suivant →",
+      "reviewHint": "Vérifie les noms et coche les secrets à importer. Les conflits sont surlignés en orange — décoche « Override » pour conserver l'existant.",
+      "colInclude": "Importer",
+      "colName": "Nom",
+      "colValue": "Valeur (preview)",
+      "colType": "Type",
+      "colOverride": "Conflit",
+      "colAction": "Action",
+      "colDetail": "Détail",
+      "overrideLabel": "Override",
+      "newSecret": "nouveau",
+      "importBtn": "Importer {{count}} secret(s)",
+      "doneTitle": "Import terminé",
+      "doneMessage": "Créés : {{created}} · Mis à jour : {{updated}} · Ignorés : {{skipped}} · Échoués : {{failed}}",
+      "reportSummary": "Créés : {{created}} · Mis à jour : {{updated}} · Ignorés : {{skipped}} · Échoués : {{failed}}"
+    },
     "import": {
       "button": "Importer",
       "title": "Importer un coffre-fort",

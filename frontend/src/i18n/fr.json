@@ -780,6 +780,26 @@
         "thresholdsSaved": "Seuils enregistrés"
       }
     },
+    "ssh": {
+      "credentials": {
+        "title": "Connexion SSH",
+        "subtitle": "Renseigne les identifiants pour ouvrir la session. Ils ne sont jamais enregistrés.",
+        "host": "Hôte",
+        "port": "Port",
+        "username": "Utilisateur",
+        "password": "Mot de passe",
+        "privateKey": "Clé privée (collée)",
+        "passphrase": "Passphrase (optionnelle)",
+        "connect": "Se connecter",
+        "cancel": "Annuler"
+      },
+      "terminal": {
+        "connecting": "Connexion en cours…",
+        "connected": "Connecté",
+        "disconnected": "Déconnecté",
+        "errorGeneric": "Erreur de connexion SSH"
+      }
+    },
     "scheduledBackups": {
       "title": "Sauvegardes planifiées",
       "subtitle": "Lancements cron automatiques. Local seul (aucune connexion sélectionnée) ou avec push vers une connexion distante après création.",

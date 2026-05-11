@@ -779,6 +779,26 @@
         "thresholdsSaved": "Thresholds saved"
       }
     },
+    "ssh": {
+      "credentials": {
+        "title": "SSH Connection",
+        "subtitle": "Enter the credentials to open the session. They are never persisted.",
+        "host": "Host",
+        "port": "Port",
+        "username": "Username",
+        "password": "Password",
+        "privateKey": "Private key (pasted)",
+        "passphrase": "Passphrase (optional)",
+        "connect": "Connect",
+        "cancel": "Cancel"
+      },
+      "terminal": {
+        "connecting": "Connecting…",
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "errorGeneric": "SSH connection error"
+      }
+    },
     "scheduledBackups": {
       "title": "Scheduled backups",
       "subtitle": "Automatic cron-driven runs. Local-only (no connection selected) or with a push to a remote connection after creation.",

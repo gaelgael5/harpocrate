@@ -16,6 +16,7 @@ from app.api.v1 import (
     admin_maintenance,
     admin_remote_backups,
     admin_replication,
+    admin_replication_pairing,
     admin_replication_sync,
     admin_scheduled_backups,
     admin_secret_types,
@@ -260,6 +261,7 @@ app.include_router(admin_ssh_terminal.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
 app.include_router(admin_scheduled_backups.router, prefix="/v1")
 app.include_router(admin_replication.router, prefix="/v1")
+app.include_router(admin_replication_pairing.router, prefix="/v1")
 app.include_router(admin_replication_sync.router, prefix="/v1")
 app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")

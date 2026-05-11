@@ -70,6 +70,12 @@ class PairingConfirmResponse(BaseModel):
     node_id: UUID
 
 
+class PairingAcceptResponse(BaseModel):
+    """B → caller : session locale créée après contact réussi avec A."""
+
+    session_id: UUID
+
+
 class PairingStatusResponse(BaseModel):
     """GET /pairing/{id}/status — état d'une session d'appairage."""
 

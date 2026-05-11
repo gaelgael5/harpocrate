@@ -44,21 +44,34 @@ async def ensure_local_admin_user(pool: asyncpg.Pool) -> None:
     display_name = settings.admin_local_display_name
 
     async with pool.acquire() as conn:
-        existing = await users_repo.get_id_and_is_system_by_email(conn, email)
+        existing = await users_repo.get_id_is_system_sub_by_email(conn, email)
         if existing is not None:
-            user_id, is_system = existing
-            if not is_system:
+            user_id, is_system, keycloak_sub = existing
+            # 3 cas possibles pour une row pré-existante avec ce mail :
+            #
+            #   (a) is_system=TRUE → c'est notre row shell (admin local pas
+            #       encore bootstrappé). On peut continuer (migration douce
+            #       du sub si NULL, voir UPDATE plus bas).
+            #
+            #   (b) is_system=FALSE ET keycloak_sub == LOCAL_ADMIN_KEYCLOAK_SUB
+            #       → c'est notre admin local APRÈS bootstrap (passphrase
+            #       initialisée). Comportement normal post-LOT_56, on passe.
+            #
+            #   (c) is_system=FALSE ET keycloak_sub différent (ou NULL pour
+            #       une raison inconnue) → un VRAI user Keycloak a déjà cet
+            #       email. Conflit réel : refuser pour ne pas écraser son
+            #       compte.
+            if not is_system and keycloak_sub != LOCAL_ADMIN_KEYCLOAK_SUB:
                 raise LocalAdminEmailConflictError(
                     f"local-admin email {email!r} is already used by a real "
-                    "user (is_system=False). Change HARPOCRATE_ADMIN_LOCAL_EMAIL "
-                    "to avoid colliding with a Keycloak account."
+                    f"Keycloak user (keycloak_sub={keycloak_sub!r}). Change "
+                    "HARPOCRATE_ADMIN_LOCAL_EMAIL to avoid colliding."
                 )
-            # Migration douce : les rows créées avant l'unification du sub
-            # local-admin (versions antérieures) avaient keycloak_sub=NULL.
-            # On patche la row pour qu'elle matche le sub du JWT — sinon
-            # `get_by_keycloak_sub("local-admin")` au login retournerait
-            # NULL et bloquerait le bootstrap (404 first_login + 409 conflict
-            # sur unique email).
+            # Migration douce : les rows shell créées avant l'unification
+            # du sub local-admin avaient keycloak_sub=NULL. On patche la row
+            # pour qu'elle matche le sub du JWT — sinon `get_by_keycloak_sub`
+            # au login retournerait NULL et bloquerait le bootstrap.
+            # No-op pour les rows déjà à 'local-admin' (cas b après reboot).
             await conn.execute(
                 """
                 UPDATE users
@@ -72,6 +85,7 @@ async def ensure_local_admin_user(pool: asyncpg.Pool) -> None:
                 "local_admin_user_exists",
                 user_id=str(user_id),
                 email=email,
+                bootstrapped=not is_system,
             )
             return
 

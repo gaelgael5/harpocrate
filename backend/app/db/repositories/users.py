@@ -279,7 +279,12 @@ async def get_id_and_is_system_by_email(
     conn: asyncpg.Connection[asyncpg.Record],
     email: str,
 ) -> tuple[UUID, bool] | None:
-    """Retourne (id, is_system) pour le user avec cet email, ou None."""
+    """Retourne (id, is_system) pour le user avec cet email, ou None.
+
+    Note : utiliser `get_id_is_system_sub_by_email` à la place quand on a
+    aussi besoin du `keycloak_sub` (ex: distinguer un admin local
+    bootstrappé d'un vrai user Keycloak qui aurait piqué l'email).
+    """
     row = await conn.fetchrow(
         "SELECT id, is_system FROM users WHERE email = $1",
         email,
@@ -287,6 +292,25 @@ async def get_id_and_is_system_by_email(
     if row is None:
         return None
     return row["id"], row["is_system"]
+
+
+async def get_id_is_system_sub_by_email(
+    conn: asyncpg.Connection[asyncpg.Record],
+    email: str,
+) -> tuple[UUID, bool, str | None] | None:
+    """Retourne (id, is_system, keycloak_sub) pour le user avec cet email.
+
+    Sert au lifespan local-admin pour distinguer notre admin local
+    bootstrappé (`keycloak_sub == LOCAL_ADMIN_KEYCLOAK_SUB`) d'un vrai
+    user Keycloak qui aurait piqué l'email (`keycloak_sub` différent).
+    """
+    row = await conn.fetchrow(
+        "SELECT id, is_system, keycloak_sub FROM users WHERE email = $1",
+        email,
+    )
+    if row is None:
+        return None
+    return row["id"], row["is_system"], row["keycloak_sub"]
 
 
 async def insert_system_user(

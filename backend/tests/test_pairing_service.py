@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import asyncpg
+import pytest
 
 from app.services import pairing as svc
 
@@ -98,3 +99,121 @@ def test_generate_code_is_4_digits() -> None:
         c = svc._generate_code()
         assert len(c) == 4
         assert c.isdigit()
+
+
+# ─── Tests Task 2.3 — confirm_master + accept_standby ────────────────────────
+
+
+async def test_confirm_master_with_invalid_code_raises(
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    async with real_db_pool.acquire() as conn:
+        with pytest.raises(svc.InvalidCodeError):
+            await svc.confirm_master(
+                conn,
+                code="0000",
+                standby_url="https://b/",
+                actor_user_id=None,
+            )
+
+
+async def test_confirm_master_rate_limits_after_max_attempts(
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Après pairing_max_attempts tentatives, le code valide est refusé."""
+    from app.core.config import settings
+    from app.db.repositories import pairing_sessions as repo
+
+    async with real_db_pool.acquire() as conn:
+        result = await svc.init_master(
+            conn,
+            partner_url="https://b/",
+            actor_user_id=None,
+        )
+        try:
+            for _ in range(settings.pairing_max_attempts):
+                await repo.increment_attempts(conn, result.session_id)
+            with pytest.raises(svc.TooManyAttemptsError):
+                await svc.confirm_master(
+                    conn,
+                    code=result.code,
+                    standby_url="https://b/",
+                    actor_user_id=None,
+                )
+        finally:
+            await conn.execute(
+                "DELETE FROM pairing_session WHERE id = $1",
+                result.session_id,
+            )
+            await conn.execute(
+                "DELETE FROM audit_log WHERE action IN "
+                "('pairing.master_init', 'pairing.failed') "
+                "AND created_at >= now() - interval '1 minute'"
+            )
+
+
+async def test_accept_standby_network_error_raises_pairing_accept_error(
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Si A est injoignable (DNS error, timeout), PairingAcceptError est levée."""
+    async with real_db_pool.acquire() as conn:
+        with pytest.raises(svc.PairingAcceptError):
+            await svc.accept_standby(
+                conn,
+                master_url="https://does-not-exist.invalid",
+                code="1234",
+                self_url="https://b/",
+                actor_user_id=None,
+            )
+
+
+async def test_accept_standby_invalid_code_raises_invalid_code_error(
+    monkeypatch: pytest.MonkeyPatch,
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    """403 de A → InvalidCodeError."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 403
+
+    fake_client = AsyncMock()
+    fake_client.__aenter__.return_value = fake_client
+    fake_client.__aexit__.return_value = None
+    fake_client.post = AsyncMock(return_value=fake_resp)
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda *a, **kw: fake_client)
+
+    async with real_db_pool.acquire() as conn:
+        with pytest.raises(svc.InvalidCodeError):
+            await svc.accept_standby(
+                conn,
+                master_url="https://a/",
+                code="0000",
+                self_url="https://b/",
+                actor_user_id=None,
+            )
+
+
+# ─── Tests unitaires _host_from_url ──────────────────────────────────────────
+
+
+def test_host_from_url_extracts_hostname() -> None:
+    assert svc._host_from_url("https://b.example/") == "b.example"
+
+
+def test_host_from_url_with_port() -> None:
+    assert svc._host_from_url("https://b.example:5443/") == "b.example"
+
+
+def test_host_from_url_with_no_schema() -> None:
+    """urlparse sans schéma ne trouve pas de hostname → raise."""
+    with pytest.raises(svc.PairingAcceptError):
+        svc._host_from_url("b.example")
+
+
+def test_host_from_url_with_empty_string() -> None:
+    with pytest.raises(svc.PairingAcceptError):
+        svc._host_from_url("")

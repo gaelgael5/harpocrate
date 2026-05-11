@@ -48,9 +48,17 @@ async def get_by_keycloak_sub(
     conn: asyncpg.Connection[asyncpg.Record],
     sub: str,
 ) -> UserRow | None:
-    """Retourne l'utilisateur par son keycloak_sub, ou None."""
+    """Retourne l'utilisateur par son keycloak_sub, ou None.
+
+    Filtre les rows shell `is_system=TRUE` : elles n'ont pas de matériel
+    crypto (rsa_public_key, salts, etc. = NULL), donc `_row_to_user`
+    crasherait sur `bytes(None)`. Une row shell signifie "user pas encore
+    bootstrappé" — du point de vue de `get_me`, équivalent à inexistant
+    (le caller renvoie alors 404 first_login → l'UI route vers le
+    bootstrap, qui fera `convert_system_user_to_real`).
+    """
     row = await conn.fetchrow(
-        "SELECT * FROM users WHERE keycloak_sub = $1",
+        "SELECT * FROM users WHERE keycloak_sub = $1 AND is_system = FALSE",
         sub,
     )
     return _row_to_user(row) if row else None
@@ -184,10 +192,16 @@ async def get_crypto(
     conn: asyncpg.Connection[asyncpg.Record],
     sub: str,
 ) -> UserRow | None:
-    """Récupère les blobs crypto d'un utilisateur par son sub."""
+    """Récupère les blobs crypto d'un utilisateur par son sub.
+
+    Filtre `is_system=FALSE` pour la même raison que `get_by_keycloak_sub` :
+    une row shell n'a pas de matériel crypto et `_row_to_user` planterait
+    sur `bytes(None)`. Le caller (typiquement `/v1/me/crypto`) renverra
+    alors 404 first_login.
+    """
     row = await conn.fetchrow(
         """
-        SELECT * FROM users WHERE keycloak_sub = $1
+        SELECT * FROM users WHERE keycloak_sub = $1 AND is_system = FALSE
         """,
         sub,
     )

@@ -159,6 +159,9 @@ class Settings(BaseSettings):
     pairing_code_ttl_seconds: int = Field(default=600, ge=30)
     # Nombre max de tentatives de saisie du code de pairing avant invalidation.
     pairing_max_attempts: int = Field(default=3, ge=1)
+    # Port Postgres annoncé aux standby lors de l'appairage. Doit être joignable
+    # depuis le standby sur l'hôte extrait de public_url. Par convention 5432.
+    replication_advertised_pg_port: int = Field(default=5432, ge=1, le=65535)
 
     @property
     def keycloak_configured(self) -> bool:

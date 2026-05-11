@@ -617,3 +617,13 @@ export async function getStandbyOf(): Promise<{ is_standby_of: string | null }> 
     "/admin/replication/standby-of",
   );
 }
+
+export interface ReplicationSelfInfo {
+  public_url: string;
+  advertised_pg_host: string;
+  advertised_pg_port: number;
+}
+
+export async function getReplicationSelfInfo(): Promise<ReplicationSelfInfo> {
+  return api.get<ReplicationSelfInfo>("/admin/replication/self-info");
+}

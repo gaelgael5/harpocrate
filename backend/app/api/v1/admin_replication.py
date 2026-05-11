@@ -316,6 +316,26 @@ async def set_lag_thresholds(body: LagThresholdsBody, admin: AdminJwt) -> JSONRe
     return JSONResponse(new.to_dict())
 
 
+@router.get("/self-info", response_class=JSONResponse)
+async def get_self_info(admin: AdminJwt) -> JSONResponse:
+    """Retourne les infos publiques à transmettre au pair lors d'un appairage :
+    URL publique du backend Harpocrate, hostname extrait, port Postgres annoncé.
+    """
+    from urllib.parse import urlparse
+
+    from app.core.config import settings
+
+    public_url = settings.public_url
+    hostname = urlparse(public_url).hostname or ""
+    return JSONResponse(
+        {
+            "public_url": public_url,
+            "advertised_pg_host": hostname,
+            "advertised_pg_port": settings.replication_advertised_pg_port,
+        }
+    )
+
+
 @router.get("/standby-of", response_class=JSONResponse)
 async def get_standby_of(admin: AdminJwt) -> JSONResponse:
     """Retourne l'URL du master si cette instance est asservie, sinon None."""

@@ -183,10 +183,13 @@ async def confirm_master(
     if strategy_row is None:
         raise InvalidPairingPreconditionError("no_active_strategy")
 
-    # Récupère les infos Postgres master (addr + port).
-    pg_info = await streaming_svc.get_postgres_info(conn)
-    master_host = pg_info.server_addr or "127.0.0.1"
-    master_port = int(pg_info.settings.get("port", "5432"))
+    # Master host = hostname du public_url de cette instance (l'admin a la
+    # responsabilité que ce host expose aussi Postgres sur le port annoncé).
+    # Master port = setting dédié (défaut 5432).
+    master_host = urlparse(settings.public_url).hostname
+    if not master_host:
+        raise InvalidPairingPreconditionError("public_url_missing_hostname")
+    master_port = settings.replication_advertised_pg_port
 
     # Extrait le hostname du standby depuis son URL.
     standby_host = _host_from_url(standby_url)

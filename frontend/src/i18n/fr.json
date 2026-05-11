@@ -685,6 +685,14 @@
       "activateSuccess": "Stratégie activée",
       "deactivateSuccess": "Stratégie désactivée",
       "nodes": "Nœuds",
+      "selfInfo": {
+        "title": "URL publique de cette instance",
+        "subtitle": "À transmettre au pair lors d'un appairage. Le hostname du backend doit aussi exposer Postgres sur le port annoncé (sinon le standby ne pourra pas se connecter en streaming).",
+        "publicUrl": "URL publique du backend Harpocrate",
+        "pgHost": "Host Postgres annoncé (depuis public_url)",
+        "pgPort": "Port Postgres annoncé",
+        "hostHint": "Si Postgres écoute sur une autre adresse ou un autre port (Cloudflare, port-forward, etc.), ajuste settings.public_url et/ou settings.replication_advertised_pg_port."
+      },
       "postgresInfo": {
         "title": "Paramètres Postgres de cette instance",
         "subtitle": "Lecture seule des paramètres `pg_settings` utiles pour configurer un standby. Copie ces valeurs côté serveur standby pour matcher la config (version, paths, wal_level, …).",

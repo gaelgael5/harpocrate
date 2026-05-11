@@ -37,6 +37,7 @@ import {
 import { ApiError } from "@/lib/api-client";
 import { StreamingNodesPanel } from "@/components/StreamingNodesPanel";
 import { PostgresInfoPanel } from "@/components/PostgresInfoPanel";
+import { PublicUrlPanel } from "@/components/PublicUrlPanel";
 import { useIsStandby } from "@/lib/useIsStandby";
 
 function StatusBadge({ status }: { status: string }) {
@@ -251,6 +252,9 @@ export function AdminReplicationPage() {
           </Stack>
         </Card>
       )}
+
+      {/* URL publique de cette instance — à transmettre au pair pour l'appairage. */}
+      <PublicUrlPanel />
 
       {/* Postgres info — paramètres de l'instance courante (master), à
           copier côté standby pour matcher la config de réplication. */}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseBulkImport } from '@/lib/bulkImportParsers'
+import { parseBulkImport, normalizeKey } from '@/lib/bulkImportParsers'
 
 describe('parseBulkImport — empty input', () => {
   it('rejects empty string', () => {
@@ -58,10 +58,80 @@ BAZ=qux
       expect(r.secrets[0]?.value).toBe('postgres://user:p@host/db?ssl=true')
   })
 
-  it('rejects line without =', () => {
-    const r = parseBulkImport('FOO_BAR_NO_EQ')
+  it('rejects line without separator (no = and no :)', () => {
+    const r = parseBulkImport('FOO_BAR_NO_SEP')
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toContain('line 1')
+  })
+
+  it('accepts colon separator with spaces around', () => {
+    const r = parseBulkImport(
+      'github token llm : FAKE_TOKEN_FOR_TEST_ONLY_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    )
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.secrets[0]?.name).toBe('github_token_llm')
+      expect(r.secrets[0]?.value).toBe(
+        'FAKE_TOKEN_FOR_TEST_ONLY_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      )
+    }
+  })
+
+  it('= takes priority over : (preserves URL with colon in value)', () => {
+    const r = parseBulkImport('URL=postgres://user:p@host/db')
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.secrets[0]?.name).toBe('URL')
+      expect(r.secrets[0]?.value).toBe('postgres://user:p@host/db')
+    }
+  })
+
+  it('normalizes key with weird characters', () => {
+    const r = parseBulkImport('API key (prod)=value123')
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.secrets[0]?.name).toBe('API_key_prod')
+  })
+
+  it('rejects line where key is only whitespace/punctuation', () => {
+    const r = parseBulkImport('@@@: value')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('empty key after normalization')
+  })
+
+  it('mix of = and : lines', () => {
+    const r = parseBulkImport(`
+FOO=bar
+my key : my value
+URL=https://x.com:443
+`)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.secrets).toHaveLength(3)
+      expect(r.secrets[0]).toEqual({ name: 'FOO', value: 'bar' })
+      expect(r.secrets[1]).toEqual({ name: 'my_key', value: 'my value' })
+      expect(r.secrets[2]).toEqual({ name: 'URL', value: 'https://x.com:443' })
+    }
+  })
+})
+
+describe('normalizeKey', () => {
+  it('replaces spaces with _', () => {
+    expect(normalizeKey('github token llm')).toBe('github_token_llm')
+  })
+  it('collapses consecutive _', () => {
+    expect(normalizeKey('foo  bar___baz')).toBe('foo_bar_baz')
+  })
+  it('trims leading/trailing _', () => {
+    expect(normalizeKey('  __key__  ')).toBe('key')
+  })
+  it('preserves dashes and existing underscores', () => {
+    expect(normalizeKey('my-key_v2')).toBe('my-key_v2')
+  })
+  it('strips non-ASCII / emoji', () => {
+    expect(normalizeKey('🔑 secret')).toBe('secret')
+  })
+  it('returns empty for input with only special chars', () => {
+    expect(normalizeKey('@@@!!!')).toBe('')
   })
 })
 

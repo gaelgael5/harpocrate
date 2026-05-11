@@ -120,8 +120,14 @@ function parseJson(json: unknown): ParseResult {
  * Règles :
  *   - lignes vides ignorées
  *   - lignes commençant par `#` (commentaires) ignorées
- *   - format `KEY=VALUE` ; `=` premier sépare le nom de la valeur
- *   - guillemets autour de la valeur (`KEY="value"` ou `KEY='value'`) sont retirés
+ *   - séparateur `=` PRIORITAIRE (format .env standard) ; à défaut `:`
+ *     (format "human" type "key: value"). Cette priorité évite de casser
+ *     les valeurs qui contiennent un `:` (ex: `URL=postgres://user:p@host`).
+ *   - clé et valeur sont trim-ées
+ *   - clé normalisée : caractères hors `[a-zA-Z0-9_-]` → `_`,
+ *     collapse des `_` consécutifs, trim des `_` aux extrémités.
+ *     Permet d'accepter "github token llm" → "github_token_llm".
+ *   - guillemets autour de la valeur (`KEY="value"` ou `KEY='value'`) retirés
  *   - lignes qui ne matchent pas sont signalées (erreur de format → fail global)
  */
 function parseEnv(text: string): ParseResult {
@@ -132,26 +138,58 @@ function parseEnv(text: string): ParseResult {
     const line = raw.trim()
     if (!line || line.startsWith('#')) continue
 
+    // Choix du séparateur : `=` prioritaire, fallback `:`.
     const eqIdx = line.indexOf('=')
-    if (eqIdx <= 0) {
+    const colonIdx = line.indexOf(':')
+    let sepIdx = -1
+    if (eqIdx > 0) sepIdx = eqIdx
+    else if (colonIdx > 0) sepIdx = colonIdx
+
+    if (sepIdx <= 0) {
       return {
         ok: false,
-        error: `line ${i + 1}: invalid format (expected KEY=VALUE, got "${line}")`,
+        error: `line ${i + 1}: invalid format (expected KEY=VALUE or KEY: VALUE, got "${line}")`,
       }
     }
-    const name = line.substring(0, eqIdx).trim()
-    let value = line.substring(eqIdx + 1)
-    // Strip wrapping quotes (mais pas si juste un seul " au début sans fermant)
+    const rawName = line.substring(0, sepIdx).trim()
+    let value = line.substring(sepIdx + 1).trim()
+    // Strip wrapping quotes (mais pas si juste un seul " au début sans fermant).
     if (
       (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
       (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
     ) {
       value = value.substring(1, value.length - 1)
     }
+    const name = normalizeKey(rawName)
+    if (!name) {
+      return {
+        ok: false,
+        error: `line ${i + 1}: empty key after normalization (got "${rawName}")`,
+      }
+    }
     secrets.push({ name, value })
   }
   if (secrets.length === 0) {
-    return { ok: false, error: 'no valid KEY=VALUE lines found' }
+    return { ok: false, error: 'no valid KEY=VALUE or KEY: VALUE lines found' }
   }
   return { ok: true, format: 'env', secrets }
+}
+
+/**
+ * Normalise une clé pour qu'elle soit utilisable comme nom de secret :
+ *   - tout caractère hors `[a-zA-Z0-9_-]` → `_`
+ *   - collapse les `_` consécutifs en un seul
+ *   - trim les `_` aux extrémités
+ *
+ * Exemples :
+ *   "github token llm"   → "github_token_llm"
+ *   "API key (prod)"     → "API_key_prod"
+ *   "  __weird-key__  "  → "weird-key"
+ *   "🔑 secret"          → "secret"
+ */
+export function normalizeKey(raw: string): string {
+  return raw
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
 }

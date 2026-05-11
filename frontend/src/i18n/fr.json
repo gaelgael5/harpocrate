@@ -711,6 +711,21 @@
           "hbaFile": "pg_hba.conf"
         }
       },
+      "pairing": {
+        "addStandby": "Ajouter un standby (assistant)",
+        "modal": {
+          "title": "Appairer un nouveau standby",
+          "step1Hint": "Saisis l'URL publique de l'instance Harpocrate qui deviendra standby de celle-ci.",
+          "partnerUrl": "URL du standby",
+          "generate": "Générer le code d'appairage",
+          "step2Hint": "Communique ce code à l'admin de l'instance standby. Il expire dans {{minutes}} minutes.",
+          "code": "Code",
+          "waiting": "En attente de l'autre instance…",
+          "completed": "Appairage terminé. Le standby va répliquer.",
+          "expired": "Code expiré. Recommence l'opération.",
+          "failed": "L'appairage a échoué."
+        }
+      },
       "streaming": {
         "title": "Streaming async — standby",
         "subtitle": "Liste des serveurs PostgreSQL en réplication streaming. Ajout d'un standby : Harpocrate crée le rôle côté master et vous fournit les commandes à exécuter en SSH côté standby.",

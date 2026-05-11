@@ -710,6 +710,21 @@
           "hbaFile": "pg_hba.conf"
         }
       },
+      "pairing": {
+        "addStandby": "Add a standby (assistant)",
+        "modal": {
+          "title": "Pair a new standby",
+          "step1Hint": "Enter the public URL of the Harpocrate instance that will become a standby of this one.",
+          "partnerUrl": "Standby URL",
+          "generate": "Generate pairing code",
+          "step2Hint": "Share this code with the admin of the standby instance. Expires in {{minutes}} minutes.",
+          "code": "Code",
+          "waiting": "Waiting for the other instance…",
+          "completed": "Pairing complete. The standby will replicate.",
+          "expired": "Code expired. Retry the operation.",
+          "failed": "Pairing failed."
+        }
+      },
       "streaming": {
         "title": "Streaming async — standby",
         "subtitle": "List of PostgreSQL servers in streaming replication. Adding a standby: Harpocrate creates the role on the master and gives you the commands to run via SSH on the standby.",

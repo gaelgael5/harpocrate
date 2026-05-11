@@ -7,8 +7,6 @@ import {
   SystemInfoSchema,
   AdminUsersResponseSchema,
   EnvConfigSchema,
-  S3BackupListResponseSchema,
-  S3PushResultSchema,
   SnapshotPolicySchema,
   SnapshotHistorySchema,
   TriggerResultSchema,
@@ -16,7 +14,6 @@ import {
   SecretTypeDetailSchema,
   ValidateSchemaResponseSchema,
   RemoteBackupConnectionListResponseSchema,
-  RemoteBackupConnectionSchema,
   RemoteBackupTestResponseSchema,
   RemoteBackupPushResultSchema,
   ScheduledBackupListResponseSchema,
@@ -31,15 +28,12 @@ import {
   type SystemInfo,
   type AdminUsersResponse,
   type EnvConfig,
-  type S3BackupListResponse,
-  type S3PushResult,
   type SnapshotPolicy,
   type SnapshotHistory,
   type TriggerResult,
   type SecretTypeListResponse,
   type SecretTypeDetail,
   type ValidateSchemaResponse,
-  type RemoteBackupConnection,
   type RemoteBackupConnectionListResponse,
   type RemoteBackupTestResponse,
   type RemoteBackupPushResult,
@@ -72,11 +66,6 @@ export async function disableMaintenance(): Promise<MaintenanceStatus> {
 export async function fetchBackups(): Promise<BackupListResponse> {
   const raw = await api.get<unknown>('/admin/backups')
   return BackupListResponseSchema.parse(raw)
-}
-
-export async function fetchBackup(id: string): Promise<Backup> {
-  const raw = await api.get<unknown>(`/admin/backups/${id}`)
-  return BackupSchema.parse(raw)
 }
 
 export async function createBackup(body: { description?: string }): Promise<Backup> {
@@ -119,21 +108,6 @@ export async function fetchAdminUsers(params?: {
 export async function fetchEnvConfig(): Promise<EnvConfig> {
   const raw = await api.get<unknown>('/admin/system/env')
   return EnvConfigSchema.parse(raw)
-}
-
-export async function fetchS3Backups(): Promise<S3BackupListResponse> {
-  const raw = await api.get<unknown>('/admin/backups/s3')
-  return S3BackupListResponseSchema.parse(raw)
-}
-
-export async function pushBackupToS3(backupId: string): Promise<S3PushResult> {
-  const raw = await api.post<unknown>(`/admin/backups/${backupId}/push-s3`, {})
-  return S3PushResultSchema.parse(raw)
-}
-
-export async function pullBackupFromS3(s3Key: string): Promise<Backup> {
-  const raw = await api.post<unknown>('/admin/backups/s3/pull', { s3_key: s3Key })
-  return BackupSchema.parse(raw)
 }
 
 export async function fetchSnapshotPolicy(): Promise<SnapshotPolicy> {
@@ -236,11 +210,6 @@ export async function validateJsonSchema(
 export async function fetchRemoteBackupConnections(): Promise<RemoteBackupConnectionListResponse> {
   const raw = await api.get<unknown>('/admin/backup-remotes')
   return RemoteBackupConnectionListResponseSchema.parse(raw)
-}
-
-export async function fetchRemoteBackupConnection(id: string): Promise<RemoteBackupConnection> {
-  const raw = await api.get<unknown>(`/admin/backup-remotes/${id}`)
-  return RemoteBackupConnectionSchema.parse(raw)
 }
 
 export interface RemoteBackupCreatePayload {

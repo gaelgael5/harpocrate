@@ -118,14 +118,6 @@ class Settings(BaseSettings):
     admin_role_name: str = Field(default="harpocrate-admin")
     backup_upload_max_bytes: int = Field(default=1 * 1024 * 1024 * 1024)
 
-    # ─── S3 remote backup (LOT_13) ────────────────────────────────────────────
-    s3_endpoint: str = Field(default="")
-    s3_bucket: str = Field(default="")
-    s3_access_key_id: str = Field(default="", json_schema_extra={"is_secret": True})
-    s3_secret_access_key: str = Field(default="", json_schema_extra={"is_secret": True})
-    s3_region: str = Field(default="us-east-1")
-    s3_key_prefix: str = Field(default="harpocrate-backups/")
-
     # ─── Notifications externes via listmonk (LOT_57) ─────────────────────────
     # Harpocrate ne gère pas l'envoi de mail directement : il déclenche
     # un transactional template listmonk via POST /api/tx. Si la config est
@@ -157,10 +149,6 @@ class Settings(BaseSettings):
     recovery_max_attempts: int = Field(default=3, ge=1)
     recovery_anomaly_threshold: int = Field(default=5, ge=1)
     recovery_anomaly_window_hours: int = Field(default=24, ge=1)
-
-    @property
-    def s3_configured(self) -> bool:
-        return bool(self.s3_bucket and self.s3_access_key_id and self.s3_secret_access_key)
 
     @property
     def keycloak_configured(self) -> bool:

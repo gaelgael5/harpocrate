@@ -79,27 +79,6 @@ export const RestoreResultSchema = z.object({
 
 export type RestoreResult = z.infer<typeof RestoreResultSchema>
 
-export const S3BackupItemSchema = z.object({
-  key: z.string(),
-  size_bytes: z.number(),
-  last_modified: z.string(),
-  etag: z.string(),
-})
-
-export type S3BackupItem = z.infer<typeof S3BackupItemSchema>
-
-export const S3BackupListResponseSchema = z.object({
-  backups: z.array(S3BackupItemSchema),
-})
-
-export type S3BackupListResponse = z.infer<typeof S3BackupListResponseSchema>
-
-export const S3PushResultSchema = z.object({
-  s3_key: z.string(),
-})
-
-export type S3PushResult = z.infer<typeof S3PushResultSchema>
-
 export const GFSRetentionSchema = z.object({
   hourly: z.number().int().min(0),
   daily: z.number().int().min(0),

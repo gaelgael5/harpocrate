@@ -16,7 +16,6 @@ from app.core.logging import logger
 from app.db.pool import get_pool
 from app.db.repositories import backups as backups_repo
 from app.services import backup as backup_svc
-from app.services import backup_s3 as backup_s3_svc
 from app.services import remote_backup_connections as remote_svc
 from app.services.audit import audit_log_insert
 from app.services.remote_backup_providers import (
@@ -101,61 +100,6 @@ async def create_backup(body: CreateBackupBody, admin: AdminJwt) -> JSONResponse
             target_wallet_id=None,
             target_secret_id=None,
             metadata={"backup_id": str(record.id), "filename": record.filename},
-        )
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED,
-        content=_backup_to_dict(record),
-    )
-
-
-# ─── S3 routes — must be before /{backup_id} to avoid UUID parse on "s3" ─────
-
-@router.get("/s3")
-async def list_s3_backups(admin: AdminJwt) -> JSONResponse:
-    """Liste les backups disponibles dans le bucket S3."""
-    try:
-        items = await backup_s3_svc.list_s3_backups()
-    except backup_s3_svc.S3Error as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"error": "s3_list_failed", "message": str(e)},
-        ) from e
-    return JSONResponse({
-        "backups": [
-            {
-                "key": item.key,
-                "size_bytes": item.size_bytes,
-                "last_modified": item.last_modified.isoformat(),
-                "etag": item.etag,
-            }
-            for item in items
-        ]
-    })
-
-
-class S3PullBody(BaseModel):
-    s3_key: str
-
-
-@router.post("/s3/pull", status_code=status.HTTP_201_CREATED)
-async def pull_backup_from_s3(body: S3PullBody, admin: AdminJwt) -> JSONResponse:
-    """Télécharge un backup depuis S3 et l'enregistre localement."""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        try:
-            record = await backup_s3_svc.pull_backup_from_s3(body.s3_key, conn)
-        except backup_s3_svc.S3Error as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={"error": "s3_pull_failed", "message": str(e)},
-            ) from e
-        await audit_log_insert(
-            conn, "admin.backup_pulled_s3",
-            actor_user_id=admin.user_id,
-            actor_ip=None,
-            target_wallet_id=None,
-            target_secret_id=None,
-            metadata={"backup_id": str(record.id), "s3_key": body.s3_key},
         )
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -250,32 +194,6 @@ async def verify_backup(backup_id: UUID, body: VerifyBody, admin: AdminJwt) -> J
         "checksums_match": result.checksums_match,
         "dump_sql_lines": result.dump_sql_lines,
     })
-
-
-@router.post("/{backup_id}/push-s3", status_code=status.HTTP_202_ACCEPTED)
-async def push_backup_to_s3(backup_id: UUID, admin: AdminJwt) -> JSONResponse:
-    """Pousse un backup local vers S3. Requiert s3_configured."""
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        try:
-            s3_key = await backup_s3_svc.push_backup_to_s3(str(backup_id), conn)
-        except backup_s3_svc.S3Error as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={"error": "s3_push_failed", "message": str(e)},
-            ) from e
-        await audit_log_insert(
-            conn, "admin.backup_pushed_s3",
-            actor_user_id=admin.user_id,
-            actor_ip=None,
-            target_wallet_id=None,
-            target_secret_id=None,
-            metadata={"backup_id": str(backup_id), "s3_key": s3_key},
-        )
-    return JSONResponse(
-        status_code=status.HTTP_202_ACCEPTED,
-        content={"s3_key": s3_key},
-    )
 
 
 @router.post(

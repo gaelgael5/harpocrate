@@ -4,7 +4,7 @@
  * Le token n'est jamais re-montré après fermeture de ce modal.
  * L'utilisateur doit confirmer qu'il a sauvegardé le token avant de pouvoir fermer.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 import {
   Modal,
   Code,
@@ -13,108 +13,100 @@ import {
   Stack,
   Alert,
   Checkbox,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { useTranslation } from 'react-i18next'
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useTranslation } from "react-i18next";
 
 interface Props {
-  token: string | null
-  onClose: () => void
+  token: string | null;
+  onClose: () => void;
 }
 
 export function ApiKeyTokenModal({ token, onClose }: Props) {
-  const { t } = useTranslation()
-  const [confirmed, setConfirmed] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const { t } = useTranslation();
+  const [confirmed, setConfirmed] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const isOpen = token !== null
+  const isOpen = token !== null;
 
   // Reset l'état local à chaque changement de token (création d'une 2e API key
   // après en avoir copié une 1re : sans ça, `copied=true` persistait et le
   // bouton affichait directement « Copié ! » sans avoir cliqué).
   useEffect(() => {
     if (token !== null) {
-      setConfirmed(false)
-      setCopied(false)
+      setConfirmed(false);
+      setCopied(false);
     }
-  }, [token])
+  }, [token]);
 
   async function handleCopy() {
-    if (!token) return
+    if (!token) return;
     try {
-      await navigator.clipboard.writeText(token)
-      setCopied(true)
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
       notifications.show({
-        color: 'green',
-        message: t('common.copied'),
-      })
+        color: "green",
+        message: t("common.copied"),
+      });
     } catch {
       notifications.show({
-        color: 'red',
-        message: t('errors.network'),
-      })
+        color: "red",
+        message: t("errors.network"),
+      });
     }
   }
 
   function handleClose() {
-    if (!confirmed && !copied) return
-    setConfirmed(false)
-    setCopied(false)
-    onClose()
+    if (!confirmed && !copied) return;
+    setConfirmed(false);
+    setCopied(false);
+    onClose();
   }
 
-  const canClose = confirmed || copied
+  const canClose = confirmed || copied;
 
   return (
     <Modal
       opened={isOpen}
       onClose={handleClose}
-      title={t('apiKeys.tokenOneShot')}
+      title={t("apiKeys.tokenOneShot")}
       size="lg"
       closeOnClickOutside={false}
       closeOnEscape={false}
     >
       <Stack gap="md">
-        <Alert color="orange" title={t('apiKeys.tokenWarning')}>
-          {t('apiKeys.tokenWarningDetail')}
+        <Alert color="orange" title={t("apiKeys.tokenWarning")}>
+          {t("apiKeys.tokenWarningDetail")}
         </Alert>
 
         <Code
           block
           style={{
-            wordBreak: 'break-all',
-            fontSize: '0.85rem',
-            fontFamily: 'monospace',
-            padding: '1rem',
+            wordBreak: "break-all",
+            fontSize: "0.85rem",
+            fontFamily: "monospace",
+            padding: "1rem",
           }}
         >
-          {token ?? ''}
+          {token ?? ""}
         </Code>
 
-        <Button
-          variant="filled"
-          onClick={() => void handleCopy()}
-          fullWidth
-        >
-          {copied ? t('common.copied') : t('common.copy')}
+        <Button variant="filled" onClick={() => void handleCopy()} fullWidth>
+          {copied ? t("common.copied") : t("common.copy")}
         </Button>
 
         <Checkbox
-          label={t('apiKeys.tokenSavedConfirm')}
+          label={t("apiKeys.tokenSavedConfirm")}
           checked={confirmed}
           onChange={(e) => setConfirmed(e.currentTarget.checked)}
         />
 
         <Group justify="flex-end">
-          <Button
-            variant="outline"
-            disabled={!canClose}
-            onClick={handleClose}
-          >
-            {t('common.close')}
+          <Button variant="outline" disabled={!canClose} onClick={handleClose}>
+            {t("common.close")}
           </Button>
         </Group>
       </Stack>
     </Modal>
-  )
+  );
 }

@@ -1,11 +1,11 @@
 /* Overrides applied after Mantine's defaults */
 
-[data-mantine-color-scheme='light'] {
+[data-mantine-color-scheme="light"] {
   --mantine-color-body: #f8f7f4;
   --mantine-color-default-border: #dedad2;
 }
 
-[data-mantine-color-scheme='dark'] {
+[data-mantine-color-scheme="dark"] {
   --mantine-color-body: #0e0e12;
   --mantine-color-default-border: #2a2a34;
 }

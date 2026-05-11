@@ -6,7 +6,7 @@
  *
  * L'iframe pointe vers `/v1/docs` qui sert le Swagger UI built-in de FastAPI.
  */
-import { Box } from '@mantine/core'
+import { Box } from "@mantine/core";
 
 export function ApiDocsEmbeddedPage() {
   return (
@@ -14,20 +14,20 @@ export function ApiDocsEmbeddedPage() {
       style={{
         // Le Layout principal a son propre padding ; on prend toute la hauteur
         // restante du panel en retirant la marge de la nav top (~60px).
-        height: 'calc(100vh - 80px)',
-        width: '100%',
+        height: "calc(100vh - 80px)",
+        width: "100%",
       }}
     >
       <iframe
         src="/v1/docs"
         title="API Reference"
         style={{
-          border: 'none',
-          width: '100%',
-          height: '100%',
-          display: 'block',
+          border: "none",
+          width: "100%",
+          height: "100%",
+          display: "block",
         }}
       />
     </Box>
-  )
+  );
 }

@@ -2,7 +2,7 @@
  * Zod schemas for /v1/audit-log/* endpoints.
  * Mirror of backend app/models/api/audit_log.py.
  */
-import { z } from 'zod'
+import { z } from "zod";
 
 export const ActorInfoSchema = z.object({
   type: z.string(),
@@ -10,7 +10,7 @@ export const ActorInfoSchema = z.object({
   email: z.string().nullable().optional(),
   display_name: z.string().nullable().optional(),
   name: z.string().nullable().optional(),
-})
+});
 
 export const TargetInfoSchema = z.object({
   wallet_id: z.string().uuid().nullable().optional(),
@@ -18,7 +18,7 @@ export const TargetInfoSchema = z.object({
   secret_id: z.string().uuid().nullable().optional(),
   user_id: z.string().uuid().nullable().optional(),
   api_key_id: z.string().uuid().nullable().optional(),
-})
+});
 
 export const AuditLogItemSchema = z.object({
   id: z.number().int(),
@@ -30,16 +30,16 @@ export const AuditLogItemSchema = z.object({
   success: z.boolean(),
   error_code: z.string().nullable(),
   actor_ip: z.string().nullable(),
-})
+});
 
 export const AuditLogResponseSchema = z.object({
   events: z.array(AuditLogItemSchema),
   next_cursor: z.string().nullable(),
-})
+});
 
 export const AuditLogActionsResponseSchema = z.object({
   actions: z.array(z.string()),
-})
+});
 
-export type AuditLogItem = z.infer<typeof AuditLogItemSchema>
-export type AuditLogResponse = z.infer<typeof AuditLogResponseSchema>
+export type AuditLogItem = z.infer<typeof AuditLogItemSchema>;
+export type AuditLogResponse = z.infer<typeof AuditLogResponseSchema>;

@@ -89,7 +89,11 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     return { type: "data", data: out };
   }
   if (m.type === "error") {
-    return { type: "error", errorCode: m.code ?? "unknown", message: m.message };
+    return {
+      type: "error",
+      errorCode: m.code ?? "unknown",
+      message: m.message,
+    };
   }
   return null;
 }

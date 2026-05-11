@@ -11,7 +11,7 @@
  * Plutôt que d'énumérer chaque clé (et oublier la prochaine qu'on ajoutera), on
  * invalide via predicate sur le walletId.
  */
-import type { QueryClient } from '@tanstack/react-query'
+import type { QueryClient } from "@tanstack/react-query";
 
 export async function invalidateWalletQueries(
   queryClient: QueryClient,
@@ -20,5 +20,5 @@ export async function invalidateWalletQueries(
   await queryClient.invalidateQueries({
     predicate: (query) =>
       query.queryKey.length >= 2 && query.queryKey[1] === walletId,
-  })
+  });
 }

@@ -7,7 +7,10 @@
 
 /** Copy Uint8Array to a plain ArrayBuffer, satisfying WebCrypto's BufferSource type. */
 function toBuffer(arr: Uint8Array): ArrayBuffer {
-  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer
+  return arr.buffer.slice(
+    arr.byteOffset,
+    arr.byteOffset + arr.byteLength,
+  ) as ArrayBuffer;
 }
 
 /**
@@ -19,24 +22,24 @@ export async function aesGcmEncrypt(
   key: Uint8Array,
 ): Promise<Uint8Array> {
   const cryptoKey = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     toBuffer(key),
-    { name: 'AES-GCM' },
+    { name: "AES-GCM" },
     false,
-    ['encrypt'],
-  )
-  const nonce = crypto.getRandomValues(new Uint8Array(12))
+    ["encrypt"],
+  );
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = new Uint8Array(
     await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: nonce },
+      { name: "AES-GCM", iv: nonce },
       cryptoKey,
       toBuffer(plaintext),
     ),
-  )
-  const result = new Uint8Array(nonce.length + ciphertext.length)
-  result.set(nonce, 0)
-  result.set(ciphertext, nonce.length)
-  return result
+  );
+  const result = new Uint8Array(nonce.length + ciphertext.length);
+  result.set(nonce, 0);
+  result.set(ciphertext, nonce.length);
+  return result;
 }
 
 /**
@@ -48,22 +51,22 @@ export async function aesGcmDecrypt(
   key: Uint8Array,
 ): Promise<Uint8Array> {
   if (blob.length < 12 + 16) {
-    throw new Error('AES-GCM blob too short (minimum 28 bytes)')
+    throw new Error("AES-GCM blob too short (minimum 28 bytes)");
   }
   const cryptoKey = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     toBuffer(key),
-    { name: 'AES-GCM' },
+    { name: "AES-GCM" },
     false,
-    ['decrypt'],
-  )
-  const nonce = blob.slice(0, 12)
-  const ciphertext = blob.slice(12)
+    ["decrypt"],
+  );
+  const nonce = blob.slice(0, 12);
+  const ciphertext = blob.slice(12);
   return new Uint8Array(
     await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: nonce },
+      { name: "AES-GCM", iv: nonce },
       cryptoKey,
       toBuffer(ciphertext),
     ),
-  )
+  );
 }

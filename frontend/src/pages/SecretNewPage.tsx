@@ -1,8 +1,8 @@
 /**
  * New secret page — creates a manual secret by encrypting the value with wallet_key.
  */
-import { useState } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useState } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Stack,
   Title,
@@ -16,171 +16,176 @@ import {
   Divider,
   Modal,
   NumberInput,
-} from '@mantine/core'
-import { useForm } from '@mantine/form'
-import { notifications } from '@mantine/notifications'
-import { useTranslation } from 'react-i18next'
-import { useQueryClient, useQuery } from '@tanstack/react-query'
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
+import { useTranslation } from "react-i18next";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 
-import { api, ApiError } from '@/lib/api-client'
-import { aesGcmEncrypt } from '@/crypto/aes-gcm'
-import { rsaOaepDecrypt } from '@/crypto/rsa-oaep'
-import { fromBase64, toBase64, textToBytes } from '@/crypto/helpers'
+import { api, ApiError } from "@/lib/api-client";
+import { aesGcmEncrypt } from "@/crypto/aes-gcm";
+import { rsaOaepDecrypt } from "@/crypto/rsa-oaep";
+import { fromBase64, toBase64, textToBytes } from "@/crypto/helpers";
 import {
   generateSshEd25519Keypair,
   generateTlsServerKeypair,
   generateWireguardKeypair,
-} from '@/crypto/keypair-gen'
-import { useCryptoStore } from '@/stores/crypto'
-import { SecretCreateResponseSchema } from '@/schemas/secrets'
-import { MyGrantResponseSchema } from '@/schemas/grants'
-import { TypedSecretForm } from '@/components/TypedSecretForm'
-import { fetchSecretTypes, fetchSecretType } from '@/lib/adminApi'
+} from "@/crypto/keypair-gen";
+import { useCryptoStore } from "@/stores/crypto";
+import { SecretCreateResponseSchema } from "@/schemas/secrets";
+import { MyGrantResponseSchema } from "@/schemas/grants";
+import { TypedSecretForm } from "@/components/TypedSecretForm";
+import { fetchSecretTypes, fetchSecretType } from "@/lib/adminApi";
 
 interface FormValues {
-  name: string
-  description: string
-  tags: string
-  value: string
+  name: string;
+  description: string;
+  tags: string;
+  value: string;
 }
 
 // Aligné sur backend/app/services/secret_paths.py:validate_secret_name
 // - sans '/' : [A-Za-z0-9_.-]+
 // - avec '/' : segments [a-zA-Z0-9@._-]+, optionnellement '/'-préfixé, pas de '/' final, pas de '//'
-const NAME_RE_ROOT = /^[A-Za-z0-9_.-]+$/
-const NAME_RE_PATH = /^\/?([a-zA-Z0-9@._-]+\/)*[a-zA-Z0-9@._-]+$/
+const NAME_RE_ROOT = /^[A-Za-z0-9_.-]+$/;
+const NAME_RE_PATH = /^\/?([a-zA-Z0-9@._-]+\/)*[a-zA-Z0-9@._-]+$/;
 
 function validateSecretName(name: string): string | null {
-  const stripped = name.trim()
-  if (!stripped) return 'common.required'
-  if (stripped.length > 256) return 'Max 256 characters'
-  if (!stripped.includes('/')) {
-    return NAME_RE_ROOT.test(stripped) ? null : 'secrets.nameHint'
+  const stripped = name.trim();
+  if (!stripped) return "common.required";
+  if (stripped.length > 256) return "Max 256 characters";
+  if (!stripped.includes("/")) {
+    return NAME_RE_ROOT.test(stripped) ? null : "secrets.nameHint";
   }
-  if (stripped.endsWith('/')) return 'secrets.nameTrailingSlash'
-  if (stripped.includes('//')) return 'secrets.nameDoubleSlash'
-  return NAME_RE_PATH.test(stripped) ? null : 'secrets.namePathHint'
+  if (stripped.endsWith("/")) return "secrets.nameTrailingSlash";
+  if (stripped.includes("//")) return "secrets.nameDoubleSlash";
+  return NAME_RE_PATH.test(stripped) ? null : "secrets.namePathHint";
 }
 
 export function SecretNewPage() {
-  const { t } = useTranslation()
-  const { walletId } = useParams<{ walletId: string }>()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const prefixPath = (location.state as { prefixPath?: string } | null)?.prefixPath ?? ''
-  const queryClient = useQueryClient()
-  const rsaPrivateKey = useCryptoStore((s) => s.rsaPrivateKey)
-  const getCachedKey = useCryptoStore((s) => s.getWalletKey)
-  const cacheWalletKey = useCryptoStore((s) => s.cacheWalletKey)
+  const { t } = useTranslation();
+  const { walletId } = useParams<{ walletId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const prefixPath =
+    (location.state as { prefixPath?: string } | null)?.prefixPath ?? "";
+  const queryClient = useQueryClient();
+  const rsaPrivateKey = useCryptoStore((s) => s.rsaPrivateKey);
+  const getCachedKey = useCryptoStore((s) => s.getWalletKey);
+  const cacheWalletKey = useCryptoStore((s) => s.cacheWalletKey);
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [selectedTypeUuid, setSelectedTypeUuid] = useState<string | null>(null)
-  const [selectedVersionUuid, setSelectedVersionUuid] = useState<string | null>(null)
-  const [typedFormData, setTypedFormData] = useState<object>({})
-  const [tlsModalOpen, setTlsModalOpen] = useState(false)
-  const [tlsCommonName, setTlsCommonName] = useState('')
-  const [tlsSans, setTlsSans] = useState('')
-  const [tlsValidityDays, setTlsValidityDays] = useState<number | string>(365)
-  const [tlsKeySize, setTlsKeySize] = useState<'2048' | '3072' | '4096'>('4096')
-  const [tlsGenerating, setTlsGenerating] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [selectedTypeUuid, setSelectedTypeUuid] = useState<string | null>(null);
+  const [selectedVersionUuid, setSelectedVersionUuid] = useState<string | null>(
+    null,
+  );
+  const [typedFormData, setTypedFormData] = useState<object>({});
+  const [tlsModalOpen, setTlsModalOpen] = useState(false);
+  const [tlsCommonName, setTlsCommonName] = useState("");
+  const [tlsSans, setTlsSans] = useState("");
+  const [tlsValidityDays, setTlsValidityDays] = useState<number | string>(365);
+  const [tlsKeySize, setTlsKeySize] = useState<"2048" | "3072" | "4096">(
+    "4096",
+  );
+  const [tlsGenerating, setTlsGenerating] = useState(false);
 
   const { data: typesData } = useQuery({
-    queryKey: ['secret-types-public'],
+    queryKey: ["secret-types-public"],
     queryFn: () => fetchSecretTypes(),
-  })
+  });
 
   const { data: selectedTypeDetail } = useQuery({
-    queryKey: ['secret-type-public', selectedTypeUuid],
+    queryKey: ["secret-type-public", selectedTypeUuid],
     queryFn: () => fetchSecretType(selectedTypeUuid!),
     enabled: !!selectedTypeUuid,
-  })
+  });
 
   const form = useForm<FormValues>({
-    initialValues: { name: prefixPath, description: '', tags: '', value: '' },
+    initialValues: { name: prefixPath, description: "", tags: "", value: "" },
     validate: {
       name: (v) => {
-        const errKey = validateSecretName(v)
-        return errKey ? t(errKey) : null
+        const errKey = validateSecretName(v);
+        return errKey ? t(errKey) : null;
       },
       value: (v) =>
-        !selectedTypeUuid && !v.trim() ? t('common.required') : null,
+        !selectedTypeUuid && !v.trim() ? t("common.required") : null,
     },
-  })
+  });
 
   async function getWalletKey(): Promise<Uint8Array> {
-    const cached = getCachedKey(walletId ?? '')
-    if (cached) return cached
-    if (!rsaPrivateKey) throw new Error(t('errors.cryptoRequired'))
+    const cached = getCachedKey(walletId ?? "");
+    if (cached) return cached;
+    if (!rsaPrivateKey) throw new Error(t("errors.cryptoRequired"));
 
     // Fetch my grant to get encrypted_wallet_key
-    const raw = await api.get<unknown>(`/wallets/${walletId ?? ''}/my-grant`)
-    const grant = MyGrantResponseSchema.parse(raw)
-    const encKey = fromBase64(grant.encrypted_wallet_key)
-    const key = await rsaOaepDecrypt(encKey, rsaPrivateKey)
-    cacheWalletKey(walletId ?? '', key)
-    return key
+    const raw = await api.get<unknown>(`/wallets/${walletId ?? ""}/my-grant`);
+    const grant = MyGrantResponseSchema.parse(raw);
+    const encKey = fromBase64(grant.encrypted_wallet_key);
+    const key = await rsaOaepDecrypt(encKey, rsaPrivateKey);
+    cacheWalletKey(walletId ?? "", key);
+    return key;
   }
 
   async function handleSubmit(values: FormValues) {
     if (!rsaPrivateKey) {
-      setSubmitError(t('errors.cryptoRequired'))
-      return
+      setSubmitError(t("errors.cryptoRequired"));
+      return;
     }
 
-    setIsSubmitting(true)
-    setSubmitError(null)
+    setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
-      const walletKey = await getWalletKey()
+      const walletKey = await getWalletKey();
 
       // Encrypt the value — typed form uses JSON, plain textarea uses raw text
       const rawValue =
         selectedTypeUuid && selectedVersionUuid
           ? JSON.stringify(typedFormData)
-          : values.value
-      const plainBytes = textToBytes(rawValue)
-      const encValue = await aesGcmEncrypt(plainBytes, walletKey)
+          : values.value;
+      const plainBytes = textToBytes(rawValue);
+      const encValue = await aesGcmEncrypt(plainBytes, walletKey);
 
       const tags = values.tags
-        .split(',')
+        .split(",")
         .map((t) => t.trim().toLowerCase())
-        .filter((t) => t.length > 0)
+        .filter((t) => t.length > 0);
 
       const body: Record<string, unknown> = {
         name: values.name.trim(),
         description: values.description.trim() || null,
         tags,
         encrypted_value: toBase64(encValue),
-      }
+      };
 
       if (selectedTypeUuid && selectedVersionUuid) {
-        body.type_uuid = selectedTypeUuid
-        body.schema_version_uuid = selectedVersionUuid
+        body.type_uuid = selectedTypeUuid;
+        body.schema_version_uuid = selectedVersionUuid;
       }
 
       const resp = await api.post<unknown>(
-        `/wallets/${walletId ?? ''}/secrets`,
+        `/wallets/${walletId ?? ""}/secrets`,
         body,
-      )
-      SecretCreateResponseSchema.parse(resp)
+      );
+      SecretCreateResponseSchema.parse(resp);
 
-      await queryClient.invalidateQueries({ queryKey: ['secrets', walletId] })
-      await queryClient.invalidateQueries({ queryKey: ['wallets'] })
+      await queryClient.invalidateQueries({ queryKey: ["secrets", walletId] });
+      await queryClient.invalidateQueries({ queryKey: ["wallets"] });
 
       notifications.show({
-        color: 'green',
-        message: 'Secret created',
-      })
+        color: "green",
+        message: "Secret created",
+      });
 
-      navigate(`/wallets/${walletId ?? ''}`, { replace: true })
+      navigate(`/wallets/${walletId ?? ""}`, { replace: true });
     } catch (err) {
-      let msg = t('errors.serverError')
-      if (err instanceof ApiError) msg = err.message
-      else if (err instanceof Error) msg = err.message
-      setSubmitError(msg)
+      let msg = t("errors.serverError");
+      if (err instanceof ApiError) msg = err.message;
+      else if (err instanceof Error) msg = err.message;
+      setSubmitError(msg);
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
 
@@ -190,122 +195,122 @@ export function SecretNewPage() {
       .map((tp) => ({
         value: tp.type_uuid,
         label: tp.label ?? `${tp.type}/${tp.sous_type}`,
-      })) ?? []
+      })) ?? [];
 
   const versionOptions =
     selectedTypeDetail?.all_versions.map((v) => ({
       value: v.version_uuid,
-      label: `v${v.version}${v.notes ? ` — ${v.notes}` : ''}`,
-    })) ?? []
+      label: `v${v.version}${v.notes ? ` — ${v.notes}` : ""}`,
+    })) ?? [];
 
   const activeSchema = selectedTypeDetail?.all_versions.find(
     (v) => v.version_uuid === selectedVersionUuid,
-  )
+  );
 
   // Sous-type courant — sert à proposer la génération côté navigateur pour
   // les types qui le permettent (LOT certificats).
-  const currentSousType = selectedTypeDetail?.sous_type ?? null
+  const currentSousType = selectedTypeDetail?.sous_type ?? null;
   const supportsClientGen =
-    currentSousType === 'wireguard_peer' || currentSousType === 'ssh_user'
-  const supportsTlsGen = currentSousType === 'tls_server'
+    currentSousType === "wireguard_peer" || currentSousType === "ssh_user";
+  const supportsTlsGen = currentSousType === "tls_server";
 
   async function handleGenerateKeypair() {
     try {
-      if (currentSousType === 'wireguard_peer') {
-        const kp = await generateWireguardKeypair()
+      if (currentSousType === "wireguard_peer") {
+        const kp = await generateWireguardKeypair();
         setTypedFormData({
           ...(typedFormData as Record<string, unknown>),
           private_key: kp.privateKey,
           public_key: kp.publicKey,
-        })
+        });
         notifications.show({
-          color: 'green',
-          message: t('secrets.generate.wireguardSuccess'),
-        })
-      } else if (currentSousType === 'ssh_user') {
+          color: "green",
+          message: t("secrets.generate.wireguardSuccess"),
+        });
+      } else if (currentSousType === "ssh_user") {
         const existingComment =
-          ((typedFormData as Record<string, unknown>).comment as string) ?? ''
-        const kp = await generateSshEd25519Keypair(existingComment)
+          ((typedFormData as Record<string, unknown>).comment as string) ?? "";
+        const kp = await generateSshEd25519Keypair(existingComment);
         setTypedFormData({
           ...(typedFormData as Record<string, unknown>),
-          key_type: 'ed25519',
+          key_type: "ed25519",
           private_key: kp.privateKey,
           public_key: kp.publicKey,
           fingerprint: kp.fingerprint,
-        })
+        });
         notifications.show({
-          color: 'green',
-          message: t('secrets.generate.sshSuccess'),
-        })
+          color: "green",
+          message: t("secrets.generate.sshSuccess"),
+        });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = err instanceof Error ? err.message : String(err);
       notifications.show({
-        color: 'red',
-        title: t('secrets.generate.failed'),
+        color: "red",
+        title: t("secrets.generate.failed"),
         message: msg,
         autoClose: 8000,
-      })
+      });
     }
   }
 
   async function handleGenerateTls() {
     if (!tlsCommonName.trim()) {
-      notifications.show({ color: 'red', message: t('common.required') })
-      return
+      notifications.show({ color: "red", message: t("common.required") });
+      return;
     }
-    setTlsGenerating(true)
+    setTlsGenerating(true);
     try {
       const sansList = tlsSans
         .split(/[\n,]+/)
         .map((s) => s.trim())
-        .filter(Boolean)
+        .filter(Boolean);
       const validity =
-        typeof tlsValidityDays === 'number'
+        typeof tlsValidityDays === "number"
           ? tlsValidityDays
-          : parseInt(String(tlsValidityDays), 10) || 365
+          : parseInt(String(tlsValidityDays), 10) || 365;
       const cert = await generateTlsServerKeypair({
         commonName: tlsCommonName.trim(),
         subjectAlternativeNames: sansList,
         validityDays: validity,
         keySize: parseInt(tlsKeySize, 10) as 2048 | 3072 | 4096,
-      })
+      });
       setTypedFormData({
         ...(typedFormData as Record<string, unknown>),
         common_name: tlsCommonName.trim(),
         subject_alt_names: sansList,
-        issuer: tlsCommonName.trim(),  // auto-signé : issuer = subject
+        issuer: tlsCommonName.trim(), // auto-signé : issuer = subject
         not_before: cert.notBefore,
         not_after: cert.notAfter,
         fingerprint_sha256: cert.fingerprintSha256,
         certificate: cert.certificate,
         private_key: cert.privateKey,
-      })
-      setTlsModalOpen(false)
+      });
+      setTlsModalOpen(false);
       notifications.show({
-        color: 'green',
-        message: t('secrets.generate.tlsSuccess'),
+        color: "green",
+        message: t("secrets.generate.tlsSuccess"),
         autoClose: 6000,
-      })
+      });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = err instanceof Error ? err.message : String(err);
       notifications.show({
-        color: 'red',
-        title: t('secrets.generate.failed'),
+        color: "red",
+        title: t("secrets.generate.failed"),
         message: msg,
         autoClose: 10000,
-      })
+      });
     } finally {
-      setTlsGenerating(false)
+      setTlsGenerating(false);
     }
   }
 
   return (
     <Stack maw={600}>
-      <Title order={2}>{t('secrets.create')}</Title>
+      <Title order={2}>{t("secrets.create")}</Title>
 
       {submitError && (
-        <Alert color="red" title={t('common.error')}>
+        <Alert color="red" title={t("common.error")}>
           {submitError}
         </Alert>
       )}
@@ -313,47 +318,47 @@ export function SecretNewPage() {
       <form onSubmit={form.onSubmit((v) => void handleSubmit(v))}>
         <Stack>
           <TextInput
-            label={t('secrets.name')}
-            placeholder={t('secrets.namePlaceholder')}
-            description={t('secrets.nameHint')}
+            label={t("secrets.name")}
+            placeholder={t("secrets.namePlaceholder")}
+            description={t("secrets.nameHint")}
             required
-            {...form.getInputProps('name')}
+            {...form.getInputProps("name")}
           />
           <Textarea
-            label={t('secrets.description')}
-            {...form.getInputProps('description')}
+            label={t("secrets.description")}
+            {...form.getInputProps("description")}
           />
           <TextInput
-            label={t('wallets.tags')}
+            label={t("wallets.tags")}
             placeholder="prod, api, database"
             description="Comma-separated"
-            {...form.getInputProps('tags')}
+            {...form.getInputProps("tags")}
           />
 
-          <Divider label={t('secrets.typeSection')} labelPosition="left" />
+          <Divider label={t("secrets.typeSection")} labelPosition="left" />
           <Text size="sm" c="dimmed">
-            {t('secrets.typeOptional')}
+            {t("secrets.typeOptional")}
           </Text>
           <Select
-            label={t('secrets.type')}
-            placeholder={t('secrets.typeSelectPlaceholder')}
+            label={t("secrets.type")}
+            placeholder={t("secrets.typeSelectPlaceholder")}
             data={typeOptions}
             value={selectedTypeUuid}
             clearable
             onChange={(v) => {
-              setSelectedTypeUuid(v)
-              setSelectedVersionUuid(null)
-              setTypedFormData({})
+              setSelectedTypeUuid(v);
+              setSelectedVersionUuid(null);
+              setTypedFormData({});
             }}
           />
           {selectedTypeUuid && (
             <Select
-              label={t('secrets.schemaVersion')}
+              label={t("secrets.schemaVersion")}
               data={versionOptions}
               value={selectedVersionUuid}
               onChange={(v) => {
-                setSelectedVersionUuid(v)
-                setTypedFormData({})
+                setSelectedVersionUuid(v);
+                setTypedFormData({});
               }}
             />
           )}
@@ -365,16 +370,16 @@ export function SecretNewPage() {
               {supportsClientGen && (
                 <Alert color="blue" variant="light">
                   <Stack gap="xs">
-                    <Text size="sm">{t('secrets.generate.hint')}</Text>
+                    <Text size="sm">{t("secrets.generate.hint")}</Text>
                     <Group>
                       <Button
                         variant="filled"
                         size="sm"
                         onClick={() => void handleGenerateKeypair()}
                       >
-                        {currentSousType === 'wireguard_peer'
-                          ? t('secrets.generate.wireguardButton')
-                          : t('secrets.generate.sshButton')}
+                        {currentSousType === "wireguard_peer"
+                          ? t("secrets.generate.wireguardButton")
+                          : t("secrets.generate.sshButton")}
                       </Button>
                     </Group>
                   </Stack>
@@ -383,14 +388,14 @@ export function SecretNewPage() {
               {supportsTlsGen && (
                 <Alert color="blue" variant="light">
                   <Stack gap="xs">
-                    <Text size="sm">{t('secrets.generate.tlsHint')}</Text>
+                    <Text size="sm">{t("secrets.generate.tlsHint")}</Text>
                     <Group>
                       <Button
                         variant="filled"
                         size="sm"
                         onClick={() => setTlsModalOpen(true)}
                       >
-                        {t('secrets.generate.tlsButton')}
+                        {t("secrets.generate.tlsButton")}
                       </Button>
                     </Group>
                   </Stack>
@@ -405,20 +410,20 @@ export function SecretNewPage() {
             </Stack>
           ) : (
             <Textarea
-              label={t('secrets.value')}
+              label={t("secrets.value")}
               placeholder="Secret value..."
               required={!selectedTypeUuid}
               minRows={4}
-              {...form.getInputProps('value')}
+              {...form.getInputProps("value")}
             />
           )}
 
           <Group justify="flex-end">
             <Button variant="subtle" onClick={() => navigate(-1)}>
-              {t('common.cancel')}
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={isSubmitting}>
-              {t('common.create')}
+              {t("common.create")}
             </Button>
           </Group>
         </Stack>
@@ -428,64 +433,66 @@ export function SecretNewPage() {
       <Modal
         opened={tlsModalOpen}
         onClose={() => setTlsModalOpen(false)}
-        title={t('secrets.generate.tlsModalTitle')}
+        title={t("secrets.generate.tlsModalTitle")}
         size="lg"
       >
         <Stack>
           <Alert color="orange" variant="light">
-            {t('secrets.generate.tlsModalWarning')}
+            {t("secrets.generate.tlsModalWarning")}
           </Alert>
           <TextInput
-            label={t('secrets.generate.tlsCn')}
-            description={t('secrets.generate.tlsCnHint')}
+            label={t("secrets.generate.tlsCn")}
+            description={t("secrets.generate.tlsCnHint")}
             placeholder="api.example.com"
             required
             value={tlsCommonName}
             onChange={(e) => setTlsCommonName(e.currentTarget.value)}
           />
           <Textarea
-            label={t('secrets.generate.tlsSans')}
-            description={t('secrets.generate.tlsSansHint')}
-            placeholder={'api.example.com\nadmin.example.com\n10.0.0.1'}
+            label={t("secrets.generate.tlsSans")}
+            description={t("secrets.generate.tlsSansHint")}
+            placeholder={"api.example.com\nadmin.example.com\n10.0.0.1"}
             value={tlsSans}
             onChange={(e) => setTlsSans(e.currentTarget.value)}
             minRows={3}
           />
           <Group grow>
             <NumberInput
-              label={t('secrets.generate.tlsValidity')}
-              description={t('secrets.generate.tlsValidityHint')}
+              label={t("secrets.generate.tlsValidity")}
+              description={t("secrets.generate.tlsValidityHint")}
               min={1}
               max={3650}
               value={tlsValidityDays}
               onChange={setTlsValidityDays}
             />
             <Select
-              label={t('secrets.generate.tlsKeySize')}
-              description={t('secrets.generate.tlsKeySizeHint')}
+              label={t("secrets.generate.tlsKeySize")}
+              description={t("secrets.generate.tlsKeySizeHint")}
               data={[
-                { value: '2048', label: '2048 bits' },
-                { value: '3072', label: '3072 bits' },
-                { value: '4096', label: '4096 bits (recommandé)' },
+                { value: "2048", label: "2048 bits" },
+                { value: "3072", label: "3072 bits" },
+                { value: "4096", label: "4096 bits (recommandé)" },
               ]}
               allowDeselect={false}
               value={tlsKeySize}
-              onChange={(v) => setTlsKeySize((v as '2048' | '3072' | '4096') ?? '4096')}
+              onChange={(v) =>
+                setTlsKeySize((v as "2048" | "3072" | "4096") ?? "4096")
+              }
             />
           </Group>
           <Group justify="flex-end">
             <Button variant="subtle" onClick={() => setTlsModalOpen(false)}>
-              {t('common.cancel')}
+              {t("common.cancel")}
             </Button>
             <Button
               loading={tlsGenerating}
               onClick={() => void handleGenerateTls()}
             >
-              {t('secrets.generate.tlsButton')}
+              {t("secrets.generate.tlsButton")}
             </Button>
           </Group>
         </Stack>
       </Modal>
     </Stack>
-  )
+  );
 }

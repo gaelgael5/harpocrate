@@ -10,29 +10,29 @@
  * sinon traité comme B. Si parse JSON KO → tenté comme .env.
  */
 
-export type BulkImportFormat = 'env' | 'json-flat' | 'harpocrate'
+export type BulkImportFormat = "env" | "json-flat" | "harpocrate";
 
 export interface ParsedSecret {
-  name: string
-  value: string
+  name: string;
+  value: string;
 }
 
 export interface ParseSuccess {
-  ok: true
-  format: BulkImportFormat
-  secrets: ParsedSecret[]
+  ok: true;
+  format: BulkImportFormat;
+  secrets: ParsedSecret[];
 }
 
 export interface ParseFailure {
-  ok: false
-  error: string
+  ok: false;
+  error: string;
 }
 
-export type ParseResult = ParseSuccess | ParseFailure
+export type ParseResult = ParseSuccess | ParseFailure;
 
 // Format Harpocrate : enveloppe explicite reconnue par la clé `format`.
 // Permet l'extension future (versioning, métadonnées).
-const HARPOCRATE_FORMAT_TAG = 'harpocrate-bulk-import'
+const HARPOCRATE_FORMAT_TAG = "harpocrate-bulk-import";
 
 /**
  * Auto-détecte le format et parse. Retourne `{ok: false, error}` si
@@ -40,79 +40,84 @@ const HARPOCRATE_FORMAT_TAG = 'harpocrate-bulk-import'
  * KEY=VALUE valides).
  */
 export function parseBulkImport(input: string): ParseResult {
-  const trimmed = input.trim()
+  const trimmed = input.trim();
   if (!trimmed) {
-    return { ok: false, error: 'empty input' }
+    return { ok: false, error: "empty input" };
   }
 
   // 1) Essai JSON
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
-      const json = JSON.parse(trimmed) as unknown
-      return parseJson(json)
+      const json = JSON.parse(trimmed) as unknown;
+      return parseJson(json);
     } catch (e) {
-      return { ok: false, error: `invalid JSON: ${(e as Error).message}` }
+      return { ok: false, error: `invalid JSON: ${(e as Error).message}` };
     }
   }
 
   // 2) Sinon, format .env
-  return parseEnv(trimmed)
+  return parseEnv(trimmed);
 }
 
 /**
  * Parse un objet JSON. Détecte format Harpocrate vs flat.
  */
 function parseJson(json: unknown): ParseResult {
-  if (typeof json !== 'object' || json === null || Array.isArray(json)) {
+  if (typeof json !== "object" || json === null || Array.isArray(json)) {
     return {
       ok: false,
-      error: 'JSON must be an object (either flat key/value or Harpocrate format)',
-    }
+      error:
+        "JSON must be an object (either flat key/value or Harpocrate format)",
+    };
   }
-  const obj = json as Record<string, unknown>
+  const obj = json as Record<string, unknown>;
 
   // Format Harpocrate
-  if (obj['format'] === HARPOCRATE_FORMAT_TAG) {
-    if (!Array.isArray(obj['secrets'])) {
+  if (obj["format"] === HARPOCRATE_FORMAT_TAG) {
+    if (!Array.isArray(obj["secrets"])) {
       return {
         ok: false,
-        error: 'Harpocrate format: missing or invalid `secrets` array',
-      }
+        error: "Harpocrate format: missing or invalid `secrets` array",
+      };
     }
-    const secrets: ParsedSecret[] = []
-    for (const item of obj['secrets']) {
-      if (typeof item !== 'object' || item === null) {
-        return { ok: false, error: 'Harpocrate format: each secret must be an object' }
+    const secrets: ParsedSecret[] = [];
+    for (const item of obj["secrets"]) {
+      if (typeof item !== "object" || item === null) {
+        return {
+          ok: false,
+          error: "Harpocrate format: each secret must be an object",
+        };
       }
-      const s = item as Record<string, unknown>
-      const name = typeof s['name'] === 'string' ? s['name'] : null
-      const value = typeof s['value'] === 'string' ? s['value'] : null
+      const s = item as Record<string, unknown>;
+      const name = typeof s["name"] === "string" ? s["name"] : null;
+      const value = typeof s["value"] === "string" ? s["value"] : null;
       if (!name || value === null) {
         return {
           ok: false,
-          error: 'Harpocrate format: each secret needs `name` (string) and `value` (string)',
-        }
+          error:
+            "Harpocrate format: each secret needs `name` (string) and `value` (string)",
+        };
       }
-      secrets.push({ name, value })
+      secrets.push({ name, value });
     }
-    return { ok: true, format: 'harpocrate', secrets }
+    return { ok: true, format: "harpocrate", secrets };
   }
 
   // Format flat : {key: value, ...}
-  const secrets: ParsedSecret[] = []
+  const secrets: ParsedSecret[] = [];
   for (const [name, value] of Object.entries(obj)) {
-    if (typeof value !== 'string') {
+    if (typeof value !== "string") {
       return {
         ok: false,
         error: `flat JSON: value for key "${name}" must be a string (got ${typeof value})`,
-      }
+      };
     }
-    secrets.push({ name, value })
+    secrets.push({ name, value });
   }
   if (secrets.length === 0) {
-    return { ok: false, error: 'flat JSON: empty object, nothing to import' }
+    return { ok: false, error: "flat JSON: empty object, nothing to import" };
   }
-  return { ok: true, format: 'json-flat', secrets }
+  return { ok: true, format: "json-flat", secrets };
 }
 
 /**
@@ -131,48 +136,48 @@ function parseJson(json: unknown): ParseResult {
  *   - lignes qui ne matchent pas sont signalées (erreur de format → fail global)
  */
 function parseEnv(text: string): ParseResult {
-  const secrets: ParsedSecret[] = []
-  const lines = text.split(/\r?\n/)
+  const secrets: ParsedSecret[] = [];
+  const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i] ?? ''
-    const line = raw.trim()
-    if (!line || line.startsWith('#')) continue
+    const raw = lines[i] ?? "";
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
 
     // Choix du séparateur : `=` prioritaire, fallback `:`.
-    const eqIdx = line.indexOf('=')
-    const colonIdx = line.indexOf(':')
-    let sepIdx = -1
-    if (eqIdx > 0) sepIdx = eqIdx
-    else if (colonIdx > 0) sepIdx = colonIdx
+    const eqIdx = line.indexOf("=");
+    const colonIdx = line.indexOf(":");
+    let sepIdx = -1;
+    if (eqIdx > 0) sepIdx = eqIdx;
+    else if (colonIdx > 0) sepIdx = colonIdx;
 
     if (sepIdx <= 0) {
       return {
         ok: false,
         error: `line ${i + 1}: invalid format (expected KEY=VALUE or KEY: VALUE, got "${line}")`,
-      }
+      };
     }
-    const rawName = line.substring(0, sepIdx).trim()
-    let value = line.substring(sepIdx + 1).trim()
+    const rawName = line.substring(0, sepIdx).trim();
+    let value = line.substring(sepIdx + 1).trim();
     // Strip wrapping quotes (mais pas si juste un seul " au début sans fermant).
     if (
       (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
       (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
     ) {
-      value = value.substring(1, value.length - 1)
+      value = value.substring(1, value.length - 1);
     }
-    const name = normalizeKey(rawName)
+    const name = normalizeKey(rawName);
     if (!name) {
       return {
         ok: false,
         error: `line ${i + 1}: empty key after normalization (got "${rawName}")`,
-      }
+      };
     }
-    secrets.push({ name, value })
+    secrets.push({ name, value });
   }
   if (secrets.length === 0) {
-    return { ok: false, error: 'no valid KEY=VALUE or KEY: VALUE lines found' }
+    return { ok: false, error: "no valid KEY=VALUE or KEY: VALUE lines found" };
   }
-  return { ok: true, format: 'env', secrets }
+  return { ok: true, format: "env", secrets };
 }
 
 /**
@@ -189,7 +194,7 @@ function parseEnv(text: string): ParseResult {
  */
 export function normalizeKey(raw: string): string {
   return raw
-    .replace(/[^a-zA-Z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }

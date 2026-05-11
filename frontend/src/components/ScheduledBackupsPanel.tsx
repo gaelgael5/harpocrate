@@ -9,8 +9,8 @@
  * supprimé : on affiche alors une bannière orange sur le planning concerné
  * pour avertir l'admin que le push n'aura plus lieu.
  */
-import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   Badge,
@@ -28,12 +28,12 @@ import {
   TextInput,
   Textarea,
   Title,
-} from '@mantine/core'
-import { useForm } from '@mantine/form'
-import { modals } from '@mantine/modals'
-import { notifications } from '@mantine/notifications'
-import dayjs from 'dayjs'
-import { useTranslation } from 'react-i18next'
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { modals } from "@mantine/modals";
+import { notifications } from "@mantine/notifications";
+import dayjs from "dayjs";
+import { useTranslation } from "react-i18next";
 
 import {
   createScheduledBackup,
@@ -45,124 +45,136 @@ import {
   validateCronExpression,
   type ScheduledBackupCreatePayload,
   type ScheduledBackupPatchPayload,
-} from '@/lib/adminApi'
-import { ApiError } from '@/lib/api-client'
-import type { ScheduledBackup } from '@/schemas/admin'
+} from "@/lib/adminApi";
+import { ApiError } from "@/lib/api-client";
+import type { ScheduledBackup } from "@/schemas/admin";
 
-const MISS_THRESHOLD_OPTIONS = [5, 10, 20, 30, 60] as const
+const MISS_THRESHOLD_OPTIONS = [5, 10, 20, 30, 60] as const;
 
 interface CronPreset {
-  label: string
-  expression: string
+  label: string;
+  expression: string;
 }
 
 // Les 4 presets sont des points de départ. L'admin peut éditer librement
 // ensuite, le champ est libre.
 const CRON_PRESETS: CronPreset[] = [
-  { label: 'daily02', expression: '0 2 * * *' },
-  { label: 'weekly', expression: '0 3 * * 0' },
-  { label: 'monthly', expression: '0 4 1 * *' },
-  { label: 'hourly', expression: '0 * * * *' },
-]
+  { label: "daily02", expression: "0 2 * * *" },
+  { label: "weekly", expression: "0 3 * * 0" },
+  { label: "monthly", expression: "0 4 1 * *" },
+  { label: "hourly", expression: "0 * * * *" },
+];
 
 export function ScheduledBackupsPanel() {
-  const { t } = useTranslation()
-  const qc = useQueryClient()
-  const [editTarget, setEditTarget] = useState<ScheduledBackup | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const [editTarget, setEditTarget] = useState<ScheduledBackup | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['admin-scheduled-backups'],
+    queryKey: ["admin-scheduled-backups"],
     queryFn: fetchScheduledBackups,
-  })
+  });
 
   const deleteMut = useMutation({
     mutationFn: deleteScheduledBackup,
     onSuccess: () => {
-      notifications.show({ color: 'green', message: t('admin.scheduledBackups.deleteSuccess') })
-      void qc.invalidateQueries({ queryKey: ['admin-scheduled-backups'] })
+      notifications.show({
+        color: "green",
+        message: t("admin.scheduledBackups.deleteSuccess"),
+      });
+      void qc.invalidateQueries({ queryKey: ["admin-scheduled-backups"] });
     },
     onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+      const msg = err instanceof ApiError ? err.message : String(err);
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: msg,
+      });
     },
-  })
+  });
 
   const toggleMut = useMutation({
     mutationFn: (args: { id: string; enabled: boolean }) =>
       updateScheduledBackup(args.id, { enabled: args.enabled }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['admin-scheduled-backups'] })
+      void qc.invalidateQueries({ queryKey: ["admin-scheduled-backups"] });
     },
     onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+      const msg = err instanceof ApiError ? err.message : String(err);
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: msg,
+      });
     },
-  })
+  });
 
   const runNowMut = useMutation({
     mutationFn: runScheduledBackupNow,
     onSuccess: (result) => {
-      if (result.status === 'ok') {
+      if (result.status === "ok") {
         notifications.show({
-          color: 'green',
-          message: t('admin.scheduledBackups.runNowSuccess'),
-        })
-      } else if (result.status === 'skipped') {
+          color: "green",
+          message: t("admin.scheduledBackups.runNowSuccess"),
+        });
+      } else if (result.status === "skipped") {
         // Skip n'est pas une erreur — c'est un comportement attendu (DB
         // inchangée depuis le dernier backup). Toast bleu informatif.
         notifications.show({
-          color: 'blue',
-          title: t('admin.scheduledBackups.runNowSkippedTitle'),
-          message: result.error ?? t('admin.scheduledBackups.runNowSkippedDefault'),
+          color: "blue",
+          title: t("admin.scheduledBackups.runNowSkippedTitle"),
+          message:
+            result.error ?? t("admin.scheduledBackups.runNowSkippedDefault"),
           autoClose: 6000,
-        })
+        });
       } else {
         notifications.show({
-          color: 'red',
-          title: t('admin.scheduledBackups.runNowFailed'),
-          message: result.error ?? t('common.error'),
+          color: "red",
+          title: t("admin.scheduledBackups.runNowFailed"),
+          message: result.error ?? t("common.error"),
           autoClose: 8000,
-        })
+        });
       }
-      void qc.invalidateQueries({ queryKey: ['admin-scheduled-backups'] })
+      void qc.invalidateQueries({ queryKey: ["admin-scheduled-backups"] });
       // L'écran "Fichiers" doit aussi se rafraîchir si un backup vient d'être créé.
-      void qc.invalidateQueries({ queryKey: ['admin-backups'] })
+      void qc.invalidateQueries({ queryKey: ["admin-backups"] });
     },
-  })
+  });
 
   function confirmDelete(s: ScheduledBackup) {
     modals.openConfirmModal({
-      title: t('admin.scheduledBackups.deleteConfirmTitle'),
+      title: t("admin.scheduledBackups.deleteConfirmTitle"),
       children: (
         <Text size="sm">
-          {t('admin.scheduledBackups.deleteConfirmDesc', { name: s.name })}
+          {t("admin.scheduledBackups.deleteConfirmDesc", { name: s.name })}
         </Text>
       ),
-      labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
-      confirmProps: { color: 'red' },
+      labels: { confirm: t("common.delete"), cancel: t("common.cancel") },
+      confirmProps: { color: "red" },
       onConfirm: () => deleteMut.mutate(s.id),
-    })
+    });
   }
 
   return (
     <Card withBorder>
       <Stack>
         <Group justify="space-between">
-          <Title order={4}>{t('admin.scheduledBackups.title')}</Title>
+          <Title order={4}>{t("admin.scheduledBackups.title")}</Title>
           <Button
             size="xs"
             onClick={() => {
-              setEditTarget(null)
-              setModalOpen(true)
+              setEditTarget(null);
+              setModalOpen(true);
             }}
           >
-            {t('admin.scheduledBackups.add')}
+            {t("admin.scheduledBackups.add")}
           </Button>
         </Group>
 
         <Text c="dimmed" size="sm">
-          {t('admin.scheduledBackups.subtitle')}
+          {t("admin.scheduledBackups.subtitle")}
         </Text>
 
         {isLoading && (
@@ -172,13 +184,13 @@ export function ScheduledBackupsPanel() {
         )}
         {error && (
           <Alert color="red">
-            {error instanceof ApiError ? error.message : t('common.error')}
+            {error instanceof ApiError ? error.message : t("common.error")}
           </Alert>
         )}
 
         {!isLoading && !error && (data?.schedules.length ?? 0) === 0 && (
           <Alert color="blue" variant="light">
-            {t('admin.scheduledBackups.empty')}
+            {t("admin.scheduledBackups.empty")}
           </Alert>
         )}
 
@@ -186,11 +198,11 @@ export function ScheduledBackupsPanel() {
           <Table highlightOnHover>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>{t('admin.scheduledBackups.colName')}</Table.Th>
-                <Table.Th>{t('admin.scheduledBackups.colCron')}</Table.Th>
-                <Table.Th>{t('admin.scheduledBackups.colTarget')}</Table.Th>
-                <Table.Th>{t('admin.scheduledBackups.colNextRun')}</Table.Th>
-                <Table.Th>{t('admin.scheduledBackups.colLastRun')}</Table.Th>
+                <Table.Th>{t("admin.scheduledBackups.colName")}</Table.Th>
+                <Table.Th>{t("admin.scheduledBackups.colCron")}</Table.Th>
+                <Table.Th>{t("admin.scheduledBackups.colTarget")}</Table.Th>
+                <Table.Th>{t("admin.scheduledBackups.colNextRun")}</Table.Th>
+                <Table.Th>{t("admin.scheduledBackups.colLastRun")}</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -200,10 +212,12 @@ export function ScheduledBackupsPanel() {
                   key={s.id}
                   schedule={s}
                   onEdit={() => {
-                    setEditTarget(s)
-                    setModalOpen(true)
+                    setEditTarget(s);
+                    setModalOpen(true);
                   }}
-                  onToggle={(enabled) => toggleMut.mutate({ id: s.id, enabled })}
+                  onToggle={(enabled) =>
+                    toggleMut.mutate({ id: s.id, enabled })
+                  }
                   onRunNow={() => runNowMut.mutate(s.id)}
                   onDelete={() => confirmDelete(s)}
                   runningId={runNowMut.isPending ? runNowMut.variables : null}
@@ -214,22 +228,24 @@ export function ScheduledBackupsPanel() {
         )}
 
         <ScheduleFormModal
-          key={editTarget?.id ?? 'create'}
+          key={editTarget?.id ?? "create"}
           opened={modalOpen}
           onClose={() => {
-            setModalOpen(false)
-            setEditTarget(null)
+            setModalOpen(false);
+            setEditTarget(null);
           }}
           editTarget={editTarget}
           onSaved={() => {
-            setModalOpen(false)
-            setEditTarget(null)
-            void qc.invalidateQueries({ queryKey: ['admin-scheduled-backups'] })
+            setModalOpen(false);
+            setEditTarget(null);
+            void qc.invalidateQueries({
+              queryKey: ["admin-scheduled-backups"],
+            });
           }}
         />
       </Stack>
     </Card>
-  )
+  );
 }
 
 function ScheduleRow({
@@ -240,46 +256,46 @@ function ScheduleRow({
   onDelete,
   runningId,
 }: {
-  schedule: ScheduledBackup
-  onEdit: () => void
-  onToggle: (enabled: boolean) => void
-  onRunNow: () => void
-  onDelete: () => void
-  runningId: string | null | undefined
+  schedule: ScheduledBackup;
+  onEdit: () => void;
+  onToggle: (enabled: boolean) => void;
+  onRunNow: () => void;
+  onDelete: () => void;
+  runningId: string | null | undefined;
 }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   const target =
     schedule.remote_id_disconnected_at !== null && schedule.remote_id === null
-      ? t('admin.scheduledBackups.targetDisconnected')
+      ? t("admin.scheduledBackups.targetDisconnected")
       : schedule.remote_id === null
-        ? t('admin.scheduledBackups.targetLocal')
-        : `→ ${schedule.remote_id.substring(0, 8)}…`
-  const nextRun = dayjs(schedule.next_run_at).format('YYYY-MM-DD HH:mm')
+        ? t("admin.scheduledBackups.targetLocal")
+        : `→ ${schedule.remote_id.substring(0, 8)}…`;
+  const nextRun = dayjs(schedule.next_run_at).format("YYYY-MM-DD HH:mm");
   const lastRunLabel = (() => {
-    if (!schedule.last_run_at) return t('admin.scheduledBackups.lastRunNever')
-    const ts = dayjs(schedule.last_run_at).format('YYYY-MM-DD HH:mm')
-    if (schedule.last_run_status === 'ok') return `✓ ${ts}`
-    if (schedule.last_run_status === 'skipped') return `○ ${ts}`
-    return `✗ ${ts}`
-  })()
+    if (!schedule.last_run_at) return t("admin.scheduledBackups.lastRunNever");
+    const ts = dayjs(schedule.last_run_at).format("YYYY-MM-DD HH:mm");
+    if (schedule.last_run_status === "ok") return `✓ ${ts}`;
+    if (schedule.last_run_status === "skipped") return `○ ${ts}`;
+    return `✗ ${ts}`;
+  })();
   // Couleur du dernier run :
   //   - 'failed'   → rouge (problème)
   //   - 'skipped'  → gris (normal — DB inchangée, on n'a rien à backup)
   //   - 'ok' / null → dimmed
   const lastRunColor =
-    schedule.last_run_status === 'failed'
-      ? 'red'
-      : schedule.last_run_status === 'skipped'
-        ? 'gray'
-        : 'dimmed'
+    schedule.last_run_status === "failed"
+      ? "red"
+      : schedule.last_run_status === "skipped"
+        ? "gray"
+        : "dimmed";
   // Tooltip plus explicite pour skipped : on affiche la raison renvoyée par
   // le backend (ex: "no changes since last backup completed at ...").
   const lastRunTooltip =
-    schedule.last_run_status === 'skipped'
-      ? t('admin.scheduledBackups.skippedTooltip', {
-          reason: schedule.last_run_error ?? '',
+    schedule.last_run_status === "skipped"
+      ? t("admin.scheduledBackups.skippedTooltip", {
+          reason: schedule.last_run_error ?? "",
         })
-      : (schedule.last_run_error ?? undefined)
+      : (schedule.last_run_error ?? undefined);
 
   return (
     <>
@@ -290,7 +306,7 @@ function ScheduleRow({
               <Text fw={500}>{schedule.name}</Text>
               {!schedule.enabled && (
                 <Badge size="xs" color="gray">
-                  {t('admin.scheduledBackups.disabled')}
+                  {t("admin.scheduledBackups.disabled")}
                 </Badge>
               )}
             </Group>
@@ -315,11 +331,7 @@ function ScheduleRow({
           </Text>
         </Table.Td>
         <Table.Td>
-          <Text
-            size="xs"
-            c={lastRunColor}
-            title={lastRunTooltip}
-          >
+          <Text size="xs" c={lastRunColor} title={lastRunTooltip}>
             {lastRunLabel}
           </Text>
         </Table.Td>
@@ -336,39 +348,42 @@ function ScheduleRow({
               loading={runningId === schedule.id}
               onClick={onRunNow}
             >
-              {t('admin.scheduledBackups.runNow')}
+              {t("admin.scheduledBackups.runNow")}
             </Button>
             <Button size="xs" variant="subtle" onClick={onEdit}>
-              {t('common.edit')}
+              {t("common.edit")}
             </Button>
             <Button size="xs" variant="subtle" color="red" onClick={onDelete}>
-              {t('common.delete')}
+              {t("common.delete")}
             </Button>
           </Group>
         </Table.Td>
       </Table.Tr>
-      {schedule.remote_id_disconnected_at !== null && schedule.remote_id === null && (
-        <Table.Tr>
-          <Table.Td colSpan={6}>
-            <Alert color="orange" variant="light">
-              {t('admin.scheduledBackups.remoteDisconnectedWarning', {
-                date: dayjs(schedule.remote_id_disconnected_at).format('YYYY-MM-DD HH:mm'),
-              })}
-            </Alert>
-          </Table.Td>
-        </Table.Tr>
-      )}
+      {schedule.remote_id_disconnected_at !== null &&
+        schedule.remote_id === null && (
+          <Table.Tr>
+            <Table.Td colSpan={6}>
+              <Alert color="orange" variant="light">
+                {t("admin.scheduledBackups.remoteDisconnectedWarning", {
+                  date: dayjs(schedule.remote_id_disconnected_at).format(
+                    "YYYY-MM-DD HH:mm",
+                  ),
+                })}
+              </Alert>
+            </Table.Td>
+          </Table.Tr>
+        )}
     </>
-  )
+  );
 }
 
 interface FormValues {
-  name: string
-  cron_expression: string
-  remote_id: string | null
-  miss_threshold_minutes: number
-  description: string
-  enabled: boolean
+  name: string;
+  cron_expression: string;
+  remote_id: string | null;
+  miss_threshold_minutes: number;
+  description: string;
+  enabled: boolean;
 }
 
 function ScheduleFormModal({
@@ -377,13 +392,13 @@ function ScheduleFormModal({
   editTarget,
   onSaved,
 }: {
-  opened: boolean
-  onClose: () => void
-  editTarget: ScheduledBackup | null
-  onSaved: () => void
+  opened: boolean;
+  onClose: () => void;
+  editTarget: ScheduledBackup | null;
+  onSaved: () => void;
 }) {
-  const { t } = useTranslation()
-  const isEditing = editTarget !== null
+  const { t } = useTranslation();
+  const isEditing = editTarget !== null;
 
   const form = useForm<FormValues>({
     initialValues: editTarget
@@ -392,103 +407,123 @@ function ScheduleFormModal({
           cron_expression: editTarget.cron_expression,
           remote_id: editTarget.remote_id,
           miss_threshold_minutes: editTarget.miss_threshold_minutes,
-          description: editTarget.description ?? '',
+          description: editTarget.description ?? "",
           enabled: editTarget.enabled,
         }
       : {
-          name: '',
-          cron_expression: '0 2 * * *',
+          name: "",
+          cron_expression: "0 2 * * *",
           remote_id: null,
           miss_threshold_minutes: 5,
-          description: '',
+          description: "",
           enabled: true,
         },
     validate: {
-      name: (v) => (!v.trim() ? t('common.required') : null),
-      cron_expression: (v) => (!v.trim() ? t('common.required') : null),
+      name: (v) => (!v.trim() ? t("common.required") : null),
+      cron_expression: (v) => (!v.trim() ? t("common.required") : null),
     },
-  })
+  });
 
   // Liste des connexions remote candidates (filtrée sur celles avec remote_path_full).
   const { data: remotes } = useQuery({
-    queryKey: ['admin-remote-backups'],
+    queryKey: ["admin-remote-backups"],
     queryFn: fetchRemoteBackupConnections,
-  })
+  });
 
   const remoteOptions = useMemo(() => {
     const items = (remotes?.connections ?? []).filter((c) => {
       // Filtre : seules les connexions avec un path "full" configuré peuvent
       // recevoir un push manuel/programmé.
-      const cfg = c.config
+      const cfg = c.config;
       const hasFull =
-        c.kind === 's3'
-          ? Boolean(String(cfg.prefix_full ?? '').trim())
-          : Boolean(String(cfg.remote_path_full ?? '').trim())
-      return hasFull
-    })
+        c.kind === "s3"
+          ? Boolean(String(cfg.prefix_full ?? "").trim())
+          : Boolean(String(cfg.remote_path_full ?? "").trim());
+      return hasFull;
+    });
     return [
-      { value: '', label: t('admin.scheduledBackups.targetLocal') },
+      { value: "", label: t("admin.scheduledBackups.targetLocal") },
       ...items.map((c) => ({
         value: c.id,
         label: `${c.name} (${c.kind})`,
       })),
-    ]
-  }, [remotes, t])
+    ];
+  }, [remotes, t]);
 
   // Validation cron en live (debounced) pour le preview des 3 prochaines occurrences.
-  const [cronPreview, setCronPreview] = useState<{ valid: boolean; lines: string[]; error: string | null }>({
+  const [cronPreview, setCronPreview] = useState<{
+    valid: boolean;
+    lines: string[];
+    error: string | null;
+  }>({
     valid: true,
     lines: [],
     error: null,
-  })
+  });
   useEffect(() => {
-    const expr = form.values.cron_expression.trim()
+    const expr = form.values.cron_expression.trim();
     if (!expr) {
-      setCronPreview({ valid: false, lines: [], error: null })
-      return
+      setCronPreview({ valid: false, lines: [], error: null });
+      return;
     }
     const handle = setTimeout(async () => {
       try {
-        const r = await validateCronExpression(expr)
+        const r = await validateCronExpression(expr);
         setCronPreview({
           valid: r.valid,
-          lines: r.next_3_occurrences.map((iso) => dayjs(iso).format('YYYY-MM-DD HH:mm')),
+          lines: r.next_3_occurrences.map((iso) =>
+            dayjs(iso).format("YYYY-MM-DD HH:mm"),
+          ),
           error: r.error,
-        })
+        });
       } catch {
         // Réseau / 4xx — on n'altère pas le UX (l'admin verra l'erreur au submit)
       }
-    }, 400)
-    return () => clearTimeout(handle)
-  }, [form.values.cron_expression])
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [form.values.cron_expression]);
 
   const createMut = useMutation({
     mutationFn: createScheduledBackup,
     onSuccess: () => {
-      notifications.show({ color: 'green', message: t('admin.scheduledBackups.createSuccess') })
-      onSaved()
+      notifications.show({
+        color: "green",
+        message: t("admin.scheduledBackups.createSuccess"),
+      });
+      onSaved();
     },
     onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+      const msg = err instanceof ApiError ? err.message : String(err);
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: msg,
+      });
     },
-  })
+  });
 
   const updateMut = useMutation({
     mutationFn: (args: { id: string; payload: ScheduledBackupPatchPayload }) =>
       updateScheduledBackup(args.id, args.payload),
     onSuccess: () => {
-      notifications.show({ color: 'green', message: t('admin.scheduledBackups.updateSuccess') })
-      onSaved()
+      notifications.show({
+        color: "green",
+        message: t("admin.scheduledBackups.updateSuccess"),
+      });
+      onSaved();
     },
     onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+      const msg = err instanceof ApiError ? err.message : String(err);
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: msg,
+      });
     },
-  })
+  });
 
   function handleSubmit(values: FormValues) {
-    const remoteIdNormalized = values.remote_id || null
+    const remoteIdNormalized = values.remote_id || null;
     if (isEditing && editTarget) {
       const payload: ScheduledBackupPatchPayload = {
         name: values.name.trim(),
@@ -501,8 +536,8 @@ function ScheduleFormModal({
         description: values.description.trim() || null,
         set_description: true,
         enabled: values.enabled,
-      }
-      updateMut.mutate({ id: editTarget.id, payload })
+      };
+      updateMut.mutate({ id: editTarget.id, payload });
     } else {
       const payload: ScheduledBackupCreatePayload = {
         name: values.name.trim(),
@@ -511,34 +546,38 @@ function ScheduleFormModal({
         miss_threshold_minutes: values.miss_threshold_minutes,
         description: values.description.trim() || null,
         enabled: values.enabled,
-      }
-      createMut.mutate(payload)
+      };
+      createMut.mutate(payload);
     }
   }
 
-  const submitting = createMut.isPending || updateMut.isPending
+  const submitting = createMut.isPending || updateMut.isPending;
 
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title={isEditing ? t('admin.scheduledBackups.editTitle') : t('admin.scheduledBackups.addTitle')}
+      title={
+        isEditing
+          ? t("admin.scheduledBackups.editTitle")
+          : t("admin.scheduledBackups.addTitle")
+      }
       size="lg"
     >
       <form onSubmit={form.onSubmit(handleSubmit)}>
         <Stack gap="sm">
           <TextInput
-            label={t('admin.scheduledBackups.fieldName')}
+            label={t("admin.scheduledBackups.fieldName")}
             required
-            {...form.getInputProps('name')}
+            {...form.getInputProps("name")}
           />
 
           <Stack gap={4}>
             <TextInput
-              label={t('admin.scheduledBackups.fieldCron')}
-              description={t('admin.scheduledBackups.fieldCronHint')}
+              label={t("admin.scheduledBackups.fieldCron")}
+              description={t("admin.scheduledBackups.fieldCronHint")}
               required
-              {...form.getInputProps('cron_expression')}
+              {...form.getInputProps("cron_expression")}
             />
             <Group gap="xs">
               {CRON_PRESETS.map((p) => (
@@ -546,7 +585,9 @@ function ScheduleFormModal({
                   key={p.label}
                   size="xs"
                   variant="subtle"
-                  onClick={() => form.setFieldValue('cron_expression', p.expression)}
+                  onClick={() =>
+                    form.setFieldValue("cron_expression", p.expression)
+                  }
                 >
                   {t(`admin.scheduledBackups.preset.${p.label}`)}
                 </Button>
@@ -560,7 +601,7 @@ function ScheduleFormModal({
             ) : cronPreview.lines.length > 0 ? (
               <Alert color="blue" variant="light" py={6}>
                 <Text size="xs" fw={500}>
-                  {t('admin.scheduledBackups.next3')}
+                  {t("admin.scheduledBackups.next3")}
                 </Text>
                 {cronPreview.lines.map((line) => (
                   <Text size="xs" ff="monospace" key={line}>
@@ -572,47 +613,49 @@ function ScheduleFormModal({
           </Stack>
 
           <Select
-            label={t('admin.scheduledBackups.fieldTarget')}
-            description={t('admin.scheduledBackups.fieldTargetHint')}
+            label={t("admin.scheduledBackups.fieldTarget")}
+            description={t("admin.scheduledBackups.fieldTargetHint")}
             data={remoteOptions}
-            value={form.values.remote_id ?? ''}
-            onChange={(v) => form.setFieldValue('remote_id', v || null)}
+            value={form.values.remote_id ?? ""}
+            onChange={(v) => form.setFieldValue("remote_id", v || null)}
             allowDeselect={false}
           />
 
           <Select
-            label={t('admin.scheduledBackups.fieldMissThreshold')}
-            description={t('admin.scheduledBackups.fieldMissThresholdHint')}
+            label={t("admin.scheduledBackups.fieldMissThreshold")}
+            description={t("admin.scheduledBackups.fieldMissThresholdHint")}
             data={MISS_THRESHOLD_OPTIONS.map((m) => ({
               value: String(m),
-              label: t('admin.scheduledBackups.minutes', { count: m }),
+              label: t("admin.scheduledBackups.minutes", { count: m }),
             }))}
             value={String(form.values.miss_threshold_minutes)}
-            onChange={(v) => form.setFieldValue('miss_threshold_minutes', Number(v) || 5)}
+            onChange={(v) =>
+              form.setFieldValue("miss_threshold_minutes", Number(v) || 5)
+            }
             allowDeselect={false}
           />
 
           <Textarea
-            label={t('admin.scheduledBackups.fieldDescription')}
+            label={t("admin.scheduledBackups.fieldDescription")}
             rows={2}
-            {...form.getInputProps('description')}
+            {...form.getInputProps("description")}
           />
 
           <Switch
-            label={t('admin.scheduledBackups.fieldEnabled')}
-            {...form.getInputProps('enabled', { type: 'checkbox' })}
+            label={t("admin.scheduledBackups.fieldEnabled")}
+            {...form.getInputProps("enabled", { type: "checkbox" })}
           />
 
           <Group justify="flex-end" mt="md">
             <Button variant="subtle" onClick={onClose}>
-              {t('common.cancel')}
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={submitting}>
-              {isEditing ? t('common.save') : t('common.create')}
+              {isEditing ? t("common.save") : t("common.create")}
             </Button>
           </Group>
         </Stack>
       </form>
     </Modal>
-  )
+  );
 }

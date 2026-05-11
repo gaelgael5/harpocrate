@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Stack,
   Title,
@@ -11,17 +11,17 @@ import {
   Alert,
   Group,
   Button,
-} from '@mantine/core'
-import { useTranslation } from 'react-i18next'
-import dayjs from 'dayjs'
+} from "@mantine/core";
+import { useTranslation } from "react-i18next";
+import dayjs from "dayjs";
 
-import { fetchAdminUsers } from '@/lib/adminApi'
-import type { AdminUser } from '@/schemas/admin'
+import { fetchAdminUsers } from "@/lib/adminApi";
+import type { AdminUser } from "@/schemas/admin";
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 50;
 
 function UserRow({ user }: { user: AdminUser }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <Table.Tr>
@@ -30,84 +30,88 @@ function UserRow({ user }: { user: AdminUser }) {
       </Table.Td>
       <Table.Td>
         <Text size="sm" c="dimmed">
-          {user.display_name ?? '—'}
+          {user.display_name ?? "—"}
         </Text>
       </Table.Td>
       <Table.Td>
-        <Badge color={user.has_bootstrap ? 'green' : 'gray'} size="sm">
-          {user.has_bootstrap ? t('admin.users.yes') : t('admin.users.no')}
+        <Badge color={user.has_bootstrap ? "green" : "gray"} size="sm">
+          {user.has_bootstrap ? t("admin.users.yes") : t("admin.users.no")}
         </Badge>
       </Table.Td>
       <Table.Td>
         <Text size="xs" c="dimmed">
-          {dayjs(user.created_at).format('YYYY-MM-DD')}
+          {dayjs(user.created_at).format("YYYY-MM-DD")}
         </Text>
       </Table.Td>
       <Table.Td>
         <Text size="xs" c="dimmed">
-          {user.last_unlock_at ? dayjs(user.last_unlock_at).format('YYYY-MM-DD HH:mm') : t('admin.users.never')}
+          {user.last_unlock_at
+            ? dayjs(user.last_unlock_at).format("YYYY-MM-DD HH:mm")
+            : t("admin.users.never")}
         </Text>
       </Table.Td>
       <Table.Td>
         {user.quarantine_until && (
           <Badge color="orange" size="sm">
-            {t('admin.users.quarantine')}
+            {t("admin.users.quarantine")}
           </Badge>
         )}
         {user.disabled_at && (
           <Badge color="red" size="sm">
-            {t('admin.users.disabled')}
+            {t("admin.users.disabled")}
           </Badge>
         )}
       </Table.Td>
     </Table.Tr>
-  )
+  );
 }
 
 export function AdminUsersPage() {
-  const { t } = useTranslation()
-  const [offset, setOffset] = useState(0)
+  const { t } = useTranslation();
+  const [offset, setOffset] = useState(0);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['admin-users', offset],
+    queryKey: ["admin-users", offset],
     queryFn: () => fetchAdminUsers({ limit: PAGE_SIZE, offset }),
-  })
+  });
 
   if (isLoading) {
     return (
       <Center py="xl">
         <Loader />
       </Center>
-    )
+    );
   }
 
   if (error) {
     return (
-      <Alert color="red">{error instanceof Error ? error.message : t('common.error')}</Alert>
-    )
+      <Alert color="red">
+        {error instanceof Error ? error.message : t("common.error")}
+      </Alert>
+    );
   }
 
-  const total = data?.total ?? 0
-  const users = data?.users ?? []
+  const total = data?.total ?? 0;
+  const users = data?.users ?? [];
 
   return (
     <Stack>
-      <Title order={2}>{t('admin.users.title')}</Title>
+      <Title order={2}>{t("admin.users.title")}</Title>
       <Text size="sm" c="dimmed">
-        {t('admin.users.total', { count: total })}
+        {t("admin.users.total", { count: total })}
       </Text>
 
       {users.length === 0 ? (
-        <Text c="dimmed">{t('admin.users.noUsers')}</Text>
+        <Text c="dimmed">{t("admin.users.noUsers")}</Text>
       ) : (
         <Table highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>{t('admin.users.email')}</Table.Th>
-              <Table.Th>{t('admin.users.displayName')}</Table.Th>
-              <Table.Th>{t('admin.users.hasBootstrap')}</Table.Th>
-              <Table.Th>{t('admin.users.createdAt')}</Table.Th>
-              <Table.Th>{t('admin.users.lastUnlock')}</Table.Th>
+              <Table.Th>{t("admin.users.email")}</Table.Th>
+              <Table.Th>{t("admin.users.displayName")}</Table.Th>
+              <Table.Th>{t("admin.users.hasBootstrap")}</Table.Th>
+              <Table.Th>{t("admin.users.createdAt")}</Table.Th>
+              <Table.Th>{t("admin.users.lastUnlock")}</Table.Th>
               <Table.Th />
             </Table.Tr>
           </Table.Thead>
@@ -141,5 +145,5 @@ export function AdminUsersPage() {
         </Group>
       )}
     </Stack>
-  )
+  );
 }

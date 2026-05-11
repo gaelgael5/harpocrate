@@ -6,10 +6,10 @@
  *
  * On click, each entry opens in a new tab with noopener,noreferrer.
  */
-import { Menu, ActionIcon, Avatar, Text, Group } from '@mantine/core'
-import { useTranslation } from 'react-i18next'
-import { useApps } from '@/hooks/useApps'
-import type { AppEntry } from '@/schemas/apps'
+import { Menu, ActionIcon, Avatar, Text, Group } from "@mantine/core";
+import { useTranslation } from "react-i18next";
+import { useApps } from "@/hooks/useApps";
+import type { AppEntry } from "@/schemas/apps";
 
 /** Inline SVG grid icon — avoids adding a new icon-package dependency. */
 function IconLayoutGrid({ size = 20 }: { size?: number }) {
@@ -31,39 +31,34 @@ function IconLayoutGrid({ size = 20 }: { size?: number }) {
       <rect x="3" y="14" width="7" height="7" />
       <rect x="14" y="14" width="7" height="7" />
     </svg>
-  )
+  );
 }
 
 function AppMenuItem({ entry }: { entry: AppEntry }) {
   function handleClick() {
-    window.open(entry.url, '_blank', 'noopener,noreferrer')
+    window.open(entry.url, "_blank", "noopener,noreferrer");
   }
 
   return (
     <Menu.Item onClick={handleClick}>
       <Group gap="xs">
-        <Avatar
-          src={entry.icon}
-          size={20}
-          radius="sm"
-          alt={entry.label}
-        >
+        <Avatar src={entry.icon} size={20} radius="sm" alt={entry.label}>
           {entry.label.charAt(0).toUpperCase()}
         </Avatar>
         <Text size="sm">{entry.label}</Text>
       </Group>
     </Menu.Item>
-  )
+  );
 }
 
 export function AppsMenu() {
-  const { t } = useTranslation()
-  const { data, isLoading } = useApps()
+  const { t } = useTranslation();
+  const { data, isLoading } = useApps();
 
-  const hasApps = !isLoading && (data?.urls.length ?? 0) > 0
+  const hasApps = !isLoading && (data?.urls.length ?? 0) > 0;
 
   if (!hasApps) {
-    return null
+    return null;
   }
 
   return (
@@ -71,19 +66,19 @@ export function AppsMenu() {
       <Menu.Target>
         <ActionIcon
           variant="subtle"
-          title={t('topbar.apps_menu')}
-          aria-label={t('topbar.apps_menu')}
+          title={t("topbar.apps_menu")}
+          aria-label={t("topbar.apps_menu")}
         >
           <IconLayoutGrid size={20} />
         </ActionIcon>
       </Menu.Target>
 
       <Menu.Dropdown>
-        <Menu.Label>{t('topbar.apps_menu')}</Menu.Label>
+        <Menu.Label>{t("topbar.apps_menu")}</Menu.Label>
         {data?.urls.map((entry) => (
           <AppMenuItem key={entry.key} entry={entry} />
         ))}
       </Menu.Dropdown>
     </Menu>
-  )
+  );
 }

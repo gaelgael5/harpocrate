@@ -47,6 +47,7 @@ import {
   type AddStreamingNodePayload,
 } from "@/lib/adminApi";
 import { AddStandbyModal } from "./AddStandbyModal";
+import { useIsStandby } from "@/lib/useIsStandby";
 import { ApiError } from "@/lib/api-client";
 import type {
   LagThresholds,
@@ -80,6 +81,7 @@ function stateColor(state: ReplicationNode["last_state"]): string {
 export function StreamingNodesPanel() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const isStandby = useIsStandby();
   const [addOpen, setAddOpen] = useState(false);
   const [bundleShown, setBundleShown] = useState<ReplicationNodeBundle | null>(
     null,
@@ -190,15 +192,16 @@ export function StreamingNodesPanel() {
                 size="xs"
                 variant="subtle"
                 loading={reloadMut.isPending}
+                disabled={isStandby}
                 onClick={() => reloadMut.mutate()}
               >
                 {t("admin.replication.streaming.reloadPgHba")}
               </Button>
             </Tooltip>
-            <Button size="xs" onClick={() => setAddOpen(true)}>
+            <Button size="xs" disabled={isStandby} onClick={() => setAddOpen(true)}>
               {t("admin.replication.streaming.add")}
             </Button>
-            <Button size="xs" variant="light" onClick={() => setPairingModalOpen(true)}>
+            <Button size="xs" variant="light" disabled={isStandby} onClick={() => setPairingModalOpen(true)}>
               {t("admin.replication.pairing.addStandby")}
             </Button>
           </Group>
@@ -322,6 +325,7 @@ export function StreamingNodesPanel() {
                           size="xs"
                           variant="subtle"
                           color="red"
+                          disabled={isStandby}
                           onClick={() => confirmDelete(n)}
                         >
                           {t("common.delete")}

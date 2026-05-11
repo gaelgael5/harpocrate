@@ -37,6 +37,7 @@ import {
 import { ApiError } from "@/lib/api-client";
 import { StreamingNodesPanel } from "@/components/StreamingNodesPanel";
 import { PostgresInfoPanel } from "@/components/PostgresInfoPanel";
+import { useIsStandby } from "@/lib/useIsStandby";
 
 function StatusBadge({ status }: { status: string }) {
   const color =
@@ -93,6 +94,7 @@ function NodesTable({ nodes }: { nodes: Array<Record<string, unknown>> }) {
 export function AdminReplicationPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const isStandby = useIsStandby();
 
   const statusQuery = useQuery({
     queryKey: ["admin-replication-status"],
@@ -234,7 +236,7 @@ export function AdminReplicationPage() {
                           : t("admin.replication.inactive")
                       }
                       checked={s.is_active}
-                      disabled={!s.enabled || toggleMut.isPending}
+                      disabled={!s.enabled || toggleMut.isPending || isStandby}
                       onChange={(e) =>
                         toggleMut.mutate({
                           id: s.id,

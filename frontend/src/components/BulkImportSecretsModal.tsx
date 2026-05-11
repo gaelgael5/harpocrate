@@ -164,7 +164,10 @@ export function BulkImportSecretsModal({
       opened={opened}
       onClose={onClose}
       title={t('wallets.bulkImport.title')}
-      size="xl"
+      // Étape paste : largeur "xl" suffit pour la textarea.
+      // Étape review : tableau à 5 colonnes (incl. textInput nom + valeur
+      // tronquée) — on prend 95% du viewport pour confort de lecture.
+      size={step === 'review' ? '95%' : 'xl'}
       closeOnClickOutside={step === 'paste'}
     >
       {step === 'paste' && (

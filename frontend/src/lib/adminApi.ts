@@ -611,3 +611,9 @@ export async function markStepBack(
     {},
   );
 }
+
+export async function getStandbyOf(): Promise<{ is_standby_of: string | null }> {
+  return api.get<{ is_standby_of: string | null }>(
+    "/admin/replication/standby-of",
+  );
+}

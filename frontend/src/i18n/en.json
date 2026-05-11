@@ -744,6 +744,10 @@
           "completed": "Pairing complete!",
           "completedSubtitle": "This instance is now a standby of {{master}}.",
           "abort": "Abort"
+        },
+        "banner": {
+          "title": "Standby mode",
+          "message": "This Harpocrate instance is a standby of master {{master}}. Replication management actions are disabled on this instance."
         }
       },
       "streaming": {

@@ -745,6 +745,10 @@
           "completed": "Appairage terminé !",
           "completedSubtitle": "Cette instance est maintenant standby de {{master}}.",
           "abort": "Abandonner"
+        },
+        "banner": {
+          "title": "Mode asservi (standby)",
+          "message": "Cette instance Harpocrate est asservie au master {{master}}. Les actions de gestion réplication sont désactivées sur cette instance."
         }
       },
       "streaming": {

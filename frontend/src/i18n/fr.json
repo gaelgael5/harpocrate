@@ -731,6 +731,20 @@
           "masterUrl": "URL du master",
           "code": "Code 4 chiffres",
           "submit": "Démarrer l'appairage"
+        },
+        "wizard": {
+          "title": "Assistant d'appairage standby",
+          "subtitleA": "Connecte-toi en SSH à la machine qui héberge ce conteneur Postgres.",
+          "subtitleB": "Une fois connecté, suis les étapes ci-contre.",
+          "stepProgress": "Étape {{current}} sur {{total}}",
+          "command": "Commande à exécuter",
+          "copy": "Copier",
+          "copied": "Copié",
+          "markDone": "Étape exécutée → suivant",
+          "back": "← Étape précédente",
+          "completed": "Appairage terminé !",
+          "completedSubtitle": "Cette instance est maintenant standby de {{master}}.",
+          "abort": "Abandonner"
         }
       },
       "streaming": {

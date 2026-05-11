@@ -730,6 +730,20 @@
           "masterUrl": "Master URL",
           "code": "4-digit code",
           "submit": "Start pairing"
+        },
+        "wizard": {
+          "title": "Standby pairing assistant",
+          "subtitleA": "Connect via SSH to the machine hosting this Postgres container.",
+          "subtitleB": "Once connected, follow the steps on the right.",
+          "stepProgress": "Step {{current}} of {{total}}",
+          "command": "Command to execute",
+          "copy": "Copy",
+          "copied": "Copied",
+          "markDone": "Step done → next",
+          "back": "← Previous step",
+          "completed": "Pairing complete!",
+          "completedSubtitle": "This instance is now a standby of {{master}}.",
+          "abort": "Abort"
         }
       },
       "streaming": {

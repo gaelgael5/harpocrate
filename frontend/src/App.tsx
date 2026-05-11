@@ -51,6 +51,7 @@ import { ExportAllPage } from "@/pages/ExportAllPage";
 import { AdminEnvPage } from "@/pages/AdminEnvPage";
 import { AdminAnomaliesPage } from "@/pages/AdminAnomaliesPage";
 import { BecomeStandbyPage } from "@/pages/BecomeStandbyPage";
+import { PairingWizardPage } from "@/pages/PairingWizardPage";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { LandingPage } from "@/pages/LandingPage";
 import { ApiDocsPage } from "@/pages/ApiDocsPage";
@@ -228,6 +229,10 @@ export default function App() {
                 <Route
                   path="/admin/become-standby"
                   element={<BecomeStandbyPage />}
+                />
+                <Route
+                  path="/admin/pairing/:sessionId"
+                  element={<PairingWizardPage />}
                 />
                 <Route
                   path="/admin/snapshots"

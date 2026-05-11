@@ -1,0 +1,104 @@
+"""Tests Pydantic schemas appairage (LOT 2)."""
+
+from __future__ import annotations
+
+from uuid import uuid4
+
+import pytest
+
+from app.models.api.pairing import (
+    PairingAcceptRequest,
+    PairingConfirmRequest,
+    PairingConfirmResponse,
+    PairingInitRequest,
+    PairingInitResponse,
+    PairingStatusResponse,
+)
+
+
+def test_init_request_validates_url() -> None:
+    r = PairingInitRequest(partner_url="https://b.example/")
+    assert r.partner_url == "https://b.example/"
+
+
+def test_init_request_rejects_empty_url() -> None:
+    with pytest.raises(ValueError):
+        PairingInitRequest(partner_url="")
+
+
+def test_init_response_serializes() -> None:
+    r = PairingInitResponse(
+        session_id=uuid4(),
+        code="1234",
+        expires_in_seconds=600,
+    )
+    assert r.code == "1234"
+
+
+def test_accept_validates_code() -> None:
+    with pytest.raises(ValueError):
+        PairingAcceptRequest(master_url="https://a/", code="abc")
+    with pytest.raises(ValueError):
+        PairingAcceptRequest(master_url="https://a/", code="12345")
+    PairingAcceptRequest(master_url="https://a/", code="1234")
+
+
+def test_confirm_validates_code() -> None:
+    with pytest.raises(ValueError):
+        PairingConfirmRequest(code="ab", standby_url="https://b/")
+    PairingConfirmRequest(code="0000", standby_url="https://b/")
+
+
+def test_confirm_response_shape() -> None:
+    PairingConfirmResponse(
+        master_host="10.0.0.1",
+        master_port=5432,
+        replication_user="rep_x",
+        replication_password="pwd",
+        application_name="app_x",
+        node_id=uuid4(),
+    )
+
+
+def test_status_response_uses_literals() -> None:
+    r = PairingStatusResponse(
+        session_id=uuid4(),
+        role="master",
+        status="pending",
+        partner_url=None,
+        current_step_idx=0,
+        expires_at="2026-05-11T12:00:00Z",
+    )
+    assert r.role == "master"
+    assert r.status == "pending"
+    # Literal types — invalid values should raise
+    with pytest.raises(ValueError):
+        PairingStatusResponse(
+            session_id=uuid4(),
+            role="invalid",  # type: ignore[arg-type]
+            status="pending",
+            partner_url=None,
+            current_step_idx=0,
+            expires_at="2026-05-11T12:00:00Z",
+        )
+
+
+def test_confirm_response_node_id_is_uuid() -> None:
+    """node_id must be a valid UUID, not a free string."""
+    PairingConfirmResponse(
+        master_host="h",
+        master_port=5432,
+        replication_user="u",
+        replication_password="p",
+        application_name="a",
+        node_id=uuid4(),
+    )
+    with pytest.raises(ValueError):
+        PairingConfirmResponse(
+            master_host="h",
+            master_port=5432,
+            replication_user="u",
+            replication_password="p",
+            application_name="a",
+            node_id="not-a-uuid",  # type: ignore[arg-type]
+        )

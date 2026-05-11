@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
@@ -19,6 +20,7 @@ from app.models.api.pairing import (
     PairingStatusResponse,
 )
 from app.services import pairing as svc
+from app.services import pairing_steps as steps_svc
 
 router = APIRouter(
     prefix="/admin/replication/pairing",
@@ -156,3 +158,102 @@ async def get_status(
         current_step_idx=sess["current_step_idx"],
         expires_at=sess["expires_at"].isoformat(),
     )
+
+
+@router.get("/{session_id}/steps")
+async def get_steps(
+    session_id: UUID,
+    admin: AdminJwt,
+) -> JSONResponse:
+    """Liste les commandes wizard à exécuter par l'admin pour ce standby."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        sess = await repo.get(conn, session_id)
+    if sess is None or sess["role"] != "standby":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "session_not_found"},
+        )
+    p = sess["payload"]
+    if not isinstance(p, dict) or "master_host" not in p:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "payload_incomplete"},
+        )
+    steps = steps_svc.build_standby_steps(
+        master_host=p["master_host"],
+        master_port=p["master_port"],
+        replication_user=p["replication_user"],
+        replication_password=p["replication_password"],
+        application_name=p["application_name"],
+    )
+    return JSONResponse(
+        {
+            "steps": [
+                {"idx": s.idx, "title": s.title, "command": s.command, "hint": s.hint}
+                for s in steps
+            ],
+            "current_step_idx": sess["current_step_idx"],
+            "status": sess["status"],
+        }
+    )
+
+
+@router.post("/{session_id}/steps/{idx}/done")
+async def step_done(
+    session_id: UUID,
+    idx: int,
+    admin: AdminJwt,
+) -> JSONResponse:
+    """Marque l'étape `idx` comme exécutée et avance le curseur."""
+    # Le total est figé pour build_standby_steps — gardons-le en sync.
+    total = 8
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            new_idx = await svc.advance_step(
+                conn,
+                session_id=session_id,
+                current_idx=idx,
+                total=total,
+                actor_user_id=admin.user_id,
+            )
+        except svc.InvalidCodeError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "session_not_found"},
+            ) from None
+        except svc.StepCursorMismatchError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": "step_cursor_mismatch", "cause": str(e)},
+            ) from None
+    return JSONResponse({"current_step_idx": new_idx})
+
+
+@router.post("/{session_id}/steps/{idx}/back")
+async def step_back(
+    session_id: UUID,
+    idx: int,
+    admin: AdminJwt,
+) -> JSONResponse:
+    """Recule d'une étape (curseur idempotent à 0)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            new_idx = await svc.back_step(
+                conn,
+                session_id=session_id,
+                current_idx=idx,
+            )
+        except svc.InvalidCodeError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "session_not_found"},
+            ) from None
+        except svc.StepCursorMismatchError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": "step_cursor_mismatch", "cause": str(e)},
+            ) from None
+    return JSONResponse({"current_step_idx": new_idx})

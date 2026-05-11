@@ -284,3 +284,83 @@ async def accept_standby(
         )
 
     return sid
+
+
+# ─── advance_step / back_step ─────────────────────────────────────────────────
+
+
+class StepCursorMismatchError(Exception):
+    """Le curseur passé par le caller ne correspond pas à l'état serveur."""
+
+
+async def advance_step(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    session_id: UUID,
+    current_idx: int,
+    total: int,
+    actor_user_id: UUID | None,
+) -> int:
+    """Marque l'étape `current_idx` comme done et avance le curseur.
+
+    Si le nouveau curseur atteint `total`, marque la session comme completed,
+    audite, et déclenche le hook is_standby_of pour les sessions role=standby.
+
+    Raises StepCursorMismatchError si current_idx != sess.current_step_idx.
+    Raises InvalidCodeError si la session n'existe pas.
+    """
+    from app.services import streaming_replication as streaming_svc
+
+    sess = await repo.get(conn, session_id)
+    if sess is None:
+        raise InvalidCodeError("session_not_found")
+    if sess["current_step_idx"] != current_idx:
+        raise StepCursorMismatchError(
+            f"expected_step_idx={sess['current_step_idx']}_got={current_idx}",
+        )
+    new_idx = current_idx + 1
+    async with conn.transaction():
+        await repo.set_step_idx(conn, session_id, new_idx)
+        if new_idx >= total:
+            await repo.set_status(conn, session_id, "completed")
+            await audit_log_insert(
+                conn,
+                "pairing.completed",
+                actor_user_id=actor_user_id,
+                metadata={
+                    "role": sess["role"],
+                    "partner_url": sess["partner_url"],
+                },
+            )
+            if sess["role"] == "standby" and sess["partner_url"]:
+                await streaming_svc.set_standby_of(
+                    conn,
+                    master_url=sess["partner_url"],
+                )
+    return new_idx
+
+
+async def back_step(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    session_id: UUID,
+    current_idx: int,
+) -> int:
+    """Recule d'une étape. Idempotent à 0 (renvoie 0).
+
+    Raises StepCursorMismatchError si current_idx != sess.current_step_idx.
+    Raises InvalidCodeError si la session n'existe pas.
+    """
+    sess = await repo.get(conn, session_id)
+    if sess is None:
+        raise InvalidCodeError("session_not_found")
+    if current_idx <= 0:
+        return 0
+    if sess["current_step_idx"] != current_idx:
+        raise StepCursorMismatchError(
+            f"expected_step_idx={sess['current_step_idx']}_got={current_idx}",
+        )
+    new_idx = current_idx - 1
+    async with conn.transaction():
+        await repo.set_step_idx(conn, session_id, new_idx)
+    return new_idx

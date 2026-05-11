@@ -217,3 +217,94 @@ def test_host_from_url_with_no_schema() -> None:
 def test_host_from_url_with_empty_string() -> None:
     with pytest.raises(svc.PairingAcceptError):
         svc._host_from_url("")
+
+
+# ─── Tests Task 3.2 — advance_step / back_step ───────────────────────────────
+
+
+async def test_advance_step_validates_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Le caller doit passer current_idx == sess.current_step_idx."""
+    from unittest.mock import AsyncMock
+
+    sess = {
+        "id": "x",
+        "role": "standby",
+        "partner_url": "https://a/",
+        "current_step_idx": 2,
+        "status": "wizard",
+        "payload": {},
+    }
+    monkeypatch.setattr(svc.repo, "get", AsyncMock(return_value=sess))
+    monkeypatch.setattr(svc.repo, "set_step_idx", AsyncMock())
+
+    from uuid import uuid4
+
+    sid = uuid4()
+    with pytest.raises(svc.StepCursorMismatchError):
+        await svc.advance_step(
+            conn=AsyncMock(),  # type: ignore[arg-type]
+            session_id=sid,
+            current_idx=5,  # mismatch (db says 2)
+            total=8,
+            actor_user_id=None,
+        )
+
+
+async def test_back_step_decrements(monkeypatch: pytest.MonkeyPatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    sess = {
+        "id": "x",
+        "role": "standby",
+        "partner_url": "https://a/",
+        "current_step_idx": 3,
+        "status": "wizard",
+        "payload": {},
+    }
+    monkeypatch.setattr(svc.repo, "get", AsyncMock(return_value=sess))
+    set_step = AsyncMock()
+    monkeypatch.setattr(svc.repo, "set_step_idx", set_step)
+
+    from uuid import uuid4
+
+    sid = uuid4()
+    conn = AsyncMock()
+    conn.transaction = MagicMock(return_value=AsyncMock())
+    new_idx = await svc.back_step(
+        conn=conn,  # type: ignore[arg-type]
+        session_id=sid,
+        current_idx=3,
+    )
+    assert new_idx == 2
+    set_step.assert_awaited_once()
+
+
+async def test_back_step_idempotent_at_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    sess = {
+        "id": "x",
+        "role": "standby",
+        "partner_url": "https://a/",
+        "current_step_idx": 0,
+        "status": "wizard",
+        "payload": {},
+    }
+    monkeypatch.setattr(svc.repo, "get", AsyncMock(return_value=sess))
+    set_step = AsyncMock()
+    monkeypatch.setattr(svc.repo, "set_step_idx", set_step)
+
+    from uuid import uuid4
+
+    sid = uuid4()
+    new_idx = await svc.back_step(
+        conn=AsyncMock(),  # type: ignore[arg-type]
+        session_id=sid,
+        current_idx=0,
+    )
+    assert new_idx == 0
+    set_step.assert_not_awaited()

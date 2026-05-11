@@ -45,7 +45,7 @@ logger = structlog.get_logger(__name__)
 LAG_THRESHOLDS_KEY = "replication_lag_thresholds"
 
 DEFAULT_LAG_THRESHOLDS: dict[str, int] = {
-    "warning_bytes": 64 * 1024 * 1024,    # 64 MB
+    "warning_bytes": 64 * 1024 * 1024,  # 64 MB
     "critical_bytes": 512 * 1024 * 1024,  # 512 MB
 }
 
@@ -143,9 +143,7 @@ def _build_bundle(
     Le `standby_data_dir` est par défaut le path Debian/Ubuntu (PG 16). Si
     l'admin utilise un layout différent (Docker, RPM...), il adapte.
     """
-    pg_hba = (
-        f"host    replication    {replication_user}    {standby_host}/32    scram-sha-256"
-    )
+    pg_hba = f"host    replication    {replication_user}    {standby_host}/32    scram-sha-256"
 
     pg_basebackup = (
         f"# À exécuter côté STANDBY, en tant que postgres :\n"
@@ -234,9 +232,7 @@ def _row_to_dto(row: asyncpg.Record) -> ReplicationNode:
         application_name=row["application_name"],
         role=row["role"],
         notes=row["notes"],
-        last_seen_at=(
-            row["last_seen_at"].isoformat() if row["last_seen_at"] else None
-        ),
+        last_seen_at=(row["last_seen_at"].isoformat() if row["last_seen_at"] else None),
         last_state=row["last_state"],
         last_lag_bytes=row["last_lag_bytes"],
         created_at=row["created_at"].isoformat(),
@@ -258,9 +254,7 @@ async def list_nodes(
     return [_row_to_dto(r) for r in rows]
 
 
-async def get_node(
-    conn: asyncpg.Connection, node_id: UUID
-) -> ReplicationNode | None:
+async def get_node(conn: asyncpg.Connection, node_id: UUID) -> ReplicationNode | None:
     row = await nodes_repo.get_by_id(conn, node_id)
     return _row_to_dto(row) if row else None
 
@@ -343,9 +337,7 @@ async def add_node(
     return node_id, bundle
 
 
-async def delete_node(
-    conn: asyncpg.Connection, node_id: UUID
-) -> bool:
+async def delete_node(conn: asyncpg.Connection, node_id: UUID) -> bool:
     """Supprime un node : DROP ROLE côté master + DELETE row.
 
     Si le DROP ROLE échoue (le rôle est utilisé par une connexion active),
@@ -408,9 +400,7 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
 
     # Mise à jour des nodes vus.
     for row in pg_stat_rows:
-        node_row = await nodes_repo.get_by_application_name(
-            conn, row["application_name"]
-        )
+        node_row = await nodes_repo.get_by_application_name(conn, row["application_name"])
         if node_row is None:
             continue  # standby physique inconnu de Harpocrate, on ignore
         state = row["state"] if row["state"] in ("streaming", "catchup") else "unknown"
@@ -453,7 +443,10 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
             # On historise quand même pour ne pas avoir de "trou" dans le
             # graph de la page détaillée (lag_bytes=NULL côté disconnected).
             await record_observation(
-                conn, node_id=n["id"], state="disconnected", lag_bytes=None,
+                conn,
+                node_id=n["id"],
+                state="disconnected",
+                lag_bytes=None,
                 observed_at=now,
             )
             continue
@@ -462,7 +455,10 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
             n["id"],
         )
         await record_observation(
-            conn, node_id=n["id"], state="disconnected", lag_bytes=None,
+            conn,
+            node_id=n["id"],
+            state="disconnected",
+            lag_bytes=None,
             observed_at=now,
         )
         updated += 1
@@ -525,9 +521,7 @@ async def tcp_ping(host: str, port: int, *, timeout: float = 2.0) -> TcpPingResu
     return TcpPingResult(ok=True, latency_ms=round(latency, 2), error=None)
 
 
-async def test_node_connect(
-    conn: asyncpg.Connection, node_id: UUID
-) -> TcpPingResult | None:
+async def test_node_connect(conn: asyncpg.Connection, node_id: UUID) -> TcpPingResult | None:
     """Récupère le node + lance tcp_ping. None si node introuvable."""
     node = await get_node(conn, node_id)
     if node is None:
@@ -649,9 +643,7 @@ async def set_lag_thresholds(
         # On tolère l'inversion mais on remonte une erreur claire — sinon
         # check_lag_threshold ne déclencherait jamais le seuil critical.
         raise ValueError("warning_bytes must be <= critical_bytes")
-    new = LagThresholds(
-        warning_bytes=warning_bytes, critical_bytes=critical_bytes
-    )
+    new = LagThresholds(warning_bytes=warning_bytes, critical_bytes=critical_bytes)
     await meta_repo.set_value(conn, LAG_THRESHOLDS_KEY, new.to_dict())
     logger.info(
         "replication_lag_thresholds_updated",
@@ -785,9 +777,9 @@ _PG_SETTINGS_TO_EXPOSE: tuple[str, ...] = (
 class PostgresInfo:
     """Snapshot des params Postgres de l'instance courante."""
 
-    settings: dict[str, str]    # name → value (string)
-    version: str                # full version string (SELECT version())
-    server_addr: str | None     # IP côté serveur, NULL si socket UNIX local
+    settings: dict[str, str]  # name → value (string)
+    version: str  # full version string (SELECT version())
+    server_addr: str | None  # IP côté serveur, NULL si socket UNIX local
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -822,3 +814,19 @@ async def get_postgres_info(conn: asyncpg.Connection) -> PostgresInfo:
         version=str(version) if version else "",
         server_addr=server_addr,
     )
+
+
+# ─── (LOT 3 stub) Hook is_standby_of ─────────────────────────────────────────
+
+
+async def set_standby_of(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    master_url: str | None,
+) -> None:
+    """Marque ou démarque cette instance comme asservie à un master (LOT 3 stub).
+
+    Implémentation complète dans LOT 5. À ce stade : juste set la clé
+    `replication.is_standby_of` dans `system_metadata` (NULL = pas asservi).
+    """
+    await meta_repo.set_value(conn, "replication.is_standby_of", master_url)

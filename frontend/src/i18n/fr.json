@@ -232,6 +232,12 @@
     "hideValue": "Masquer",
     "copyValue": "Copier sans afficher",
     "editValue": "Modifier la valeur",
+    "editProperties": "Modifier les propriétés",
+    "editPropertiesTitle": "Propriétés du secret",
+    "descriptionLabel": "Description",
+    "tagsLabel": "Tags",
+    "tagsHint": "Appuie sur Entrée pour ajouter un tag.",
+    "meta_saved": "Propriétés mises à jour",
     "generating": "Génération...",
     "placeholder": "Placeholder (sans valeur)",
     "generate": {

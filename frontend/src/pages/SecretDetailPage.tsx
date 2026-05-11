@@ -27,6 +27,9 @@ import {
   PasswordInput,
   Breadcrumbs,
   Anchor,
+  Modal,
+  Textarea,
+  TagsInput,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useTranslation } from 'react-i18next'
@@ -61,6 +64,45 @@ export function SecretDetailPage() {
   const [editValue, setEditValue] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [decryptError, setDecryptError] = useState<string | null>(null)
+  // Modale d'édition des métadonnées (description + tags) — séparée du flow
+  // edit value (qui touche au crypto). Les champs sont initialisés depuis
+  // `secret` à l'ouverture de la modale.
+  const [isEditingMeta, setIsEditingMeta] = useState(false)
+  const [metaDescription, setMetaDescription] = useState('')
+  const [metaTags, setMetaTags] = useState<string[]>([])
+  const [isSavingMeta, setIsSavingMeta] = useState(false)
+
+  function openMetaModal() {
+    if (!secret) return
+    setMetaDescription(secret.description ?? '')
+    setMetaTags([...secret.tags])
+    setIsEditingMeta(true)
+  }
+
+  async function handleSaveMeta() {
+    if (!secret || isSavingMeta) return
+    setIsSavingMeta(true)
+    try {
+      await api.patch<unknown>(
+        `/wallets/${walletId}/secrets/by-id/${secret.id}`,
+        {
+          description: metaDescription.trim() || null,
+          tags: metaTags,
+        },
+      )
+      notifications.show({ color: 'green', message: t('secrets.meta_saved') })
+      setIsEditingMeta(false)
+      void queryClient.invalidateQueries({
+        queryKey: ['secret-detail', walletId, secretId],
+      })
+      invalidateWalletQueries(queryClient, walletId ?? '')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : String(err)
+      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+    } finally {
+      setIsSavingMeta(false)
+    }
+  }
 
   async function handleSaveEdit() {
     if (!secret || isSaving) return
@@ -325,6 +367,9 @@ export function SecretDetailPage() {
             >
               {isEditing ? t('common.cancel') : t('secrets.editValue')}
             </Button>
+            <Button variant="outline" onClick={openMetaModal}>
+              {t('secrets.editProperties')}
+            </Button>
             <Button
               variant="outline"
               color="red"
@@ -354,6 +399,38 @@ export function SecretDetailPage() {
           </Stack>
         )}
       </Paper>
+
+      <Modal
+        opened={isEditingMeta}
+        onClose={() => setIsEditingMeta(false)}
+        title={t('secrets.editPropertiesTitle')}
+        size="md"
+      >
+        <Stack>
+          <Textarea
+            label={t('secrets.descriptionLabel')}
+            value={metaDescription}
+            onChange={(e) => setMetaDescription(e.currentTarget.value)}
+            rows={3}
+            maxLength={1000}
+          />
+          <TagsInput
+            label={t('secrets.tagsLabel')}
+            description={t('secrets.tagsHint')}
+            value={metaTags}
+            onChange={setMetaTags}
+            clearable
+          />
+          <Group justify="flex-end" mt="md">
+            <Button variant="subtle" onClick={() => setIsEditingMeta(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button loading={isSavingMeta} onClick={() => void handleSaveMeta()}>
+              {t('common.save')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   )
 }

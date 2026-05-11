@@ -34,6 +34,7 @@ import {
 } from '@/lib/adminApi'
 import { ApiError } from '@/lib/api-client'
 import { StreamingNodesPanel } from '@/components/StreamingNodesPanel'
+import { PostgresInfoPanel } from '@/components/PostgresInfoPanel'
 
 function StatusBadge({ status }: { status: string }) {
   const color = status === 'ok' ? 'green' : status === 'degraded' ? 'orange' : 'red'
@@ -230,6 +231,10 @@ export function AdminReplicationPage() {
           </Stack>
         </Card>
       )}
+
+      {/* Postgres info — paramètres de l'instance courante (master), à
+          copier côté standby pour matcher la config de réplication. */}
+      <PostgresInfoPanel />
 
       {/* Streaming async — gestion des standby */}
       <StreamingNodesPanel />

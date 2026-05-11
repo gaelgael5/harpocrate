@@ -114,13 +114,7 @@ export function Layout({ children }: { children?: ReactNode }) {
         <NavLink component={RouterNavLink} to="/audit"       label={t('nav.audit')} />
         <NavLink component={RouterNavLink} to="/account"     label={t('nav.account')} />
         <NavLink component={RouterNavLink} to="/integration" label={t('nav.integration')} />
-        <NavLink
-          component="a"
-          href="/v1/api-docs"
-          target="_blank"
-          rel="noopener noreferrer"
-          label={t('nav.api_docs')}
-        />
+        <NavLink component={RouterNavLink} to="/api-docs" label={t('nav.api_docs')} />
         <NavLink component={RouterNavLink} to="/export-all"  label={t('nav.export_all')} />
 
         {isAdmin && (

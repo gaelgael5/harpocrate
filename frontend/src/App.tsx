@@ -53,6 +53,7 @@ import { AdminAnomaliesPage } from '@/pages/AdminAnomaliesPage'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import { LandingPage } from '@/pages/LandingPage'
 import { ApiDocsPage } from '@/pages/ApiDocsPage'
+import { ApiDocsEmbeddedPage } from '@/pages/ApiDocsEmbeddedPage'
 
 /** Wrapper qui pousse tout le contenu sous le bandeau dev (s'il est actif). */
 function ContentWithBannerOffset({ children }: { children: ReactNode }) {
@@ -218,6 +219,7 @@ export default function App() {
             <Route path="/admin/anomalies" element={<AdminAnomaliesPage />} />
             <Route path="/export-all" element={<ExportAllPage />} />
             <Route path="/admin/env" element={<AdminEnvPage />} />
+            <Route path="/api-docs" element={<ApiDocsEmbeddedPage />} />
           </Route>
 
           {/* Fallback */}

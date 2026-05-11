@@ -192,6 +192,23 @@ async def delete_streaming_node(node_id: UUID, admin: AdminJwt) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/streaming/postgres-info", response_class=JSONResponse)
+async def get_postgres_info(admin: AdminJwt) -> JSONResponse:
+    """Expose les paramètres Postgres de l'instance courante (master) :
+    version, paths config/data/hba, wal_level, max_wal_senders, etc.
+
+    Utilisé par l'UI Réplication pour aider l'admin à configurer un standby :
+    il peut lire ces valeurs côté master et copier les bons paramètres dans
+    la config standby (postgresql.conf, primary_conninfo, etc.).
+
+    Lecture seule, aucun side-effect.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        info = await streaming_svc.get_postgres_info(conn)
+    return JSONResponse(info.to_dict())
+
+
 @router.post("/streaming/reload-pg-hba", response_class=JSONResponse)
 async def reload_pg_hba(admin: AdminJwt) -> JSONResponse:
     """À appeler après que l'admin a modifié pg_hba.conf manuellement côté

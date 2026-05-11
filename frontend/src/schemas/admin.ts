@@ -343,6 +343,16 @@ export const LagThresholdsSchema = z.object({
 
 export type LagThresholds = z.infer<typeof LagThresholdsSchema>
 
+// (it 2.5) Snapshot des paramètres Postgres de l'instance courante,
+// exposé pour aider l'admin à configurer un standby (copie master → standby).
+export const PostgresInfoSchema = z.object({
+  settings: z.record(z.string()),
+  version: z.string(),
+  server_addr: z.string().nullable(),
+})
+
+export type PostgresInfo = z.infer<typeof PostgresInfoSchema>
+
 // ─── Replication strategies (LOT_20) ─────────────────────────────────────────
 
 export const ReplicationStrategySchema = z.object({

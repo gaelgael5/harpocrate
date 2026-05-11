@@ -685,6 +685,32 @@
       "activateSuccess": "Stratégie activée",
       "deactivateSuccess": "Stratégie désactivée",
       "nodes": "Nœuds",
+      "postgresInfo": {
+        "title": "Paramètres Postgres de cette instance",
+        "subtitle": "Lecture seule des paramètres `pg_settings` utiles pour configurer un standby. Copie ces valeurs côté serveur standby pour matcher la config (version, paths, wal_level, …).",
+        "versionFull": "Version complète",
+        "serverAddr": "Adresse serveur (vue par cette connexion)",
+        "unixSocket": "socket UNIX local",
+        "warnFlag": "⚠ à corriger",
+        "group": {
+          "identity": "Identité",
+          "replication": "Réplication",
+          "paths": "Fichiers de configuration"
+        },
+        "field": {
+          "serverVersion": "Version serveur",
+          "port": "Port d'écoute",
+          "listenAddresses": "Adresses d'écoute",
+          "walLevel": "Niveau WAL (doit être ≥ replica)",
+          "maxWalSenders": "Max WAL senders (≥ 1)",
+          "maxReplicationSlots": "Max slots de réplication",
+          "walKeepSize": "WAL conservés (taille)",
+          "archiveMode": "Mode archive",
+          "dataDirectory": "Répertoire de données",
+          "configFile": "postgresql.conf",
+          "hbaFile": "pg_hba.conf"
+        }
+      },
       "streaming": {
         "title": "Streaming async — standby",
         "subtitle": "Liste des serveurs PostgreSQL en réplication streaming. Ajout d'un standby : Harpocrate crée le rôle côté master et vous fournit les commandes à exécuter en SSH côté standby.",

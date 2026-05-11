@@ -400,9 +400,11 @@ import {
   TcpPingResultSchema,
   ReplicationNodeObservationsResponseSchema,
   LagThresholdsSchema,
+  PostgresInfoSchema,
   type TcpPingResult,
   type ReplicationNodeObservationsResponse,
   type LagThresholds,
+  type PostgresInfo,
 } from '@/schemas/admin'
 
 export async function testStreamingNodeConnect(id: string): Promise<TcpPingResult> {
@@ -436,6 +438,11 @@ export async function updateLagThresholds(
     body,
   )
   return LagThresholdsSchema.parse(raw)
+}
+
+export async function fetchPostgresInfo(): Promise<PostgresInfo> {
+  const raw = await api.get<unknown>('/admin/replication/streaming/postgres-info')
+  return PostgresInfoSchema.parse(raw)
 }
 
 // ─── Scheduled backups (cron-like) ───────────────────────────────────────────

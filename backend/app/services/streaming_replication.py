@@ -745,3 +745,80 @@ async def check_lag_threshold(
         },
     )
     return severity
+
+
+# ─── (it2.5) Postgres info — pour copier la config master vers standby ──────
+
+
+# Liste des paramètres `pg_settings` utiles pour configurer une réplication.
+# Choisi pour matcher exactement ce dont l'admin a besoin pour configurer un
+# standby :
+#   - `version`              : matcher la version PG entre master et standby
+#                              (sinon pg_basebackup refuse)
+#   - `data_directory`       : utile au pg_basebackup côté standby (souvent
+#                              identique des deux côtés)
+#   - `config_file`/`hba_file`: paths absolus côté master, à connaître pour
+#                              modifier pg_hba.conf
+#   - `wal_level`            : doit valoir 'replica' (ou 'logical') sinon le
+#                              standby ne peut pas streamer
+#   - `max_wal_senders`      : doit être >= nombre de standbys + 1 marge
+#   - `max_replication_slots`: idem si on utilise des slots
+#   - `port` / `listen_addresses` : pour construire `primary_conninfo`
+#
+# Tous lus en une seule query via `pg_settings WHERE name = ANY(...)`.
+_PG_SETTINGS_TO_EXPOSE: tuple[str, ...] = (
+    "data_directory",
+    "config_file",
+    "hba_file",
+    "wal_level",
+    "max_wal_senders",
+    "max_replication_slots",
+    "wal_keep_size",
+    "archive_mode",
+    "port",
+    "listen_addresses",
+    "server_version",
+)
+
+
+@dataclass(frozen=True)
+class PostgresInfo:
+    """Snapshot des params Postgres de l'instance courante."""
+
+    settings: dict[str, str]    # name → value (string)
+    version: str                # full version string (SELECT version())
+    server_addr: str | None     # IP côté serveur, NULL si socket UNIX local
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "settings": self.settings,
+            "version": self.version,
+            "server_addr": self.server_addr,
+        }
+
+
+async def get_postgres_info(conn: asyncpg.Connection) -> PostgresInfo:
+    """Lit les paramètres Postgres utiles à la configuration d'un standby.
+
+    Tout est lu en lecture seule. Aucun side-effect.
+    """
+    settings_rows = await conn.fetch(
+        "SELECT name, setting FROM pg_settings WHERE name = ANY($1::text[])",
+        list(_PG_SETTINGS_TO_EXPOSE),
+    )
+    settings = {row["name"]: row["setting"] for row in settings_rows}
+
+    # version() retourne la chaîne complète "PostgreSQL 16.1 on x86_64-...".
+    version = await conn.fetchval("SELECT version()")
+
+    # inet_server_addr() = IP du serveur PG vue depuis cette connexion ;
+    # NULL si on est connecté via socket UNIX local. Utile pour confirmer
+    # à l'admin où PG écoute réellement.
+    server_addr_raw = await conn.fetchval("SELECT inet_server_addr()::text")
+    server_addr = server_addr_raw if server_addr_raw else None
+
+    return PostgresInfo(
+        settings=settings,
+        version=str(version) if version else "",
+        server_addr=server_addr,
+    )

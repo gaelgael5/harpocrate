@@ -248,11 +248,20 @@ async def accept_pairing_v2(
                 pairing_url=req.pairing_url,
                 self_url=settings.public_url,
                 actor_user_id=admin.user_id,
+                force=req.force,
             )
         except InvalidPairingUrlError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "invalid_pairing_url", "cause": str(e)},
+            ) from e
+        except svc.NodeAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "node_already_exists",
+                    "existing_node": e.existing_node,
+                },
             ) from e
         except svc.InvalidCodeError:
             raise HTTPException(

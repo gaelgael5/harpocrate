@@ -8,14 +8,14 @@ from uuid import uuid4
 
 def _build_test_app() -> tuple:
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     from app.api.v1 import admin_replication_pairing
 
     app = FastAPI()
     app.include_router(admin_replication_pairing.router, prefix="/v1")
-    from fastapi.testclient import TestClient
 
-    return TestClient(app), admin_replication_pairing
+    return TestClient(app), app, admin_replication_pairing
 
 
 def _make_pool_mock() -> MagicMock:
@@ -29,7 +29,7 @@ def _make_pool_mock() -> MagicMock:
 
 
 def test_init_v2_requires_admin_auth() -> None:
-    client, _ = _build_test_app()
+    client, _app, _ = _build_test_app()
     r = client.post(
         "/v1/admin/replication/pairing/init-v2",
         json={"standby_url": "https://b.example/"},
@@ -38,7 +38,7 @@ def test_init_v2_requires_admin_auth() -> None:
 
 
 def test_accept_v2_requires_admin_auth() -> None:
-    client, _ = _build_test_app()
+    client, _app, _ = _build_test_app()
     r = client.post(
         "/v1/admin/replication/pairing/accept-v2",
         json={"pairing_url": "https://a.example/pair?sid=" + str(uuid4()) + "&t=" + "a" * 32},
@@ -48,7 +48,7 @@ def test_accept_v2_requires_admin_auth() -> None:
 
 def test_confirm_v2_does_not_require_auth() -> None:
     """/confirm-v2 est appelé inter-instances — pas de JWT exigé."""
-    client, mod = _build_test_app()
+    client, _app, mod = _build_test_app()
 
     async def fake_confirm(conn, **kw):
         return {
@@ -81,7 +81,7 @@ def test_confirm_v2_does_not_require_auth() -> None:
 
 
 def test_confirm_v2_invalid_token_returns_403() -> None:
-    client, mod = _build_test_app()
+    client, _app, mod = _build_test_app()
 
     async def fake_confirm(conn, **kw):
         raise mod.svc.InvalidCodeError("token_mismatch")
@@ -105,7 +105,7 @@ def test_confirm_v2_invalid_token_returns_403() -> None:
 
 
 def test_confirm_v2_too_many_attempts_returns_429() -> None:
-    client, mod = _build_test_app()
+    client, _app, mod = _build_test_app()
 
     async def fake_confirm(conn, **kw):
         raise mod.svc.TooManyAttemptsError("too_many_attempts")
@@ -130,7 +130,7 @@ def test_confirm_v2_too_many_attempts_returns_429() -> None:
 
 def test_confirm_v2_rejects_short_token_via_pydantic() -> None:
     """Validator du DTO : token doit être 32 hex chars."""
-    client, _ = _build_test_app()
+    client, _app, _ = _build_test_app()
     r = client.post(
         "/v1/admin/replication/pairing/confirm-v2",
         json={
@@ -144,7 +144,7 @@ def test_confirm_v2_rejects_short_token_via_pydantic() -> None:
 
 def test_confirm_v2_endpoint_returns_409_when_node_label_exists() -> None:
     """Si un node existe déjà côté master, /confirm-v2 doit renvoyer 409 node_already_exists."""
-    client, mod = _build_test_app()
+    client, _app, mod = _build_test_app()
 
     existing: mod.svc.ExistingNodeInfo = {  # type: ignore[attr-defined]
         "id": "22222222-2222-2222-2222-222222222222",
@@ -182,7 +182,7 @@ def test_confirm_v2_endpoint_returns_409_when_node_label_exists() -> None:
 
 def test_confirm_v2_endpoint_replaces_when_force_true() -> None:
     """force=true → 200, l'ancien node est remplacé."""
-    client, mod = _build_test_app()
+    client, _app, mod = _build_test_app()
 
     async def fake_confirm(conn, **kw):
         assert kw.get("force") is True, "force doit être passé au service"
@@ -216,3 +216,57 @@ def test_confirm_v2_endpoint_replaces_when_force_true() -> None:
     body = r.json()
     assert body["master_host"] == "10.0.0.1"
     assert body["replication_user"].startswith("repl_")
+
+
+def test_accept_v2_endpoint_returns_409_when_master_node_exists() -> None:
+    """/accept-v2 renvoie 409 transparent quand accept_standby_v2 lève NodeAlreadyExistsError."""
+    from unittest.mock import AsyncMock as _AsyncMock
+    from uuid import uuid4
+
+    client, app, mod = _build_test_app()
+
+    existing: mod.svc.ExistingNodeInfo = {  # type: ignore[attr-defined]
+        "id": str(uuid4()),
+        "label": "https://b.example/",
+        "host": "b.example",
+        "application_name": "b_example",
+        "last_state": "disconnected",
+        "last_seen_at": None,
+    }
+
+    async def fake_accept(*args: object, **kwargs: object) -> object:
+        raise mod.svc.NodeAlreadyExistsError(existing)
+
+    from app.core import admin_auth
+
+    async def fake_admin() -> admin_auth.AdminUser:
+        return admin_auth.AdminUser(
+            user_id="00000000-0000-0000-0000-000000000000",  # type: ignore[arg-type]
+            keycloak_sub="test",
+            email="test@example.com",
+            display_name="Test",
+        )
+
+    app.dependency_overrides[admin_auth.require_admin_jwt] = fake_admin
+    try:
+        with (
+            patch.object(mod.svc_v2, "accept_standby_v2", side_effect=fake_accept),
+            patch(
+                "app.api.v1.admin_replication_pairing.get_pool",
+                _AsyncMock(return_value=_make_pool_mock()),
+            ),
+        ):
+            pairing_url = f"https://a.example/pair?sid={uuid4()}&t=" + "a" * 32
+            r = client.post(
+                "/v1/admin/replication/pairing/accept-v2",
+                json={"pairing_url": pairing_url},
+                headers={"Authorization": "Bearer fake"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r.status_code == 409, r.text
+    body = r.json()
+    assert body["detail"]["error"] == "node_already_exists"
+    assert body["detail"]["existing_node"]["host"] == "b.example"
+    assert body["detail"]["existing_node"]["last_state"] == "disconnected"

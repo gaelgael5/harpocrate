@@ -27,7 +27,7 @@ import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 import asyncpg
@@ -36,6 +36,9 @@ import structlog
 from app.db.repositories import replication_nodes as nodes_repo
 from app.db.repositories import system_metadata as meta_repo
 from app.services import system_anomalies as anomaly_svc
+
+if TYPE_CHECKING:
+    from app.services.pairing import ExistingNodeInfo
 
 
 logger = structlog.get_logger(__name__)
@@ -276,46 +279,69 @@ async def add_node(
     """Crée le rôle Postgres + insère le node + retourne le bundle.
 
     Tout est en transaction : si l'INSERT échoue, on DROP le rôle pour ne
-    pas laisser d'orphelin côté master.
+    pas laisser d'orphelin côté master. Si l'INSERT échoue à cause d'un
+    conflit d'unicité sur `label` ou `application_name`, on remonte une
+    `NodeAlreadyExistsError` typée qui porte les détails du node existant.
     """
+    from app.services.pairing import NodeAlreadyExistsError
+
     replication_user = make_replication_user(label)
     application_name = make_application_name(label)
     password = generate_password()
 
-    async with conn.transaction():
-        # 1) CREATE ROLE — pas de quote_ident ici, le user est généré par
-        # `make_replication_user` qui n'utilise que [a-z0-9_] (pas d'injection
-        # possible). Le password est passé en littéral après escape standard.
-        # asyncpg ne paramétrise pas les CREATE ROLE — on écrit en SQL brut
-        # avec un pg_quote_literal-like (doublement des single quotes).
-        safe_password = password.replace("'", "''")
-        await conn.execute(
-            f"CREATE ROLE {replication_user} REPLICATION LOGIN PASSWORD '{safe_password}'"
-        )
-
-        try:
-            node_id = await nodes_repo.insert(
-                conn,
-                strategy_id=strategy_id,
-                label=label,
-                host=host,
-                port=port,
-                replication_user=replication_user,
-                application_name=application_name,
-                role=role,
-                notes=notes,
-                created_by_user_id=created_by_user_id,
+    try:
+        async with conn.transaction():
+            # 1) CREATE ROLE — pas de quote_ident ici, le user est généré par
+            # `make_replication_user` qui n'utilise que [a-z0-9_] (pas d'injection
+            # possible). Le password est passé en littéral après escape standard.
+            # asyncpg ne paramétrise pas les CREATE ROLE — on écrit en SQL brut
+            # avec un pg_quote_literal-like (doublement des single quotes).
+            safe_password = password.replace("'", "''")
+            await conn.execute(
+                f"CREATE ROLE {replication_user} REPLICATION LOGIN PASSWORD '{safe_password}'"
             )
-        except Exception:
-            # Best-effort cleanup : on tente de drop le rôle pour ne pas
-            # laisser d'orphelin si l'INSERT a échoué (typiquement un label
-            # déjà pris). La transaction sera rollback de toute façon, donc
-            # le CREATE ROLE l'est aussi — mais on log au cas où.
+
+            try:
+                node_id = await nodes_repo.insert(
+                    conn,
+                    strategy_id=strategy_id,
+                    label=label,
+                    host=host,
+                    port=port,
+                    replication_user=replication_user,
+                    application_name=application_name,
+                    role=role,
+                    notes=notes,
+                    created_by_user_id=created_by_user_id,
+                )
+            except asyncpg.UniqueViolationError:
+                raise
+            except Exception:
+                # Best-effort cleanup : on tente de drop le rôle pour ne pas
+                # laisser d'orphelin si l'INSERT a échoué (typiquement un label
+                # déjà pris). La transaction sera rollback de toute façon, donc
+                # le CREATE ROLE l'est aussi — mais on log au cas où.
+                logger.warning(
+                    "replication_node_insert_failed_role_will_be_rolled_back",
+                    replication_user=replication_user,
+                )
+                raise
+    except asyncpg.UniqueViolationError as exc:
+        existing = await _load_existing_node_details(
+            conn,
+            label=label,
+            application_name=application_name,
+        )
+        if existing is None:
             logger.warning(
-                "replication_node_insert_failed_role_will_be_rolled_back",
+                "replication_node_unique_violation_on_unknown_constraint",
+                label=label,
+                application_name=application_name,
                 replication_user=replication_user,
+                constraint_name=getattr(exc, "constraint_name", None),
             )
             raise
+        raise NodeAlreadyExistsError(existing) from exc
 
     bundle = _build_bundle(
         node_id=node_id,
@@ -335,6 +361,40 @@ async def add_node(
         standby_host=host,
     )
     return node_id, bundle
+
+
+async def _load_existing_node_details(
+    conn: asyncpg.Connection,
+    *,
+    label: str,
+    application_name: str,
+) -> ExistingNodeInfo | None:
+    """Récupère le node existant qui a déclenché la `UniqueViolationError`.
+
+    Le conflit peut venir de l'index sur `LOWER(label)` ou sur
+    `LOWER(application_name)` — on cherche les deux.
+    """
+    row = await conn.fetchrow(
+        """
+        SELECT id, label, host, application_name, last_state, last_seen_at
+        FROM replication_nodes
+        WHERE LOWER(label) = LOWER($1) OR LOWER(application_name) = LOWER($2)
+        LIMIT 1
+        """,
+        label,
+        application_name,
+    )
+    if row is None:
+        return None
+    last_seen_at = row["last_seen_at"]
+    return {
+        "id": str(row["id"]),
+        "label": row["label"],
+        "host": row["host"],
+        "application_name": row["application_name"],
+        "last_state": row["last_state"],
+        "last_seen_at": last_seen_at.isoformat() if last_seen_at is not None else None,
+    }
 
 
 async def delete_node(conn: asyncpg.Connection, node_id: UUID) -> bool:

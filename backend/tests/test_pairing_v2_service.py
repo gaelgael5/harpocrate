@@ -15,6 +15,23 @@ from app.services.pairing_url_codec import (
 )
 
 
+def _token_from_pairing_url(pairing_url: str) -> str:
+    from urllib.parse import parse_qs, urlparse
+
+    qs = parse_qs(urlparse(pairing_url).query)
+    return qs["t"][0]
+
+
+async def _cleanup_repl_roles(conn: asyncpg.Connection[asyncpg.Record]) -> None:
+    await conn.execute(
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+        "WHERE usename LIKE 'repl_%'"
+    )
+    roles = await conn.fetch("SELECT rolname FROM pg_roles WHERE rolname LIKE 'repl_%'")
+    for r in roles:
+        await conn.execute(f"DROP ROLE IF EXISTS {r['rolname']}")
+
+
 async def test_init_master_v2_returns_pairing_url(
     real_db_pool: asyncpg.Pool[asyncpg.Record],
 ) -> None:
@@ -238,3 +255,132 @@ async def test_accept_standby_v2_verify_tls_disabled_when_setting_true(
             )
     assert captured.get("verify") is False
     assert any(ev == "pairing_v2.tls_verification_disabled" for ev, _ in warnings)
+
+
+async def test_confirm_master_v2_raises_node_already_exists_on_label_collision(
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    """Si un node existe déjà pour ce standby_url, on lève NodeAlreadyExistsError."""
+    async with real_db_pool.acquire() as conn:
+        from app.db.repositories import replication_strategies as strat_repo
+        from app.services import streaming_replication as streaming_svc
+
+        strat_id = await strat_repo.upsert_strategy(
+            conn,
+            type_="docker_compose",
+            label=f"test-strategy-{__import__('uuid').uuid4().hex[:8]}",
+            description="test",
+            config={"compose_file": "/tmp/x.yml"},
+        )
+        await strat_repo.activate_strategy(conn, strategy_id=strat_id)
+
+        # 1) crée un node existant pour b.example
+        await streaming_svc.add_node(
+            conn,
+            strategy_id=strat_id,
+            label="https://b.example/",
+            host="b.example",
+            port=5432,
+            role="standby_ro",
+            notes=None,
+            master_host="a.example",
+            master_port=5432,
+            created_by_user_id=None,
+        )
+
+        # 2) prépare une session pending pour confirm_master_v2
+        init = await svc.init_master_v2(
+            conn,
+            standby_url="https://b.example/",
+            actor_user_id=None,
+        )
+        try:
+            with pytest.raises(svc_v1.NodeAlreadyExistsError) as exc_info:
+                await svc.confirm_master_v2(
+                    conn,
+                    session_id=init.session_id,
+                    token=_token_from_pairing_url(init.pairing_url),
+                    standby_url="https://b.example/",
+                    actor_user_id=None,
+                )
+            assert "id" in exc_info.value.existing_node
+            assert exc_info.value.existing_node["label"] == "https://b.example/"
+        finally:
+            await conn.execute("DELETE FROM pairing_session WHERE id = $1", init.session_id)
+            await conn.execute("DELETE FROM replication_nodes WHERE strategy_id = $1", strat_id)
+            await conn.execute("DELETE FROM replication_strategies WHERE id = $1", strat_id)
+            await _cleanup_repl_roles(conn)
+
+
+async def test_confirm_master_v2_with_force_replaces_existing_node(
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    """`force=True` remplace le node existant et écrit l'audit `pairing.master_node_replaced`."""
+    async with real_db_pool.acquire() as conn:
+        from app.db.repositories import replication_strategies as strat_repo
+        from app.services import streaming_replication as streaming_svc
+
+        strat_id = await strat_repo.upsert_strategy(
+            conn,
+            type_="docker_compose",
+            label=f"test-strategy-{__import__('uuid').uuid4().hex[:8]}",
+            description="test",
+            config={"compose_file": "/tmp/x.yml"},
+        )
+        await strat_repo.activate_strategy(conn, strategy_id=strat_id)
+        old_node_id, _ = await streaming_svc.add_node(
+            conn,
+            strategy_id=strat_id,
+            label="https://b.example/",
+            host="b.example",
+            port=5432,
+            role="standby_ro",
+            notes=None,
+            master_host="a.example",
+            master_port=5432,
+            created_by_user_id=None,
+        )
+        init = await svc.init_master_v2(
+            conn,
+            standby_url="https://b.example/",
+            actor_user_id=None,
+        )
+        try:
+            payload = await svc.confirm_master_v2(
+                conn,
+                session_id=init.session_id,
+                token=_token_from_pairing_url(init.pairing_url),
+                standby_url="https://b.example/",
+                actor_user_id=None,
+                force=True,
+            )
+            assert payload["master_host"]
+            assert payload["replication_user"].startswith("repl_")
+            # ancien node supprimé
+            assert await conn.fetchrow(
+                "SELECT id FROM replication_nodes WHERE id = $1", old_node_id
+            ) is None
+            # nouveau node créé
+            new_row = await conn.fetchrow(
+                "SELECT id FROM replication_nodes WHERE id = $1::uuid",
+                payload["node_id"],
+            )
+            assert new_row is not None
+            # audit log replacement
+            audit = await conn.fetchrow(
+                "SELECT * FROM audit_log "
+                "WHERE action = 'pairing.master_node_replaced' "
+                "AND created_at >= now() - interval '1 minute' "
+                "ORDER BY created_at DESC LIMIT 1"
+            )
+            assert audit is not None
+        finally:
+            await conn.execute("DELETE FROM pairing_session WHERE id = $1", init.session_id)
+            await conn.execute("DELETE FROM replication_nodes WHERE strategy_id = $1", strat_id)
+            await conn.execute("DELETE FROM replication_strategies WHERE id = $1", strat_id)
+            await conn.execute(
+                "DELETE FROM audit_log WHERE action IN "
+                "('pairing.master_init_v2', 'pairing.master_node_replaced') "
+                "AND created_at >= now() - interval '1 minute'"
+            )
+            await _cleanup_repl_roles(conn)

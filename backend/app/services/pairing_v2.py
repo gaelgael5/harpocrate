@@ -141,11 +141,19 @@ async def confirm_master_v2(
     token: str,
     standby_url: str,
     actor_user_id: UUID | None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """A reçoit l'appel inter-instances du standby : (session_id, token).
 
     Vérifie que la session est active, que le token correspond, crée le node
     de réplication et stocke le payload pour répondre au standby.
+
+    Si `force=True` et qu'un node existe déjà avec le même label (ou
+    application_name), il est supprimé puis recréé. Cette opération est
+    DESTRUCTIVE et irréversible : l'ancien rôle Postgres est DROP et toutes
+    les credentials précédemment provisionnées pour ce standby deviennent
+    invalides. À n'utiliser qu'après confirmation que l'ancien standby est
+    hors service. L'opération est auditée via `pairing.master_node_replaced`.
     """
     from app.core.config import settings
 
@@ -182,7 +190,7 @@ async def confirm_master_v2(
 
     standby_host = _host_from_url(standby_url)
 
-    _node_id, bundle = await streaming_svc.add_node(
+    node_id, bundle = await streaming_svc.add_node(
         conn,
         strategy_id=strategy_row["id"],
         label=standby_url,
@@ -193,6 +201,7 @@ async def confirm_master_v2(
         master_host=master_host,
         master_port=master_port,
         created_by_user_id=actor_user_id,
+        replace_existing=force,
     )
 
     payload: dict[str, Any] = {
@@ -201,12 +210,24 @@ async def confirm_master_v2(
         "replication_user": bundle.replication_user,
         "replication_password": bundle.password,
         "application_name": bundle.application_name,
-        "node_id": str(bundle.node_id),
+        "node_id": str(node_id),
     }
 
     async with conn.transaction():
         await repo.set_payload(conn, session_id, payload)
         await repo.set_status(conn, session_id, "confirmed")
+        if force:
+            # TODO(audit): inclure old_node_id quand add_node retourne le node remplacé.
+            await audit_log_insert(
+                conn,
+                "pairing.master_node_replaced",
+                actor_user_id=actor_user_id,
+                metadata={
+                    "session_id": str(session_id),
+                    "standby_url": standby_url,
+                    "new_node_id": str(node_id),
+                },
+            )
 
     return payload
 

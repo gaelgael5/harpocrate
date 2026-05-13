@@ -202,7 +202,7 @@ async def confirm_master(
         label=standby_url,
         host=standby_host,
         port=5432,  # Port Postgres standby inconnu — défaut, à ajuster dans le wizard Task 3.
-        role="standby",
+        role="standby_ro",
         notes=f"Créé automatiquement lors de l'appairage avec {standby_url}",
         master_host=master_host,
         master_port=master_port,

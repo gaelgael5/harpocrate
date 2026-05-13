@@ -188,7 +188,7 @@ async def confirm_master_v2(
         label=standby_url,
         host=standby_host,
         port=5432,
-        role="standby",
+        role="standby_ro",
         notes=f"Créé par appairage v2 avec {standby_url}",
         master_host=master_host,
         master_port=master_port,

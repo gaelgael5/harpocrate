@@ -106,6 +106,7 @@ class PairingAcceptV2Request(BaseModel):
     """B colle l'URL d'appairage reçue de A."""
 
     pairing_url: str = Field(..., min_length=1)
+    force: bool = False
 
 
 class PairingConfirmV2Request(BaseModel):
@@ -114,6 +115,7 @@ class PairingConfirmV2Request(BaseModel):
     session_id: UUID
     token: str
     standby_url: str = Field(..., min_length=1)
+    force: bool = False
 
     @field_validator("token")
     @classmethod

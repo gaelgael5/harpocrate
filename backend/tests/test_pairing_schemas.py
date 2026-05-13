@@ -1,15 +1,17 @@
-"""Tests Pydantic schemas appairage (LOT 2)."""
+"""Tests Pydantic schemas appairage (LOT 2 + LOT 5)."""
 
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from app.models.api.pairing import (
     PairingAcceptRequest,
+    PairingAcceptV2Request,
     PairingConfirmRequest,
     PairingConfirmResponse,
+    PairingConfirmV2Request,
     PairingInitRequest,
     PairingInitResponse,
     PairingStatusResponse,
@@ -102,3 +104,35 @@ def test_confirm_response_node_id_is_uuid() -> None:
             application_name="a",
             node_id="not-a-uuid",  # type: ignore[arg-type]
         )
+
+
+# ─── V2 tests (LOT 5) ──────────────────────────────────────────────────────────
+
+
+def test_pairing_confirm_v2_request_force_defaults_false() -> None:
+    req = PairingConfirmV2Request(
+        session_id=UUID("00000000-0000-0000-0000-000000000000"),
+        token="a" * 32,
+        standby_url="https://b/",
+    )
+    assert req.force is False
+
+
+def test_pairing_confirm_v2_request_force_true_accepted() -> None:
+    req = PairingConfirmV2Request(
+        session_id=UUID("00000000-0000-0000-0000-000000000000"),
+        token="a" * 32,
+        standby_url="https://b/",
+        force=True,
+    )
+    assert req.force is True
+
+
+def test_pairing_accept_v2_request_force_defaults_false() -> None:
+    req = PairingAcceptV2Request(pairing_url="https://a/pair?sid=x&t=y")
+    assert req.force is False
+
+
+def test_pairing_accept_v2_request_force_true_accepted() -> None:
+    req = PairingAcceptV2Request(pairing_url="https://a/pair?sid=x&t=y", force=True)
+    assert req.force is True

@@ -5,6 +5,9 @@
  * session_id + token, contacte le master pour récupérer les creds de
  * réplication, puis redirige vers PairingWizardPage qui guide l'exécution
  * des commandes SSH.
+ *
+ * Si le master refuse en 409 node_already_exists, on affiche
+ * ConfirmReplaceNodeModal pour relancer avec force=true.
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -23,21 +26,44 @@ import { useTranslation } from "react-i18next";
 
 import { acceptPairingV2 } from "@/lib/adminApi";
 import { ApiError } from "@/lib/api-client";
+import { ConfirmReplaceNodeModal } from "@/components/ConfirmReplaceNodeModal";
+import { ExistingNodeSchema, type ExistingNode } from "@/schemas/pairing";
 
 export function BecomeStandbyPage() {
   const { t } = useTranslation();
   const nav = useNavigate();
   const [pairingUrl, setPairingUrl] = useState("");
+  const [existing, setExisting] = useState<ExistingNode | null>(null);
 
-  const mut = useMutation({
-    mutationFn: () => acceptPairingV2(pairingUrl.trim()),
-    onSuccess: (r) => nav(`/admin/pairing/${r.session_id}`),
-    onError: (e) =>
+  const submitMut = useMutation({
+    mutationFn: (force: boolean) => acceptPairingV2(pairingUrl.trim(), force),
+    onSuccess: (r) => {
+      setExisting(null);
+      nav(`/admin/pairing/${r.session_id}`);
+    },
+    onError: (e) => {
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        e.code === "node_already_exists" &&
+        e.detail !== null &&
+        typeof e.detail === "object" &&
+        "existing_node" in (e.detail as Record<string, unknown>)
+      ) {
+        const parsed = ExistingNodeSchema.safeParse(
+          (e.detail as { existing_node: unknown }).existing_node,
+        );
+        if (parsed.success) {
+          setExisting(parsed.data);
+          return;
+        }
+      }
       notifications.show({
         color: "red",
         title: t("common.error"),
         message: e instanceof ApiError ? e.message : String(e),
-      }),
+      });
+    },
   });
 
   return (
@@ -61,15 +87,24 @@ export function BecomeStandbyPage() {
           />
           <Group justify="flex-end">
             <Button
-              loading={mut.isPending}
+              loading={submitMut.isPending}
               disabled={!pairingUrl.trim()}
-              onClick={() => mut.mutate()}
+              onClick={() => submitMut.mutate(false)}
             >
               {t("admin.replication.pairing.becomeStandby.submit")}
             </Button>
           </Group>
         </Stack>
       </Card>
+      {existing !== null && (
+        <ConfirmReplaceNodeModal
+          opened={true}
+          existingNode={existing}
+          loading={submitMut.isPending}
+          onCancel={() => setExisting(null)}
+          onConfirm={() => submitMut.mutate(true)}
+        />
+      )}
     </Stack>
   );
 }

@@ -589,9 +589,11 @@ export async function initPairingV2(
 
 export async function acceptPairingV2(
   pairingUrl: string,
+  force: boolean = false,
 ): Promise<PairingAcceptResponse> {
   const raw = await api.post<unknown>("/admin/replication/pairing/accept-v2", {
     pairing_url: pairingUrl,
+    force,
   });
   return PairingAcceptResponseSchema.parse(raw);
 }

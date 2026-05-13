@@ -77,3 +77,60 @@ async def test_add_node_label_collision_raises_node_already_exists(
             )
             for r in roles:
                 await conn.execute(f"DROP ROLE IF EXISTS {r['rolname']}")
+
+
+async def test_add_node_with_replace_existing_replaces_collision(
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    async with real_db_pool.acquire() as conn:
+        strat_id = await _create_active_strategy(conn)
+        try:
+            node_id_1, _bundle_1 = await svc.add_node(
+                conn,
+                strategy_id=strat_id,
+                label="https://b.example/",
+                host="b.example",
+                port=5432,
+                role="standby_ro",
+                notes=None,
+                master_host="a.example",
+                master_port=5432,
+                created_by_user_id=None,
+            )
+            node_id_2, bundle_2 = await svc.add_node(
+                conn,
+                strategy_id=strat_id,
+                label="https://b.example/",
+                host="b.example",
+                port=5432,
+                role="standby_ro",
+                notes=None,
+                master_host="a.example",
+                master_port=5432,
+                created_by_user_id=None,
+                replace_existing=True,
+            )
+            assert node_id_2 != node_id_1
+            old = await conn.fetchrow(
+                "SELECT id FROM replication_nodes WHERE id = $1", node_id_1
+            )
+            assert old is None  # ancienne row supprimée
+            new = await conn.fetchrow(
+                "SELECT id FROM replication_nodes WHERE id = $1", node_id_2
+            )
+            assert new is not None
+            assert bundle_2.password != ""
+        finally:
+            await conn.execute(
+                "DELETE FROM replication_nodes WHERE strategy_id = $1", strat_id
+            )
+            await conn.execute("DELETE FROM replication_strategies WHERE id = $1", strat_id)
+            await conn.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE usename LIKE 'repl_%'"
+            )
+            roles = await conn.fetch(
+                "SELECT rolname FROM pg_roles WHERE rolname LIKE 'repl_%'"
+            )
+            for r in roles:
+                await conn.execute(f"DROP ROLE IF EXISTS {r['rolname']}")

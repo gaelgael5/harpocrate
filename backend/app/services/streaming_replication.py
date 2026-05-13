@@ -262,6 +262,59 @@ async def get_node(conn: asyncpg.Connection, node_id: UUID) -> ReplicationNode |
     return _row_to_dto(row) if row else None
 
 
+async def _create_role_and_insert_node(
+    conn: asyncpg.Connection,
+    *,
+    strategy_id: UUID,
+    label: str,
+    host: str,
+    port: int,
+    role: str,
+    notes: str | None,
+    replication_user: str,
+    application_name: str,
+    password: str,
+    created_by_user_id: UUID | None,
+) -> UUID:
+    """CREATE ROLE + INSERT row dans une seule transaction.
+
+    Le password est échappé pour le littéral SQL (doublement des single quotes).
+    Sur erreur, la transaction est rollback atomiquement (CREATE ROLE + INSERT
+    forment une unité). Les `UniqueViolationError` propagent silencieusement
+    pour que le caller les traduise en exception métier ; toute autre erreur
+    est loggée avec son contexte avant propagation.
+    """
+    async with conn.transaction():
+        safe_password = password.replace("'", "''")
+        await conn.execute(
+            f"CREATE ROLE {replication_user} REPLICATION LOGIN PASSWORD '{safe_password}'"
+        )
+        try:
+            return await nodes_repo.insert(
+                conn,
+                strategy_id=strategy_id,
+                label=label,
+                host=host,
+                port=port,
+                replication_user=replication_user,
+                application_name=application_name,
+                role=role,
+                notes=notes,
+                created_by_user_id=created_by_user_id,
+            )
+        except asyncpg.UniqueViolationError:
+            raise
+        except Exception:
+            logger.warning(
+                "replication_node_insert_failed",
+                replication_user=replication_user,
+                label=label,
+                application_name=application_name,
+                strategy_id=str(strategy_id),
+            )
+            raise
+
+
 async def add_node(
     conn: asyncpg.Connection,
     *,
@@ -275,13 +328,17 @@ async def add_node(
     master_port: int,
     standby_data_dir: str = "/var/lib/postgresql/16/main",
     created_by_user_id: UUID | None = None,
+    replace_existing: bool = False,
 ) -> tuple[UUID, NodeBundle]:
     """Crée le rôle Postgres + insère le node + retourne le bundle.
 
     Tout est en transaction : si l'INSERT échoue, on DROP le rôle pour ne
     pas laisser d'orphelin côté master. Si l'INSERT échoue à cause d'un
-    conflit d'unicité sur `label` ou `application_name`, on remonte une
-    `NodeAlreadyExistsError` typée qui porte les détails du node existant.
+    conflit d'unicité sur `label` ou `application_name` :
+      - `replace_existing=False` (défaut) : lève `NodeAlreadyExistsError`
+        avec les détails du node existant.
+      - `replace_existing=True` : supprime l'ancien node (DROP ROLE +
+        DELETE row) puis réessaie l'insert dans une nouvelle transaction.
     """
     from app.services.pairing import NodeAlreadyExistsError
 
@@ -290,42 +347,19 @@ async def add_node(
     password = generate_password()
 
     try:
-        async with conn.transaction():
-            # 1) CREATE ROLE — pas de quote_ident ici, le user est généré par
-            # `make_replication_user` qui n'utilise que [a-z0-9_] (pas d'injection
-            # possible). Le password est passé en littéral après escape standard.
-            # asyncpg ne paramétrise pas les CREATE ROLE — on écrit en SQL brut
-            # avec un pg_quote_literal-like (doublement des single quotes).
-            safe_password = password.replace("'", "''")
-            await conn.execute(
-                f"CREATE ROLE {replication_user} REPLICATION LOGIN PASSWORD '{safe_password}'"
-            )
-
-            try:
-                node_id = await nodes_repo.insert(
-                    conn,
-                    strategy_id=strategy_id,
-                    label=label,
-                    host=host,
-                    port=port,
-                    replication_user=replication_user,
-                    application_name=application_name,
-                    role=role,
-                    notes=notes,
-                    created_by_user_id=created_by_user_id,
-                )
-            except asyncpg.UniqueViolationError:
-                raise
-            except Exception:
-                # Best-effort cleanup : on tente de drop le rôle pour ne pas
-                # laisser d'orphelin si l'INSERT a échoué (typiquement un label
-                # déjà pris). La transaction sera rollback de toute façon, donc
-                # le CREATE ROLE l'est aussi — mais on log au cas où.
-                logger.warning(
-                    "replication_node_insert_failed_role_will_be_rolled_back",
-                    replication_user=replication_user,
-                )
-                raise
+        node_id = await _create_role_and_insert_node(
+            conn,
+            strategy_id=strategy_id,
+            label=label,
+            host=host,
+            port=port,
+            role=role,
+            notes=notes,
+            replication_user=replication_user,
+            application_name=application_name,
+            password=password,
+            created_by_user_id=created_by_user_id,
+        )
     except asyncpg.UniqueViolationError as exc:
         existing = await _load_existing_node_details(
             conn,
@@ -341,7 +375,34 @@ async def add_node(
                 constraint_name=getattr(exc, "constraint_name", None),
             )
             raise
-        raise NodeAlreadyExistsError(existing) from exc
+        if not replace_existing:
+            raise NodeAlreadyExistsError(existing) from exc
+
+        # Remplacement explicite : delete (DROP ROLE + DELETE row) + retry.
+        # La transaction précédente a déjà rollbacké (UniqueViolation la
+        # rollbacke automatiquement) — on ouvre une nouvelle transaction.
+        existing_id = UUID(existing["id"])
+        await delete_node(conn, existing_id)
+        node_id = await _create_role_and_insert_node(
+            conn,
+            strategy_id=strategy_id,
+            label=label,
+            host=host,
+            port=port,
+            role=role,
+            notes=notes,
+            replication_user=replication_user,
+            application_name=application_name,
+            password=password,
+            created_by_user_id=created_by_user_id,
+        )
+        logger.info(
+            "replication_node_replaced",
+            old_node_id=str(existing_id),
+            new_label=label,
+            new_node_id=str(node_id),
+            new_replication_user=replication_user,
+        )
 
     bundle = _build_bundle(
         node_id=node_id,

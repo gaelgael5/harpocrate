@@ -160,3 +160,81 @@ async def test_accept_standby_v2_invalid_token_raises_invalid_code(
                 self_url="https://b/",
                 actor_user_id=None,
             )
+
+
+async def test_accept_standby_v2_verify_tls_default_strict(
+    monkeypatch: pytest.MonkeyPatch,
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    """Par défaut, httpx.AsyncClient est instancié avec verify=True."""
+    from uuid import uuid4
+
+    captured: dict[str, object] = {}
+
+    def fake_async_client(*args: object, **kwargs: object) -> AsyncMock:
+        captured.update(kwargs)
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        resp = MagicMock()
+        resp.status_code = 403
+        client.post = AsyncMock(return_value=resp)
+        return client
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", fake_async_client)
+
+    url = build_pairing_url("https://a.example", uuid4(), "a" * 32)
+    async with real_db_pool.acquire() as conn:
+        with pytest.raises(svc_v1.InvalidCodeError):
+            await svc.accept_standby_v2(
+                conn,
+                pairing_url=url,
+                self_url="https://b/",
+                actor_user_id=None,
+            )
+    assert captured.get("verify") is True
+
+
+async def test_accept_standby_v2_verify_tls_disabled_when_setting_true(
+    monkeypatch: pytest.MonkeyPatch,
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    """Quand allow_self_signed=True, verify=False et un warning est loggé."""
+    from uuid import uuid4
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "replication_pairing_allow_self_signed", True)
+
+    captured: dict[str, object] = {}
+
+    def fake_async_client(*args: object, **kwargs: object) -> AsyncMock:
+        captured.update(kwargs)
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        resp = MagicMock()
+        resp.status_code = 403
+        client.post = AsyncMock(return_value=resp)
+        return client
+
+    monkeypatch.setattr(svc.httpx, "AsyncClient", fake_async_client)
+
+    warnings: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        svc.logger,
+        "warning",
+        lambda event, **kw: warnings.append((event, kw)),
+    )
+
+    url = build_pairing_url("https://a.example", uuid4(), "a" * 32)
+    async with real_db_pool.acquire() as conn:
+        with pytest.raises(svc_v1.InvalidCodeError):
+            await svc.accept_standby_v2(
+                conn,
+                pairing_url=url,
+                self_url="https://b/",
+                actor_user_id=None,
+            )
+    assert captured.get("verify") is False
+    assert any(ev == "pairing_v2.tls_verification_disabled" for ev, _ in warnings)

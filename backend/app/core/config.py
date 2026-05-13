@@ -162,6 +162,14 @@ class Settings(BaseSettings):
     # Port Postgres annoncé aux standby lors de l'appairage. Doit être joignable
     # depuis le standby sur l'hôte extrait de public_url. Par convention 5432.
     replication_advertised_pg_port: int = Field(default=5432, ge=1, le=65535)
+    # DEV-ONLY — autorise le standby à joindre un master servi par un cert
+    # TLS auto-signé lors d'un appairage v2 (httpx.verify=False sur le call
+    # /pairing/confirm-v2 uniquement). Ne JAMAIS activer en prod : un MITM
+    # entre les deux instances permettrait à un attaquant de voler le token
+    # d'appairage et de se faire passer pour le master. En prod, utilise un
+    # certificat public valide (Cloudflare, Let's Encrypt). Logge un warning
+    # structlog à chaque appel quand activé.
+    replication_pairing_allow_self_signed: bool = Field(default=False)
 
     @property
     def keycloak_configured(self) -> bool:

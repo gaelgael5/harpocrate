@@ -241,8 +241,17 @@ async def accept_standby_v2(
         "token": parsed.token,
         "standby_url": self_url,
     }
+    verify_tls = not settings.replication_pairing_allow_self_signed
+    if not verify_tls:
+        # Mode dégradé : trace chaque appel pour qu'un audit puisse retrouver
+        # les sessions d'appairage où la chaîne TLS n'a pas été vérifiée.
+        logger.warning(
+            "pairing_v2.tls_verification_disabled",
+            master_url=parsed.master_url,
+            session_id=str(parsed.session_id),
+        )
     try:
-        async with httpx.AsyncClient(timeout=10.0, verify=True) as client:
+        async with httpx.AsyncClient(timeout=10.0, verify=verify_tls) as client:
             resp = await client.post(confirm_url, json=body)
     except httpx.HTTPError as e:
         raise PairingAcceptError(f"network_error:{e}") from e

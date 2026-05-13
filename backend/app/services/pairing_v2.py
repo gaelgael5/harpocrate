@@ -254,7 +254,18 @@ async def accept_standby_v2(
         async with httpx.AsyncClient(timeout=10.0, verify=verify_tls) as client:
             resp = await client.post(confirm_url, json=body)
     except httpx.HTTPError as e:
-        raise PairingAcceptError(f"network_error:{e}") from e
+        # Le détail de l'exception httpx est précieux pour diagnostiquer (TLS
+        # self-signed, DNS, connection refused, timeout). Sans ce log on ne
+        # voit que le 502 final, ce qui est aveugle pour un admin.
+        logger.error(
+            "pairing_v2.confirm_call_failed",
+            master_url=parsed.master_url,
+            confirm_url=confirm_url,
+            error_type=type(e).__name__,
+            error=str(e),
+            verify_tls=verify_tls,
+        )
+        raise PairingAcceptError(f"network_error:{type(e).__name__}:{e}") from e
 
     if resp.status_code in (401, 403):
         raise InvalidCodeError("invalid_or_expired_token")

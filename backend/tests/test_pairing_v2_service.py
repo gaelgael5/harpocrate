@@ -312,6 +312,87 @@ async def test_confirm_master_v2_raises_node_already_exists_on_label_collision(
             await _cleanup_repl_roles(conn)
 
 
+async def test_accept_standby_v2_transmits_force_to_master(
+    monkeypatch: pytest.MonkeyPatch,
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    """`force=True` doit apparaître dans le body POST vers /confirm-v2."""
+    from uuid import uuid4
+
+    captured: dict[str, object] = {}
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json = MagicMock(return_value={
+        "master_host": "a", "master_port": 5432,
+        "replication_user": "repl_x", "replication_password": "p",
+        "application_name": "x", "node_id": str(uuid4()),
+    })
+    fake_client = AsyncMock()
+    fake_client.__aenter__.return_value = fake_client
+    fake_client.__aexit__.return_value = None
+
+    async def fake_post(url: str, json: dict[str, object]) -> MagicMock:
+        captured["url"] = url
+        captured["body"] = json
+        return fake_resp
+
+    fake_client.post = fake_post
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda *a, **kw: fake_client)
+
+    url = build_pairing_url("https://a.example", uuid4(), "a" * 32)
+    async with real_db_pool.acquire() as conn:
+        await svc.accept_standby_v2(
+            conn,
+            pairing_url=url,
+            self_url="https://b/",
+            actor_user_id=None,
+            force=True,
+        )
+    assert captured["body"]["force"] is True
+
+
+async def test_accept_standby_v2_propagates_409_as_node_already_exists(
+    monkeypatch: pytest.MonkeyPatch,
+    real_db_pool: asyncpg.Pool[asyncpg.Record],
+) -> None:
+    """409 du master → NodeAlreadyExistsError typée portant existing_node."""
+    from uuid import uuid4
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 409
+    fake_resp.json = MagicMock(return_value={
+        "detail": {
+            "error": "node_already_exists",
+            "existing_node": {
+                "id": str(uuid4()),
+                "label": "https://b/",
+                "host": "b",
+                "application_name": "b",
+                "last_state": "disconnected",
+                "last_seen_at": "2026-05-10T12:00:00+00:00",
+            },
+        },
+    })
+    fake_client = AsyncMock()
+    fake_client.__aenter__.return_value = fake_client
+    fake_client.__aexit__.return_value = None
+    fake_client.post = AsyncMock(return_value=fake_resp)
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda *a, **kw: fake_client)
+
+    url = build_pairing_url("https://a.example", uuid4(), "a" * 32)
+    async with real_db_pool.acquire() as conn:
+        with pytest.raises(svc_v1.NodeAlreadyExistsError) as exc_info:
+            await svc.accept_standby_v2(
+                conn,
+                pairing_url=url,
+                self_url="https://b/",
+                actor_user_id=None,
+            )
+        assert exc_info.value.existing_node["host"] == "b"
+        assert exc_info.value.existing_node["last_state"] == "disconnected"
+
+
 async def test_confirm_master_v2_with_force_replaces_existing_node(
     real_db_pool: asyncpg.Pool[asyncpg.Record],
 ) -> None:

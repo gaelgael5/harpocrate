@@ -241,6 +241,7 @@ async def accept_standby_v2(
     pairing_url: str,
     self_url: str,
     actor_user_id: UUID | None,
+    force: bool = False,
 ) -> UUID:
     """B parse l'URL d'appairage collée → contacte A → stocke payload local.
 
@@ -248,12 +249,20 @@ async def accept_standby_v2(
     est créée avec status=wizard et payload prêt à être consommé par
     PairingWizardPage.
 
-    Raises InvalidPairingUrlError si l'URL n'a pas le bon format.
-    Raises InvalidCodeError si A répond 401/403 (session inconnue/token KO).
-    Raises TooManyAttemptsError si A répond 429.
-    Raises PairingAcceptError en cas d'erreur réseau ou autre HTTP.
+    `force=True` est transmis au master pour autoriser le remplacement d'un
+    node de réplication déjà enregistré pour la même URL standby. Opération
+    destructive côté master — ne l'utiliser qu'après confirmation explicite
+    de l'admin.
+
+    Raises:
+        InvalidPairingUrlError: l'URL d'appairage n'a pas le bon format.
+        InvalidCodeError: A répond 401/403 (session inconnue/token KO).
+        TooManyAttemptsError: A répond 429.
+        NodeAlreadyExistsError: A répond 409 avec error=node_already_exists.
+        PairingAcceptError: erreur réseau, autre HTTP, ou 409 mal formé.
     """
     from app.core.config import settings
+    from app.services.pairing import NodeAlreadyExistsError
 
     parsed = parse_pairing_url(pairing_url)
     confirm_url = parsed.master_url + "/v1/admin/replication/pairing/confirm-v2"
@@ -261,6 +270,7 @@ async def accept_standby_v2(
         "session_id": str(parsed.session_id),
         "token": parsed.token,
         "standby_url": self_url,
+        "force": force,
     }
     verify_tls = not settings.replication_insecure_skip_tls_verify
     if not verify_tls:
@@ -292,6 +302,16 @@ async def accept_standby_v2(
         raise InvalidCodeError("invalid_or_expired_token")
     if resp.status_code == 429:
         raise TooManyAttemptsError("too_many_attempts")
+    if resp.status_code == 409:
+        body_json = resp.json()
+        detail = body_json.get("detail") if isinstance(body_json, dict) else None
+        if (
+            isinstance(detail, dict)
+            and detail.get("error") == "node_already_exists"
+            and isinstance(detail.get("existing_node"), dict)
+        ):
+            raise NodeAlreadyExistsError(detail["existing_node"])
+        raise PairingAcceptError(f"unexpected_409:{body_json}")
     if resp.status_code != 200:
         raise PairingAcceptError(f"unexpected_status:{resp.status_code}")
 
@@ -312,7 +332,11 @@ async def accept_standby_v2(
             conn,
             "pairing.standby_accepted_v2",
             actor_user_id=actor_user_id,
-            metadata={"master_url": parsed.master_url, "session_id": str(sid)},
+            metadata={
+                "master_url": parsed.master_url,
+                "session_id": str(sid),
+                "force": force,
+            },
         )
 
     return sid

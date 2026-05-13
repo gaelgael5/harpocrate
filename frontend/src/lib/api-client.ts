@@ -11,6 +11,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly detail: unknown = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -116,7 +117,7 @@ async function request<T>(
       code = (rootErr as string | undefined) ?? "error";
       msg = (rootMsg as string | undefined) ?? response.statusText;
     }
-    throw new ApiError(response.status, code, msg);
+    throw new ApiError(response.status, code, msg, detail ?? null);
   }
 
   return json as T;

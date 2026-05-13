@@ -154,6 +154,43 @@ detect_frontend_https_port() {
   echo "8443"
 }
 
+# Ajoute au .env les clés présentes dans .env.example mais manquantes côté
+# local (typiquement : nouvelles variables introduites par un git pull). Les
+# valeurs existantes ne sont JAMAIS écrasées — on ajoute seulement les clés
+# absentes, avec la valeur par défaut du .env.example. Sans ce sync, une
+# nouvelle var Pydantic restera invisible côté container malgré le commit
+# repo, jusqu'à ce que l'admin édite manuellement le .env du serveur.
+sync_new_vars_from_example() {
+  local env_file=".env" example_file=".env.example"
+  [ -f "$env_file" ] || return 0
+  [ -f "$example_file" ] || return 0
+  local added=()
+  while IFS= read -r line; do
+    case "$line" in
+      ''|\#*) continue ;;
+    esac
+    local key="${line%%=*}"
+    [ -z "$key" ] && continue
+    if ! grep -qE "^${key}=" "$env_file"; then
+      # Premier ajout : on prefixe d'un séparateur lisible.
+      if [ ${#added[@]} -eq 0 ]; then
+        {
+          echo ""
+          echo "# Nouvelles variables ajoutées par dev-deploy.sh ($(date -I))"
+        } >> "$env_file"
+      fi
+      echo "$line" >> "$env_file"
+      added+=("$key")
+    fi
+  done < "$example_file"
+  if [ ${#added[@]} -gt 0 ]; then
+    echo "      + ${#added[@]} nouvelle(s) variable(s) ajoutée(s) au .env :"
+    for k in "${added[@]}"; do
+      echo "          - ${k}"
+    done
+  fi
+}
+
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
     echo "[2/6] .env absent → création depuis .env.example + génération secrets aléatoires"
@@ -207,6 +244,7 @@ if [ ! -f ".env" ]; then
   fi
 else
   echo "[2/6] .env déjà présent (secrets non régénérés)."
+  sync_new_vars_from_example
 fi
 
 # ─── 3) Dossiers data/ pour volumes Docker (ignorés par .gitignore) ─────────

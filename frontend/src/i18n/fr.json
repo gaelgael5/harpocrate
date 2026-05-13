@@ -731,7 +731,19 @@
           "subtitle": "Colle l'URL d'appairage que l'admin du master t'a transmise. Une fois validée, le wizard SSH s'ouvre automatiquement.",
           "pairingUrl": "URL d'appairage",
           "pairingUrlHint": "Format : https://master.example/pair?sid=…&t=…",
-          "submit": "Ajouter en tant que standby"
+          "submit": "Ajouter en tant que standby",
+          "replaceModal": {
+            "title": "Un node existe déjà côté master",
+            "intro": "Un node de réplication portant cette URL est déjà enregistré sur le master. Le remplacer supprimera l'ancien rôle Postgres et créera un nouveau bundle de credentials.",
+            "existingLabel": "URL :",
+            "existingHost": "Hôte :",
+            "existingAppName": "Application name :",
+            "existingState": "Dernier état :",
+            "existingSeen": "Vu pour la dernière fois :",
+            "neverSeen": "jamais",
+            "cancel": "Annuler",
+            "replace": "Remplacer le node"
+          }
         },
         "wizard": {
           "title": "Assistant d'appairage standby",

@@ -55,3 +55,13 @@ export const PairingInitV2ResponseSchema = z.object({
   expires_in_seconds: z.number().int().positive(),
 });
 export type PairingInitV2Response = z.infer<typeof PairingInitV2ResponseSchema>;
+
+export const ExistingNodeSchema = z.object({
+  id: z.string().uuid(),
+  label: z.string(),
+  host: z.string(),
+  application_name: z.string(),
+  last_state: z.enum(["streaming", "catchup", "disconnected", "unknown"]).nullable(),
+  last_seen_at: z.string().nullable(),
+});
+export type ExistingNode = z.infer<typeof ExistingNodeSchema>;

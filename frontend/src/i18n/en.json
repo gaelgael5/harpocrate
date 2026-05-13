@@ -730,7 +730,19 @@
           "subtitle": "Paste the pairing URL the master admin gave you. Once validated, the SSH wizard opens automatically.",
           "pairingUrl": "Pairing URL",
           "pairingUrlHint": "Format: https://master.example/pair?sid=…&t=…",
-          "submit": "Add as standby"
+          "submit": "Add as standby",
+          "replaceModal": {
+            "title": "A node already exists on the master",
+            "intro": "A replication node with this URL is already registered on the master. Replacing it will drop the existing Postgres role and issue a fresh credentials bundle.",
+            "existingLabel": "URL:",
+            "existingHost": "Host:",
+            "existingAppName": "Application name:",
+            "existingState": "Last state:",
+            "existingSeen": "Last seen:",
+            "neverSeen": "never",
+            "cancel": "Cancel",
+            "replace": "Replace node"
+          }
         },
         "wizard": {
           "title": "Standby pairing assistant",

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -43,6 +43,31 @@ class PairingAcceptError(Exception):
 
 class InvalidPairingPreconditionError(Exception):
     """Précondition non remplie côté master (ex: pas de stratégie active)."""
+
+
+class ExistingNodeInfo(TypedDict):
+    """Payload sérialisable décrivant un node de réplication déjà enregistré.
+
+    `last_state` reflète `replication_nodes.last_state` (NULL si jamais observé).
+    `last_seen_at` est l'ISO 8601 UTC de `replication_nodes.last_seen_at`.
+    """
+
+    id: str
+    label: str
+    host: str
+    application_name: str
+    last_state: str | None
+    last_seen_at: str | None
+
+
+class NodeAlreadyExistsError(InvalidPairingPreconditionError):
+    """Un node de réplication avec ce label ou application_name existe déjà."""
+
+    existing_node: ExistingNodeInfo
+
+    def __init__(self, existing_node: ExistingNodeInfo) -> None:
+        super().__init__("node_already_exists")
+        self.existing_node = existing_node
 
 
 # ─── DTOs ────────────────────────────────────────────────────────────────────

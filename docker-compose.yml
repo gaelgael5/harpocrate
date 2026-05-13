@@ -72,6 +72,10 @@ services:
       HARPOCRATE_RECOVERY_MAX_ATTEMPTS: ${HARPOCRATE_RECOVERY_MAX_ATTEMPTS:-3}
       HARPOCRATE_RECOVERY_ANOMALY_THRESHOLD: ${HARPOCRATE_RECOVERY_ANOMALY_THRESHOLD:-5}
       HARPOCRATE_RECOVERY_ANOMALY_WINDOW_HOURS: ${HARPOCRATE_RECOVERY_ANOMALY_WINDOW_HOURS:-24}
+      # Réplication — appairage inter-instances (LOT 5). Défaut strict
+      # (verify TLS activé). Mettre à true uniquement en dev pour autoriser
+      # les certs auto-signés sur /pairing/confirm-v2.
+      HARPOCRATE_REPLICATION_INSECURE_SKIP_TLS_VERIFY: ${HARPOCRATE_REPLICATION_INSECURE_SKIP_TLS_VERIFY:-false}
     depends_on:
       postgres:
         condition: service_healthy

@@ -140,3 +140,79 @@ def test_confirm_v2_rejects_short_token_via_pydantic() -> None:
         },
     )
     assert r.status_code == 422
+
+
+def test_confirm_v2_endpoint_returns_409_when_node_label_exists() -> None:
+    """Si un node existe déjà côté master, /confirm-v2 doit renvoyer 409 node_already_exists."""
+    client, mod = _build_test_app()
+
+    existing: mod.svc.ExistingNodeInfo = {  # type: ignore[attr-defined]
+        "id": "22222222-2222-2222-2222-222222222222",
+        "label": "https://b.example/",
+        "application_name": "repl_b_example",
+        "host": "b.example",
+        "last_state": None,
+        "last_seen_at": None,
+    }
+
+    async def fake_confirm(conn, **kw):
+        raise mod.svc.NodeAlreadyExistsError(existing)
+
+    with (
+        patch.object(mod.svc_v2, "confirm_master_v2", side_effect=fake_confirm),
+        patch(
+            "app.api.v1.admin_replication_pairing.get_pool",
+            AsyncMock(return_value=_make_pool_mock()),
+        ),
+    ):
+        r = client.post(
+            "/v1/admin/replication/pairing/confirm-v2",
+            json={
+                "session_id": str(uuid4()),
+                "token": "a" * 32,
+                "standby_url": "https://b.example/",
+            },
+        )
+
+    assert r.status_code == 409, r.text
+    body = r.json()
+    assert body["detail"]["error"] == "node_already_exists"
+    assert body["detail"]["existing_node"]["label"] == "https://b.example/"
+
+
+def test_confirm_v2_endpoint_replaces_when_force_true() -> None:
+    """force=true → 200, l'ancien node est remplacé."""
+    client, mod = _build_test_app()
+
+    async def fake_confirm(conn, **kw):
+        assert kw.get("force") is True, "force doit être passé au service"
+        return {
+            "master_host": "10.0.0.1",
+            "master_port": 5432,
+            "replication_user": "repl_b_example",
+            "replication_password": "pwd_new",
+            "application_name": "repl_b_example",
+            "node_id": "33333333-3333-3333-3333-333333333333",
+        }
+
+    with (
+        patch.object(mod.svc_v2, "confirm_master_v2", side_effect=fake_confirm),
+        patch(
+            "app.api.v1.admin_replication_pairing.get_pool",
+            AsyncMock(return_value=_make_pool_mock()),
+        ),
+    ):
+        r = client.post(
+            "/v1/admin/replication/pairing/confirm-v2",
+            json={
+                "session_id": str(uuid4()),
+                "token": "a" * 32,
+                "standby_url": "https://b.example/",
+                "force": True,
+            },
+        )
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["master_host"] == "10.0.0.1"
+    assert body["replication_user"].startswith("repl_")

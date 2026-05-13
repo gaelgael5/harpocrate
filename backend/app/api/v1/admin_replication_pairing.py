@@ -195,7 +195,16 @@ async def confirm_pairing_v2(req: PairingConfirmV2Request) -> PairingConfirmResp
                 token=req.token,
                 standby_url=req.standby_url,
                 actor_user_id=None,
+                force=req.force,
             )
+        except svc.NodeAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "node_already_exists",
+                    "existing_node": e.existing_node,
+                },
+            ) from e
         except svc.InvalidCodeError:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

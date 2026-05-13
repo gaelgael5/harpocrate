@@ -241,7 +241,7 @@ async def accept_standby_v2(
         "token": parsed.token,
         "standby_url": self_url,
     }
-    verify_tls = not settings.replication_pairing_allow_self_signed
+    verify_tls = not settings.replication_insecure_skip_tls_verify
     if not verify_tls:
         # Mode dégradé : trace chaque appel pour qu'un audit puisse retrouver
         # les sessions d'appairage où la chaîne TLS n'a pas été vérifiée.

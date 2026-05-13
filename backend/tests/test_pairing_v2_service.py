@@ -199,12 +199,12 @@ async def test_accept_standby_v2_verify_tls_disabled_when_setting_true(
     monkeypatch: pytest.MonkeyPatch,
     real_db_pool: asyncpg.Pool[asyncpg.Record],
 ) -> None:
-    """Quand allow_self_signed=True, verify=False et un warning est loggé."""
+    """Quand insecure_skip_tls_verify=True, verify=False et un warning est loggé."""
     from uuid import uuid4
 
     from app.core.config import settings
 
-    monkeypatch.setattr(settings, "replication_pairing_allow_self_signed", True)
+    monkeypatch.setattr(settings, "replication_insecure_skip_tls_verify", True)
 
     captured: dict[str, object] = {}
 

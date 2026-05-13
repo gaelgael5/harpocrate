@@ -1,12 +1,12 @@
 /**
- * PublicUrlPanel — affiche les coordonnées publiques de cette instance
- * Harpocrate à transmettre au pair lors d'un appairage (LOT 5 — refonte).
+ * PublicUrlPanel — affiche l'URL publique de cette instance Harpocrate à
+ * transmettre au pair lors d'un appairage (LOT 5 — refonte mono-URL).
  *
- * - URL publique du backend (settings.public_url)
- * - Host Postgres annoncé (hostname extrait de public_url)
- * - Port Postgres annoncé (settings.replication_advertised_pg_port)
+ * Une seule ligne copiable = URL du back-office. C'est cette URL que l'autre
+ * instance collera dans sa modale « Ajouter un standby » pour générer une
+ * URL d'appairage signée.
  *
- * Lecture seule. Bouton copier sur chaque ligne.
+ * Lecture seule.
  */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,7 +27,7 @@ import { useTranslation } from "react-i18next";
 import { getReplicationSelfInfo } from "@/lib/adminApi";
 import { ApiError } from "@/lib/api-client";
 
-function CopyRow({ label, value }: { label: string; value: string }) {
+function CopyRow({ value }: { value: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -43,15 +43,12 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 
   return (
     <Group justify="space-between" wrap="nowrap" align="center">
-      <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
-        <Text size="xs" c="dimmed">
-          {label}
-        </Text>
-        <Code style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>
-          {value}
-        </Code>
-      </Stack>
-      <Button size="compact-xs" variant="subtle" onClick={() => void copy()}>
+      <Code
+        style={{ fontSize: "0.95rem", wordBreak: "break-all", flex: 1 }}
+      >
+        {value}
+      </Code>
+      <Button size="compact-sm" variant="filled" onClick={() => void copy()}>
         {copied ? t("common.copied") : t("common.copy")}
       </Button>
     </Group>
@@ -103,27 +100,7 @@ export function PublicUrlPanel() {
           </Alert>
         )}
 
-        {query.data && (
-          <Stack gap="xs">
-            <CopyRow
-              label={t("admin.replication.selfInfo.publicUrl")}
-              value={query.data.public_url}
-            />
-            <CopyRow
-              label={t("admin.replication.selfInfo.pgHost")}
-              value={query.data.advertised_pg_host}
-            />
-            <CopyRow
-              label={t("admin.replication.selfInfo.pgPort")}
-              value={String(query.data.advertised_pg_port)}
-            />
-            <Alert color="blue" mt="xs">
-              <Text size="xs">
-                {t("admin.replication.selfInfo.hostHint")}
-              </Text>
-            </Alert>
-          </Stack>
-        )}
+        {query.data && <CopyRow value={query.data.public_url} />}
       </Stack>
     </Card>
   );

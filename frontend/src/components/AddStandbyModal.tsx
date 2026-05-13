@@ -1,12 +1,14 @@
 /**
- * Modale côté master (A) pour démarrer un appairage avec un standby (B).
+ * Modale côté master (A) pour démarrer un appairage avec un standby (B) — v2.
  *
- * Flow :
- *  - Étape 1 : saisie de l'URL publique du standby
- *  - Étape 2 : affichage du code 4 chiffres + polling du status (3s)
+ * Flow simplifié LOT 5 :
+ *  - Étape 1 : l'admin colle l'URL publique du standby.
+ *  - Étape 2 : le backend génère une URL d'appairage signée que l'admin copie
+ *    et transmet à l'admin du standby. Ce dernier la collera dans son propre
+ *    formulaire « Ajouter en tant que standby » pour démarrer le wizard.
  */
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   Alert,
   Button,
@@ -19,8 +21,9 @@ import {
 } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 
-import { getPairingStatus, initPairing } from "@/lib/adminApi";
-import type { PairingInitResponse } from "@/schemas/pairing";
+import { initPairingV2 } from "@/lib/adminApi";
+import { ApiError } from "@/lib/api-client";
+import type { PairingInitV2Response } from "@/schemas/pairing";
 
 interface Props {
   opened: boolean;
@@ -29,28 +32,40 @@ interface Props {
 
 export function AddStandbyModal({ opened, onClose }: Props) {
   const { t } = useTranslation();
-  const [partnerUrl, setPartnerUrl] = useState("");
-  const [init, setInit] = useState<PairingInitResponse | null>(null);
+  const [standbyUrl, setStandbyUrl] = useState("");
+  const [init, setInit] = useState<PairingInitV2Response | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const initMut = useMutation({
-    mutationFn: () => initPairing(partnerUrl),
+    mutationFn: () => initPairingV2(standbyUrl.trim()),
     onSuccess: (r) => setInit(r),
-  });
-
-  const statusQuery = useQuery({
-    queryKey: ["pairing-status", init?.session_id],
-    queryFn: () => getPairingStatus(init!.session_id),
-    enabled: !!init,
-    refetchInterval: 3000,
   });
 
   function reset() {
     setInit(null);
-    setPartnerUrl("");
+    setStandbyUrl("");
+    setCopied(false);
+    initMut.reset();
     onClose();
   }
 
-  const status = statusQuery.data?.status;
+  async function copyPairingUrl() {
+    if (!init) return;
+    try {
+      await navigator.clipboard.writeText(init.pairing_url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard non dispo — l'admin sélectionnera manuellement.
+    }
+  }
+
+  const errMsg =
+    initMut.error instanceof ApiError
+      ? initMut.error.message
+      : initMut.error
+        ? String(initMut.error)
+        : null;
 
   return (
     <Modal
@@ -58,6 +73,11 @@ export function AddStandbyModal({ opened, onClose }: Props) {
       onClose={reset}
       size="lg"
       title={t("admin.replication.pairing.modal.title")}
+      // Empêche la fermeture accidentelle une fois l'URL générée : c'est la
+      // seule occurrence où l'admin pourra la copier (la session expire après
+      // pairing_code_ttl_seconds).
+      closeOnClickOutside={init === null}
+      closeOnEscape={init === null}
     >
       {!init ? (
         <Stack>
@@ -66,10 +86,11 @@ export function AddStandbyModal({ opened, onClose }: Props) {
           </Text>
           <TextInput
             label={t("admin.replication.pairing.modal.partnerUrl")}
-            value={partnerUrl}
-            onChange={(e) => setPartnerUrl(e.currentTarget.value)}
+            value={standbyUrl}
+            onChange={(e) => setStandbyUrl(e.currentTarget.value)}
             placeholder="https://harpo-2.example/"
           />
+          {errMsg && <Alert color="red">{errMsg}</Alert>}
           <Group justify="flex-end">
             <Button variant="default" onClick={reset}>
               {t("common.cancel")}
@@ -77,7 +98,7 @@ export function AddStandbyModal({ opened, onClose }: Props) {
             <Button
               onClick={() => initMut.mutate()}
               loading={initMut.isPending}
-              disabled={!partnerUrl}
+              disabled={!standbyUrl.trim()}
             >
               {t("admin.replication.pairing.modal.generate")}
             </Button>
@@ -85,46 +106,35 @@ export function AddStandbyModal({ opened, onClose }: Props) {
         </Stack>
       ) : (
         <Stack>
-          <Text size="sm" c="dimmed">
+          <Alert color="green">
             {t("admin.replication.pairing.modal.step2Hint", {
               minutes: Math.round(init.expires_in_seconds / 60),
             })}
-          </Text>
-          <Group justify="center">
+          </Alert>
+          <Stack gap={4}>
+            <Text size="sm" fw={500}>
+              {t("admin.replication.pairing.modal.pairingUrl")}
+            </Text>
             <Code
-              style={{
-                fontSize: "2.5rem",
-                letterSpacing: "0.5rem",
-                padding: "1rem 2rem",
-              }}
+              block
+              style={{ wordBreak: "break-all", fontSize: "0.85rem" }}
             >
-              {init.code}
+              {init.pairing_url}
             </Code>
-          </Group>
-          {(status === "pending" ||
-            status === "confirmed" ||
-            status === "wizard") && (
-            <Alert color="blue">
-              {t("admin.replication.pairing.modal.waiting")}
-            </Alert>
-          )}
-          {status === "completed" && (
-            <Alert color="green">
-              {t("admin.replication.pairing.modal.completed")}
-            </Alert>
-          )}
-          {status === "expired" && (
-            <Alert color="orange">
-              {t("admin.replication.pairing.modal.expired")}
-            </Alert>
-          )}
-          {status === "failed" && (
-            <Alert color="red">
-              {t("admin.replication.pairing.modal.failed")}
-            </Alert>
-          )}
-          <Group justify="flex-end">
-            <Button onClick={reset}>{t("common.close")}</Button>
+          </Stack>
+          <Group justify="space-between">
+            <Button
+              variant="filled"
+              color={copied ? "green" : "blue"}
+              onClick={() => void copyPairingUrl()}
+            >
+              {copied
+                ? t("common.copied")
+                : t("admin.replication.pairing.modal.copyPairingUrl")}
+            </Button>
+            <Button variant="default" onClick={reset}>
+              {t("common.close")}
+            </Button>
           </Group>
         </Stack>
       )}

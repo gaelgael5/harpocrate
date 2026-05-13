@@ -545,10 +545,12 @@ export async function validateCronExpression(
 
 import {
   PairingInitResponseSchema,
+  PairingInitV2ResponseSchema,
   PairingStatusSchema,
   PairingStepsResponseSchema,
   PairingAcceptResponseSchema,
   type PairingInitResponse,
+  type PairingInitV2Response,
   type PairingStatus,
   type PairingStepsResponse,
   type PairingAcceptResponse,
@@ -570,6 +572,26 @@ export async function acceptPairing(
   const raw = await api.post<unknown>("/admin/replication/pairing/accept", {
     master_url: masterUrl,
     code,
+  });
+  return PairingAcceptResponseSchema.parse(raw);
+}
+
+// ─── Pairing v2 (LOT 5) — échange d'URL signée ──────────────────────────────
+
+export async function initPairingV2(
+  standbyUrl: string,
+): Promise<PairingInitV2Response> {
+  const raw = await api.post<unknown>("/admin/replication/pairing/init-v2", {
+    standby_url: standbyUrl,
+  });
+  return PairingInitV2ResponseSchema.parse(raw);
+}
+
+export async function acceptPairingV2(
+  pairingUrl: string,
+): Promise<PairingAcceptResponse> {
+  const raw = await api.post<unknown>("/admin/replication/pairing/accept-v2", {
+    pairing_url: pairingUrl,
   });
   return PairingAcceptResponseSchema.parse(raw);
 }

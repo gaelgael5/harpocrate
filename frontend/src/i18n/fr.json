@@ -687,11 +687,7 @@
       "nodes": "Nœuds",
       "selfInfo": {
         "title": "URL publique de cette instance",
-        "subtitle": "À transmettre au pair lors d'un appairage. Le hostname du backend doit aussi exposer Postgres sur le port annoncé (sinon le standby ne pourra pas se connecter en streaming).",
-        "publicUrl": "URL publique du backend Harpocrate",
-        "pgHost": "Host Postgres annoncé (depuis public_url)",
-        "pgPort": "Port Postgres annoncé",
-        "hostHint": "Si Postgres écoute sur une autre adresse ou un autre port (Cloudflare, port-forward, etc.), ajuste settings.public_url et/ou settings.replication_advertised_pg_port."
+        "subtitle": "Copie cette URL et transmets-la à l'admin de l'instance qui veut s'appairer avec celle-ci (ou la coller dans la modale « Ajouter un standby » de l'autre côté)."
       },
       "postgresInfo": {
         "title": "Paramètres Postgres de cette instance",
@@ -720,25 +716,22 @@
         }
       },
       "pairing": {
-        "addStandby": "Ajouter un standby (assistant)",
+        "addStandby": "Ajouter un standby",
         "modal": {
           "title": "Appairer un nouveau standby",
-          "step1Hint": "Saisis l'URL publique de l'instance Harpocrate qui deviendra standby de celle-ci.",
+          "step1Hint": "Colle ici l'URL publique de l'instance qui deviendra standby (à copier depuis le panneau « URL publique de cette instance » de l'autre côté).",
           "partnerUrl": "URL du standby",
-          "generate": "Générer le code d'appairage",
-          "step2Hint": "Communique ce code à l'admin de l'instance standby. Il expire dans {{minutes}} minutes.",
-          "code": "Code",
-          "waiting": "En attente de l'autre instance…",
-          "completed": "Appairage terminé. Le standby va répliquer.",
-          "expired": "Code expiré. Recommence l'opération.",
-          "failed": "L'appairage a échoué."
+          "generate": "Générer l'URL d'appairage",
+          "step2Hint": "Copie cette URL et transmets-la à l'admin du standby. Elle expire dans {{minutes}} minutes et n'est affichée qu'une seule fois.",
+          "pairingUrl": "URL d'appairage à transmettre",
+          "copyPairingUrl": "Copier l'URL d'appairage"
         },
         "becomeStandby": {
-          "title": "Devenir standby d'une autre instance",
-          "subtitle": "Saisis l'URL du master Harpocrate et le code 4 chiffres qu'il t'a transmis.",
-          "masterUrl": "URL du master",
-          "code": "Code 4 chiffres",
-          "submit": "Démarrer l'appairage"
+          "title": "Ajouter en tant que standby",
+          "subtitle": "Colle l'URL d'appairage que l'admin du master t'a transmise. Une fois validée, le wizard SSH s'ouvre automatiquement.",
+          "pairingUrl": "URL d'appairage",
+          "pairingUrlHint": "Format : https://master.example/pair?sid=…&t=…",
+          "submit": "Ajouter en tant que standby"
         },
         "wizard": {
           "title": "Assistant d'appairage standby",

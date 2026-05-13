@@ -686,11 +686,7 @@
       "nodes": "Nodes",
       "selfInfo": {
         "title": "Public URL of this instance",
-        "subtitle": "Share this with the peer when pairing. The backend hostname must also expose Postgres on the advertised port (otherwise the standby cannot stream).",
-        "publicUrl": "Public URL of the Harpocrate backend",
-        "pgHost": "Advertised Postgres host (from public_url)",
-        "pgPort": "Advertised Postgres port",
-        "hostHint": "If Postgres listens on a different address or port (Cloudflare, port-forward, etc.), adjust settings.public_url and/or settings.replication_advertised_pg_port."
+        "subtitle": "Copy this URL and share it with the admin of the instance that wants to pair with this one (or paste it into the « Add a standby » modal on the other side)."
       },
       "postgresInfo": {
         "title": "Postgres parameters of this instance",
@@ -719,25 +715,22 @@
         }
       },
       "pairing": {
-        "addStandby": "Add a standby (assistant)",
+        "addStandby": "Add a standby",
         "modal": {
           "title": "Pair a new standby",
-          "step1Hint": "Enter the public URL of the Harpocrate instance that will become a standby of this one.",
+          "step1Hint": "Paste here the public URL of the instance that will become a standby (copy it from the « Public URL of this instance » panel on the other side).",
           "partnerUrl": "Standby URL",
-          "generate": "Generate pairing code",
-          "step2Hint": "Share this code with the admin of the standby instance. Expires in {{minutes}} minutes.",
-          "code": "Code",
-          "waiting": "Waiting for the other instance…",
-          "completed": "Pairing complete. The standby will replicate.",
-          "expired": "Code expired. Retry the operation.",
-          "failed": "Pairing failed."
+          "generate": "Generate pairing URL",
+          "step2Hint": "Copy this URL and share it with the standby admin. It expires in {{minutes}} minutes and is shown only once.",
+          "pairingUrl": "Pairing URL to share",
+          "copyPairingUrl": "Copy pairing URL"
         },
         "becomeStandby": {
-          "title": "Become a standby of another instance",
-          "subtitle": "Enter the URL of the Harpocrate master and the 4-digit code it gave you.",
-          "masterUrl": "Master URL",
-          "code": "4-digit code",
-          "submit": "Start pairing"
+          "title": "Add as standby",
+          "subtitle": "Paste the pairing URL the master admin gave you. Once validated, the SSH wizard opens automatically.",
+          "pairingUrl": "Pairing URL",
+          "pairingUrlHint": "Format: https://master.example/pair?sid=…&t=…",
+          "submit": "Add as standby"
         },
         "wizard": {
           "title": "Standby pairing assistant",

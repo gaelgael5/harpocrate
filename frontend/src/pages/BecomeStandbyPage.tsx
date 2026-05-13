@@ -1,68 +1,75 @@
 /**
- * Page côté standby (B) — saisie de l'URL master + code 4 chiffres.
- * Au succès, redirige vers /admin/pairing/{session_id} (wizard, Task 4.5).
+ * Page côté standby (B) — saisie d'une URL d'appairage (v2, LOT 5).
+ *
+ * L'admin colle l'URL générée par le master. Le backend extrait master_url +
+ * session_id + token, contacte le master pour récupérer les creds de
+ * réplication, puis redirige vers PairingWizardPage qui guide l'exécution
+ * des commandes SSH.
  */
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import {
-  Stack, Title, Text, TextInput, PinInput, Group, Button, Card,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { useTranslation } from 'react-i18next'
+  Stack,
+  Title,
+  Text,
+  TextInput,
+  Group,
+  Button,
+  Card,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useTranslation } from "react-i18next";
 
-import { acceptPairing } from '@/lib/adminApi'
-import { ApiError } from '@/lib/api-client'
+import { acceptPairingV2 } from "@/lib/adminApi";
+import { ApiError } from "@/lib/api-client";
 
 export function BecomeStandbyPage() {
-  const { t } = useTranslation()
-  const nav = useNavigate()
-  const [masterUrl, setMasterUrl] = useState('')
-  const [code, setCode] = useState('')
+  const { t } = useTranslation();
+  const nav = useNavigate();
+  const [pairingUrl, setPairingUrl] = useState("");
 
   const mut = useMutation({
-    mutationFn: () => acceptPairing(masterUrl, code),
+    mutationFn: () => acceptPairingV2(pairingUrl.trim()),
     onSuccess: (r) => nav(`/admin/pairing/${r.session_id}`),
-    onError: (e) => notifications.show({
-      color: 'red',
-      title: t('common.error'),
-      message: e instanceof ApiError ? e.message : String(e),
-    }),
-  })
+    onError: (e) =>
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
 
   return (
     <Stack maw={600} mx="auto" mt="xl">
       <Title order={2}>
-        {t('admin.replication.pairing.becomeStandby.title')}
+        {t("admin.replication.pairing.becomeStandby.title")}
       </Title>
       <Text c="dimmed">
-        {t('admin.replication.pairing.becomeStandby.subtitle')}
+        {t("admin.replication.pairing.becomeStandby.subtitle")}
       </Text>
       <Card withBorder>
         <Stack>
           <TextInput
-            label={t('admin.replication.pairing.becomeStandby.masterUrl')}
-            placeholder="https://harpo-1.example/"
-            value={masterUrl}
-            onChange={(e) => setMasterUrl(e.currentTarget.value)}
+            label={t("admin.replication.pairing.becomeStandby.pairingUrl")}
+            description={t(
+              "admin.replication.pairing.becomeStandby.pairingUrlHint",
+            )}
+            placeholder="https://harpo-1.example/pair?sid=...&t=..."
+            value={pairingUrl}
+            onChange={(e) => setPairingUrl(e.currentTarget.value)}
           />
-          <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              {t('admin.replication.pairing.becomeStandby.code')}
-            </Text>
-            <PinInput length={4} type="number" value={code} onChange={setCode} />
-          </Stack>
           <Group justify="flex-end">
             <Button
               loading={mut.isPending}
-              disabled={!masterUrl || code.length !== 4}
+              disabled={!pairingUrl.trim()}
               onClick={() => mut.mutate()}
             >
-              {t('admin.replication.pairing.becomeStandby.submit')}
+              {t("admin.replication.pairing.becomeStandby.submit")}
             </Button>
           </Group>
         </Stack>
       </Card>
     </Stack>
-  )
+  );
 }

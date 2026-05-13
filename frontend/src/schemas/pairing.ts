@@ -46,3 +46,12 @@ export const PairingAcceptResponseSchema = z.object({
   session_id: z.string().uuid(),
 });
 export type PairingAcceptResponse = z.infer<typeof PairingAcceptResponseSchema>;
+
+// ─── V2 — échange d'URL d'appairage (LOT 5) ──────────────────────────────────
+
+export const PairingInitV2ResponseSchema = z.object({
+  session_id: z.string().uuid(),
+  pairing_url: z.string().url(),
+  expires_in_seconds: z.number().int().positive(),
+});
+export type PairingInitV2Response = z.infer<typeof PairingInitV2ResponseSchema>;

@@ -46,7 +46,6 @@ import {
   updateLagThresholds,
   type AddStreamingNodePayload,
 } from "@/lib/adminApi";
-import { AddStandbyModal } from "./AddStandbyModal";
 import { useIsStandby } from "@/lib/useIsStandby";
 import { ApiError } from "@/lib/api-client";
 import type {
@@ -87,7 +86,6 @@ export function StreamingNodesPanel() {
     null,
   );
   const [thresholdsOpen, setThresholdsOpen] = useState(false);
-  const [pairingModalOpen, setPairingModalOpen] = useState(false);
   // Map node_id → dernier résultat de test connect (affiché inline jusqu'au
   // prochain test). Réinitialisé au refetch global.
   const [pingResults, setPingResults] = useState<Record<string, TcpPingResult>>(
@@ -200,9 +198,6 @@ export function StreamingNodesPanel() {
             </Tooltip>
             <Button size="xs" disabled={isStandby} onClick={() => setAddOpen(true)}>
               {t("admin.replication.streaming.add")}
-            </Button>
-            <Button size="xs" variant="light" disabled={isStandby} onClick={() => setPairingModalOpen(true)}>
-              {t("admin.replication.pairing.addStandby")}
             </Button>
           </Group>
         </Group>
@@ -356,11 +351,6 @@ export function StreamingNodesPanel() {
         <ThresholdsModal
           opened={thresholdsOpen}
           onClose={() => setThresholdsOpen(false)}
-        />
-
-        <AddStandbyModal
-          opened={pairingModalOpen}
-          onClose={() => setPairingModalOpen(false)}
         />
       </Stack>
     </Card>

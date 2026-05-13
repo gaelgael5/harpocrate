@@ -9,6 +9,7 @@
  * Les stratégies futures (harpocrate_sync, s3_wal) sont listées mais désactivées
  * tant que leur backend n'est pas implémenté.
  */
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Stack,
@@ -38,6 +39,7 @@ import { ApiError } from "@/lib/api-client";
 import { StreamingNodesPanel } from "@/components/StreamingNodesPanel";
 import { PostgresInfoPanel } from "@/components/PostgresInfoPanel";
 import { PublicUrlPanel } from "@/components/PublicUrlPanel";
+import { AddStandbyModal } from "@/components/AddStandbyModal";
 import { useIsStandby } from "@/lib/useIsStandby";
 
 function StatusBadge({ status }: { status: string }) {
@@ -96,6 +98,7 @@ export function AdminReplicationPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const isStandby = useIsStandby();
+  const [addStandbyOpen, setAddStandbyOpen] = useState(false);
 
   const statusQuery = useQuery({
     queryKey: ["admin-replication-status"],
@@ -142,15 +145,34 @@ export function AdminReplicationPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
+      <Group justify="space-between" align="flex-start" wrap="nowrap">
         <Title order={2}>{t("admin.replication.title")}</Title>
-        <Button component={Link} to="/admin/become-standby" variant="light">
-          {t("admin.replication.pairing.becomeStandby.title")}
-        </Button>
+        <Group gap="xs" wrap="nowrap">
+          <Button
+            onClick={() => setAddStandbyOpen(true)}
+            disabled={isStandby}
+            variant="filled"
+          >
+            {t("admin.replication.pairing.addStandby")}
+          </Button>
+          <Button
+            component={Link}
+            to="/admin/become-standby"
+            variant="light"
+            disabled={isStandby}
+          >
+            {t("admin.replication.pairing.becomeStandby.title")}
+          </Button>
+        </Group>
       </Group>
       <Text c="dimmed" size="sm">
         {t("admin.replication.subtitle")}
       </Text>
+
+      <AddStandbyModal
+        opened={addStandbyOpen}
+        onClose={() => setAddStandbyOpen(false)}
+      />
 
       {/* État temps réel */}
       {statusQuery.isLoading && (

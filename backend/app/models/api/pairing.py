@@ -85,3 +85,39 @@ class PairingStatusResponse(BaseModel):
     partner_url: str | None
     current_step_idx: int
     expires_at: str
+
+
+# ─── V2 — échange d'URL d'appairage (LOT 5) ──────────────────────────────────
+
+
+class PairingInitV2Request(BaseModel):
+    """A appelle /init-v2 avec l'URL publique du standby."""
+
+    standby_url: str = Field(..., min_length=1)
+
+
+class PairingInitV2Response(BaseModel):
+    session_id: UUID
+    pairing_url: str
+    expires_in_seconds: int
+
+
+class PairingAcceptV2Request(BaseModel):
+    """B colle l'URL d'appairage reçue de A."""
+
+    pairing_url: str = Field(..., min_length=1)
+
+
+class PairingConfirmV2Request(BaseModel):
+    """B → A : confirme avec session_id + token extraits de l'URL d'appairage."""
+
+    session_id: UUID
+    token: str
+    standby_url: str = Field(..., min_length=1)
+
+    @field_validator("token")
+    @classmethod
+    def _check_token(cls, v: str) -> str:
+        if not re.fullmatch(r"[0-9a-f]{32}", v):
+            raise ValueError("token_must_be_32_hex_chars")
+        return v

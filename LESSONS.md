@@ -1,3 +1,4 @@
 # Leçons
 
 - [build] Quand on ajoute une dep Python à `backend/pyproject.toml`, l'ajouter AUSSI dans la liste hardcodée du `backend/Dockerfile` (lignes 33-50). Le commentaire ligne 52 prévient. Sinon `ModuleNotFoundError` au boot du container après `pull latest`. Refactor à venir : faire lire pyproject.toml directement.
+- [replication] add_node lève désormais NodeAlreadyExistsError (sous-classe d'InvalidPairingPreconditionError) sur conflit UNIQUE(label/application_name) ; les endpoints pairing v2 mappent en 409 avec `existing_node`. Le param `force` (request body) déclenche un DELETE+DROP ROLE+INSERT atomique pour remplacer le node existant. Audit log : `pairing.master_node_replaced`. Voir le plan `docs/superpowers/plans/2026-05-13-pairing-replace-existing-node.md`. Validation e2e manuelle différée — nécessite le master sur LXC 192.168.10.196 + standby sur 192.168.10.198 avec les nouvelles images.

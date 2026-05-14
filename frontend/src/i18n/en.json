@@ -1014,6 +1014,15 @@
       "privKey": "Private key",
       "passphrase": "Passphrase (if encrypted)",
       "start": "Start execution"
+    },
+    "steps": {
+      "stop_pg_container":         { "title": "Stop the local Postgres container", "description": "We stop Postgres so its data dir can be replaced. If it is writing, we wait for a graceful shutdown." },
+      "backup_pg_data_dir":        { "title": "Back up the current data dir",      "description": "The current data dir is renamed to .bak.<timestamp> so a manual rollback stays possible." },
+      "pg_basebackup_from_master": { "title": "pg_basebackup from the master",     "description": "Copies the whole database from the master in streaming mode. May take several minutes." },
+      "verify_standby_signal":     { "title": "Check standby.signal",              "description": "The signal file must exist for Postgres to boot in standby mode." },
+      "verify_auto_conf":          { "title": "Check postgresql.auto.conf",        "description": "Must contain primary_conninfo with the correct host/user." },
+      "start_pg_container":        { "title": "Start the Postgres container",      "description": "Postgres starts in standby mode (recovery)." },
+      "verify_streaming":          { "title": "Verify WAL streaming is active",    "description": "A row with status='streaming' in pg_stat_wal_receiver confirms the flow." }
     }
   },
   "devMode": {

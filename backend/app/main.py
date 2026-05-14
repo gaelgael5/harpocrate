@@ -51,6 +51,7 @@ from app.core.logging import configure_logging, logger
 from app.db.pool import close_pool, get_pool, init_pool
 from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
+from app.middleware.db_availability import db_availability_middleware
 from app.services import local_admin_bootstrap
 from app.services import replication as replication_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
@@ -261,6 +262,20 @@ async def log_requests(request: Request, call_next: object) -> Response:
         body_logged=body_logged,
     )
     return response
+
+
+# Ordre Starlette : le `@app.middleware` enregistré en DERNIER est le PLUS
+# EXTERNE. `db_availability_middleware` doit englober tous les autres pour
+# intercepter les exceptions de connexion DB qui remontent depuis les routes
+# (typiquement pendant le wizard pairing standby quand Postgres est stoppé).
+# Le 503 retourné ici reste visible par `log_requests` qui logue le statut
+# correctement.
+@app.middleware("http")
+async def _db_availability_middleware(request: Request, call_next: object) -> Response:
+    import typing
+
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
+    return await db_availability_middleware(request, _call_next)
 
 
 # ─── Routers ──────────────────────────────────────────────────────────────────

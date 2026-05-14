@@ -1001,6 +1001,13 @@
     "viewVersion": "View version v{{n}}",
     "prefillFromPrevious": "Pre-filled from v{{n}}"
   },
+  "pairingExec": {
+    "pending": "pending",
+    "running": "running",
+    "done": "done",
+    "error": "error",
+    "retryFrom": "Retry from step {{n}}"
+  },
   "devMode": {
     "banner": "Dev mode is active — this instance is NOT for production. Do not store any real secret here."
   },

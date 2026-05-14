@@ -1002,6 +1002,13 @@
     "viewVersion": "Voir la version v{{n}}",
     "prefillFromPrevious": "Pré-rempli depuis v{{n}}"
   },
+  "pairingExec": {
+    "pending": "en attente",
+    "running": "en cours",
+    "done": "terminée",
+    "error": "erreur",
+    "retryFrom": "Réessayer depuis l'étape {{n}}"
+  },
   "devMode": {
     "banner": "Mode développement actif — instance non destinée à la production. N'y stockez aucun secret réel."
   },

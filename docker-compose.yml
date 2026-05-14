@@ -76,6 +76,11 @@ services:
       # (verify TLS activé). Mettre à true uniquement en dev pour autoriser
       # les certs auto-signés sur /pairing/confirm-v2.
       HARPOCRATE_REPLICATION_INSECURE_SKIP_TLS_VERIFY: ${HARPOCRATE_REPLICATION_INSECURE_SKIP_TLS_VERIFY:-false}
+      # Pairing exec mode natif — host/port SSH de la machine Postgres pour
+      # exécuter le wizard quand le socket Docker n'est pas monté côté backend.
+      # Laisser vide si on utilise le mode docker_compose_auto (socket monté).
+      HARPOCRATE_SELF_SSH_HOST: ${HARPOCRATE_SELF_SSH_HOST:-}
+      HARPOCRATE_SELF_SSH_PORT: ${HARPOCRATE_SELF_SSH_PORT:-22}
     depends_on:
       postgres:
         condition: service_healthy

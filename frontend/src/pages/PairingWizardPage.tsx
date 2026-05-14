@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Group, Loader, Stack, Title, Text } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -91,6 +92,24 @@ export function PairingWizardPage() {
     wsRef.current = ws;
     ws.onopen = () => ws.send(encodeOpen(open));
     ws.onmessage = (ev) => {
+      // Avant parse via schema d'event : intercepte les frames d'erreur
+      // émises par le backend AVANT le lancement effectif de l'exécution
+      // (token KO, self_ssh_host_not_configured, session_not_found, etc.).
+      // Sans ça l'utilisateur voit le WS se fermer en silence.
+      try {
+        const raw = JSON.parse(String(ev.data)) as Record<string, unknown>;
+        if (raw["type"] === "error") {
+          const code = String(raw["code"] ?? "unknown");
+          notifications.show({
+            color: "red",
+            title: t("pairingExec.error"),
+            message: t(`pairingExec.errors.${code}`, { defaultValue: code }),
+          });
+          return;
+        }
+      } catch {
+        // pas du JSON ou non-error → tombe sur parseFrame ci-dessous
+      }
       const frame = parseFrame(String(ev.data));
       if (!frame) return;
       setState((prev) => {

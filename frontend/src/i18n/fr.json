@@ -1024,6 +1024,14 @@
       "verify_auto_conf":          { "title": "Vérifier postgresql.auto.conf",       "description": "Doit contenir primary_conninfo avec le bon host/user." },
       "start_pg_container":        { "title": "Démarrer le conteneur Postgres",      "description": "Postgres démarre en mode standby (recovery)." },
       "verify_streaming":          { "title": "Vérifier le streaming WAL actif",     "description": "Une ligne status='streaming' dans pg_stat_wal_receiver confirme le flux." }
+    },
+    "errors": {
+      "self_ssh_host_not_configured": "HARPOCRATE_SELF_SSH_HOST n'est pas configuré dans le .env du serveur. Renseigne-le pour utiliser le mode natif, ou monte /var/run/docker.sock dans le conteneur backend pour passer en mode auto.",
+      "session_not_found": "Session de pairing introuvable. Relance le wizard depuis le master.",
+      "payload_incomplete": "Payload de pairing incomplet. Relance l'appairage depuis le master.",
+      "invalid_open_frame": "Trame d'ouverture invalide (incohérence frontend/backend).",
+      "invalid_token": "Token JWT invalide ou expiré.",
+      "not_admin": "Le compte connecté n'a pas le rôle administrateur."
     }
   },
   "devMode": {

@@ -1006,7 +1006,15 @@
     "running": "running",
     "done": "done",
     "error": "error",
-    "retryFrom": "Retry from step {{n}}"
+    "retryFrom": "Retry from step {{n}}",
+    "credsModal": {
+      "title": "SSH credentials (Postgres host)",
+      "username": "Username",
+      "password": "Password",
+      "privKey": "Private key",
+      "passphrase": "Passphrase (if encrypted)",
+      "start": "Start execution"
+    }
   },
   "devMode": {
     "banner": "Dev mode is active — this instance is NOT for production. Do not store any real secret here."

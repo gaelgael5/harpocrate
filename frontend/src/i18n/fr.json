@@ -1007,7 +1007,15 @@
     "running": "en cours",
     "done": "terminée",
     "error": "erreur",
-    "retryFrom": "Réessayer depuis l'étape {{n}}"
+    "retryFrom": "Réessayer depuis l'étape {{n}}",
+    "credsModal": {
+      "title": "Identifiants SSH (machine Postgres)",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "privKey": "Clé privée",
+      "passphrase": "Passphrase (si protégée)",
+      "start": "Démarrer l'exécution"
+    }
   },
   "devMode": {
     "banner": "Mode développement actif — instance non destinée à la production. N'y stockez aucun secret réel."

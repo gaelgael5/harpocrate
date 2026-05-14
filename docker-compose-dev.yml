@@ -95,6 +95,12 @@ services:
       - ./releases:/app/releases:ro
       # Backups locaux .tar.age — persistent à travers les rebuilds d'images.
       - ./data/backups:/var/lib/harpocrate/backups
+      # Pairing exec — mode docker_compose_auto. Monter le socket Docker
+      # permet à aiodocker d'orchestrer `docker stop/start/exec` sur le
+      # conteneur `harpocrate-postgres` depuis le backend. ATTENTION : accès
+      # équivalent à root sur l'hôte. Activé en dev uniquement (compose-dev).
+      # En prod, voir docker-compose.yml + Install-dev.md pour les implications.
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test:
         - "CMD-SHELL"

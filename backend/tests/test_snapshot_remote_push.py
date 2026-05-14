@@ -10,11 +10,10 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-
 
 _REMOTE_ID_1 = UUID("aaaaaaaa-0000-0000-0000-000000000001")
 _REMOTE_ID_2 = UUID("aaaaaaaa-0000-0000-0000-000000000002")

@@ -119,6 +119,12 @@ services:
       - ./releases:/app/releases:ro
       # Backups locaux .tar.age — persistent à travers les rebuilds d'images.
       - ./data/backups:/var/lib/harpocrate/backups
+      # Password Postgres override — écrit par le wizard pairing après
+      # pg_basebackup (le standby hérite des credentials du master). Lu en
+      # priorité par Settings.effective_db_dsn au démarrage du backend.
+      # Doit exister sur l'hôte (touché par dev-deploy.sh) sinon Docker
+      # crée un répertoire vide.
+      - ./data/db-password-override.txt:/var/lib/harpocrate/db-password-override.txt:ro
       # Pairing exec — mode docker_compose_auto. Monter le socket Docker
       # permet à aiodocker d'orchestrer `docker stop/start/exec` sur le
       # conteneur `harpocrate-postgres` depuis le backend. ATTENTION : accès

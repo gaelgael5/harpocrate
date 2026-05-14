@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -171,6 +173,36 @@ class Settings(BaseSettings):
     # self_ssh_host_not_configured renvoyée au client).
     harpocrate_self_ssh_host: str | None = None
     harpocrate_self_ssh_port: int = 22
+
+    # Path d'un fichier optionnel contenant le password Postgres override.
+    # Utilisé par le wizard pairing : après pg_basebackup, le standby a une
+    # DB répliquée du master → le user `harpocrate` côté DB a le password du
+    # master, pas celui du `.env` local. Le wizard écrit ici le password du
+    # master ; le backend le lit en priorité au prochain (re)démarrage.
+    db_password_override_path: str = "/var/lib/harpocrate/db-password-override.txt"
+
+    @property
+    def effective_db_dsn(self) -> str:
+        """DSN avec password override appliqué si le fichier existe et non-vide.
+
+        Permet à un standby récemment basebackuppé d'utiliser le password
+        du master sans modifier le `.env`. Si le fichier est absent, vide,
+        ou illisible → fallback sur `db_dsn` tel quel (env var classique).
+        """
+        try:
+            content = Path(self.db_password_override_path).read_text().strip()
+        except (FileNotFoundError, PermissionError, IsADirectoryError):
+            return self.db_dsn
+        if not content:
+            return self.db_dsn
+        parsed = urlparse(self.db_dsn)
+        if not parsed.hostname:
+            return self.db_dsn
+        userinfo = f"{parsed.username or ''}:{content}"
+        netloc = f"{userinfo}@{parsed.hostname}"
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        return urlunparse(parsed._replace(netloc=netloc))
 
     @property
     def keycloak_configured(self) -> bool:

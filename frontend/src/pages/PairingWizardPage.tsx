@@ -37,6 +37,7 @@ const STEP_KINDS = [
   "pg_basebackup_from_master",
   "verify_standby_signal",
   "verify_auto_conf",
+  "write_db_credentials_override",
   "start_pg_container",
   "verify_streaming",
 ] as const;

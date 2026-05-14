@@ -19,15 +19,15 @@ def _payload() -> PairingPayload:
     )
 
 
-def test_list_steps_returns_eight_entries() -> None:
+def test_list_steps_returns_nine_entries() -> None:
     steps = list_steps(_payload())
-    assert len(steps) == 8
+    assert len(steps) == 9
     assert all(isinstance(s, StepDescriptor) for s in steps)
 
 
-def test_list_steps_have_unique_indices_0_to_7() -> None:
+def test_list_steps_have_unique_indices_0_to_8() -> None:
     steps = list_steps(_payload())
-    assert [s.idx for s in steps] == list(range(8))
+    assert [s.idx for s in steps] == list(range(9))
 
 
 def test_list_steps_first_is_verify_master_reachable() -> None:

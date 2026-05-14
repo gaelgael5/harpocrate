@@ -1023,6 +1023,7 @@
       "pg_basebackup_from_master": { "title": "pg_basebackup depuis le master",      "description": "Copie l'intégralité de la base depuis le master en streaming. Peut prendre plusieurs minutes." },
       "verify_standby_signal":     { "title": "Vérifier standby.signal",             "description": "Le fichier signal doit exister pour démarrer en mode standby." },
       "verify_auto_conf":          { "title": "Vérifier postgresql.auto.conf",       "description": "Doit contenir primary_conninfo avec le bon host/user." },
+      "write_db_credentials_override": { "title": "Écrire le password Postgres du master", "description": "Après pg_basebackup, le user 'harpocrate' côté DB a le password du master, pas celui du .env local. On l'écrit dans un fichier override que le backend lira au prochain démarrage." },
       "start_pg_container":        { "title": "Démarrer le conteneur Postgres",      "description": "Postgres démarre en mode standby (recovery)." },
       "verify_streaming":          { "title": "Vérifier le streaming WAL actif",     "description": "Une ligne status='streaming' dans pg_stat_wal_receiver confirme le flux." }
     },

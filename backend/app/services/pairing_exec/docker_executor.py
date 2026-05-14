@@ -60,6 +60,7 @@ class DockerExecutor(Executor):
             "pg_basebackup_from_master": self._step_pg_basebackup,
             "verify_standby_signal": self._step_verify_standby_signal,
             "verify_auto_conf": self._step_verify_auto_conf,
+            "write_db_credentials_override": self._step_write_db_credentials_override,
             "start_pg_container": self._step_start_pg,
             "verify_streaming": self._step_verify_streaming,
         }
@@ -147,6 +148,36 @@ class DockerExecutor(Executor):
             image="alpine:3.20",
             cmd=["sh", "-c", f"grep primary_conninfo /host/{leaf}/postgresql.auto.conf"],
             binds=[f"{parent_dir}:/host:ro"],
+        )
+
+    async def _step_write_db_credentials_override(self, payload: PairingPayload) -> StepResult:
+        """Écrit le password Postgres du master dans le fichier override.
+
+        Le fichier est créé dans le dossier PARENT du data dir Postgres :
+        si le data dir host est `/opt/harpocrate/data/postgres`, le fichier
+        sera `/opt/harpocrate/data/db-password-override.txt`. C'est le path
+        que le compose bind-mount vers `/var/lib/harpocrate/db-password-override.txt`
+        dans le conteneur backend.
+
+        Le password est passé via env var au conteneur éphémère (pas via la
+        commande shell) pour éviter les soucis d'escape avec les chars
+        spéciaux dans le password.
+        """
+        if not payload.master_postgres_password:
+            return StepResult(
+                exit_code=1,
+                stdout="",
+                stderr="master_postgres_password absent du payload pairing",
+            )
+        assert self.pg_data_host_path is not None
+        parent_dir, _leaf = self._parent_and_leaf()
+        # `printf '%s'` évite le trailing newline que `echo` ajoute par défaut.
+        cmd_sh = "printf '%s' \"$DB_PASSWORD\" > /host/db-password-override.txt"
+        return await self._run_ephemeral(
+            image="alpine:3.20",
+            cmd=["sh", "-c", cmd_sh],
+            binds=[f"{parent_dir}:/host"],
+            env={"DB_PASSWORD": payload.master_postgres_password},
         )
 
     async def _step_start_pg(self, payload: PairingPayload) -> StepResult:

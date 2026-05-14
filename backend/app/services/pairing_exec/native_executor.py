@@ -107,6 +107,16 @@ def _build_command(step: StepDescriptor, payload: PairingPayload, pg_container: 
         return f"sudo -u postgres test -f {pg_data}/standby.signal && echo present"
     if step.kind == "verify_auto_conf":
         return f"sudo -u postgres grep primary_conninfo {pg_data}/postgresql.auto.conf"
+    if step.kind == "write_db_credentials_override":
+        # Le password est inséré via stdin (heredoc) pour ne pas apparaître
+        # dans l'history shell ni dans /proc/<pid>/cmdline du sshd.
+        # Path host par défaut : `/opt/harpocrate/data/db-password-override.txt`.
+        # En mode natif personnalisé, l'admin peut adapter via un alias shell.
+        return (
+            "cat > /opt/harpocrate/data/db-password-override.txt <<'EOF'\n"
+            f"{payload.master_postgres_password}\n"
+            "EOF"
+        )
     if step.kind == "start_pg_container":
         return f"docker start {pg_container}"
     if step.kind == "verify_streaming":

@@ -22,6 +22,7 @@ StepKind = Literal[
     "pg_basebackup_from_master",
     "verify_standby_signal",
     "verify_auto_conf",
+    "write_db_credentials_override",
     "start_pg_container",
     "verify_streaming",
 ]
@@ -34,6 +35,12 @@ class PairingPayload:
     replication_user: str
     replication_password: str
     application_name: str
+    # Password Postgres du user applicatif (`harpocrate`) côté master. Après
+    # pg_basebackup, la DB du standby est une copie exacte du master donc le
+    # password du user `harpocrate` est désormais celui du master, pas celui
+    # du `.env` local. Le wizard écrit ce password dans l'override file pour
+    # que le backend standby puisse se reconnecter au prochain (re)démarrage.
+    master_postgres_password: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,12 +106,24 @@ def list_steps(payload: PairingPayload) -> list[StepDescriptor]:
         ),
         StepDescriptor(
             idx=6,
+            kind="write_db_credentials_override",
+            title="Écrire le password Postgres du master",
+            description=(
+                "Après pg_basebackup, la DB locale du standby est une copie "
+                "du master : le user 'harpocrate' a maintenant le password "
+                "du master, pas celui du .env local. On écrit ce password "
+                "dans un fichier override que le backend lira au prochain "
+                "(re)démarrage."
+            ),
+        ),
+        StepDescriptor(
+            idx=7,
             kind="start_pg_container",
             title="Démarrer le conteneur Postgres",
             description="Postgres démarre en mode standby (recovery).",
         ),
         StepDescriptor(
-            idx=7,
+            idx=8,
             kind="verify_streaming",
             title="Vérifier le streaming WAL actif",
             description=(

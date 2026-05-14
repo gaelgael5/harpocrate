@@ -99,6 +99,7 @@ async def pairing_exec_ws(ws: WebSocket, session_id: UUID, token: str = Query(..
             replication_user=p["replication_user"],
             replication_password=p["replication_password"],
             application_name=p["application_name"],
+            master_postgres_password=p.get("master_postgres_password", ""),
         )
 
         try:

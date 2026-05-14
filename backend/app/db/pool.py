@@ -14,8 +14,10 @@ async def init_pool() -> asyncpg.Pool[asyncpg.Record]:
     """Initialize asyncpg pool if not already initialized (idempotent)."""
     global _pool
     if _pool is None:
+        # `effective_db_dsn` applique le password override si présent
+        # (cf. db_password_override_path — utilisé après un pairing standby).
         _pool = await asyncpg.create_pool(
-            dsn=settings.db_dsn,
+            dsn=settings.effective_db_dsn,
             min_size=2,
             max_size=10,
             command_timeout=30,

@@ -283,6 +283,11 @@ mkdir -p data/backups
 # Sans ce chown, le container échoue à écrire dans /var/lib/harpocrate/backups.
 # `2>/dev/null || true` car en local Windows/MINGW on n'a pas chown utile.
 chown -R 1001:1001 data/backups 2>/dev/null || true
+# Override password Postgres — fichier optionnel rempli par le wizard pairing
+# côté standby. Le bind mount dans docker-compose-dev.yml exige que le fichier
+# EXISTE côté hôte (sinon Docker crée un dossier vide à sa place). On le touch
+# vide ici ; le backend l'ignore tant qu'il est vide.
+[ -f data/db-password-override.txt ] || touch data/db-password-override.txt
 
 # ─── 4) Build images locales ────────────────────────────────────────────────
 

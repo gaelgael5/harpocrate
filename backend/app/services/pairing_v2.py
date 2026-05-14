@@ -204,6 +204,12 @@ async def confirm_master_v2(
         replace_existing=force,
     )
 
+    # Extrait le password du user applicatif Postgres ('harpocrate') depuis
+    # le DSN effectif du master. Le standby en aura besoin après pg_basebackup
+    # (sa DB devient une copie du master → mêmes credentials côté DB, donc
+    # son backend doit utiliser le password du master pour se reconnecter).
+    master_pg_password = urlparse(settings.effective_db_dsn).password or ""
+
     payload: dict[str, Any] = {
         "master_host": master_host,
         "master_port": master_port,
@@ -211,6 +217,7 @@ async def confirm_master_v2(
         "replication_password": bundle.password,
         "application_name": bundle.application_name,
         "node_id": str(node_id),
+        "master_postgres_password": master_pg_password,
     }
 
     async with conn.transaction():

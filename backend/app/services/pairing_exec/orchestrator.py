@@ -50,17 +50,35 @@ class PairingExecOrchestrator:
         self._audit_writer = audit_writer
 
     async def _audit(self, action: str, metadata: dict[str, Any]) -> None:
+        """Écrit un audit log. Tolérant aux pannes DB pendant l'exécution.
+
+        Pendant le wizard, les steps `stop_pg_container` / `start_pg_container`
+        coupent la connexion réseau du backend vers le conteneur Postgres,
+        donc tout `INSERT INTO audit_log` échouera avec `InterfaceError` ou
+        `Name or service not known`. On ne veut PAS faire crasher l'exécution
+        pour autant : on continue les étapes Docker, et on log l'audit en
+        fallback via structlog (visible dans `docker compose logs backend`).
+        """
         if self._audit_writer is None or self._conn is None:
             return
-        await self._audit_writer(
-            self._conn,
-            action,
-            actor_user_id=self._actor_user_id,
-            metadata={
-                "session_id": str(self._session_id) if self._session_id else None,
-                **metadata,
-            },
-        )
+        try:
+            await self._audit_writer(
+                self._conn,
+                action,
+                actor_user_id=self._actor_user_id,
+                metadata={
+                    "session_id": str(self._session_id) if self._session_id else None,
+                    **metadata,
+                },
+            )
+        except Exception as e:
+            logger.warning(
+                "pairing_exec_audit_failed",
+                action=action,
+                metadata=metadata,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
     async def run(self, *, start_from_step: int = 0) -> None:
         await self._executor.open()

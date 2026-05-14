@@ -290,7 +290,7 @@ async def _create_role_and_insert_node(
             f"CREATE ROLE {replication_user} REPLICATION LOGIN PASSWORD '{safe_password}'"
         )
         try:
-            return await nodes_repo.insert(
+            node_id = await nodes_repo.insert(
                 conn,
                 strategy_id=strategy_id,
                 label=label,
@@ -313,6 +313,20 @@ async def _create_role_and_insert_node(
                 strategy_id=str(strategy_id),
             )
             raise
+        # Crée le replication slot physique côté master. pg_basebackup --slot=
+        # côté standby suppose que le slot existe déjà. Le nom du slot = celui
+        # de l'application_name pour pouvoir corréler facilement les rows de
+        # pg_stat_replication / pg_replication_slots à un node Harpocrate.
+        slot_exists = await conn.fetchval(
+            "SELECT 1 FROM pg_replication_slots WHERE slot_name = $1",
+            application_name,
+        )
+        if not slot_exists:
+            await conn.execute(
+                "SELECT pg_create_physical_replication_slot($1)",
+                application_name,
+            )
+        return node_id
 
 
 async def add_node(
@@ -470,7 +484,29 @@ async def delete_node(conn: asyncpg.Connection, node_id: UUID) -> bool:
         return False
 
     async with conn.transaction():
-        # On drop d'abord le rôle. Si ça échoue, la transaction rollback
+        # Drop le slot de réplication s'il existe encore. Sans ça, un slot
+        # orphelin reste actif côté master et bloque la création d'un nouveau
+        # slot du même nom lors d'un replace.
+        slot_exists = await conn.fetchval(
+            "SELECT 1 FROM pg_replication_slots WHERE slot_name = $1",
+            node.application_name,
+        )
+        if slot_exists:
+            try:
+                await conn.execute(
+                    "SELECT pg_drop_replication_slot($1)",
+                    node.application_name,
+                )
+            except asyncpg.PostgresError as exc:
+                logger.warning(
+                    "replication_slot_drop_failed",
+                    node_id=str(node_id),
+                    slot_name=node.application_name,
+                    error=str(exc),
+                )
+                raise
+
+        # On drop ensuite le rôle. Si ça échoue, la transaction rollback
         # et la row reste en DB — l'admin peut retry après avoir débranché
         # le standby.
         try:

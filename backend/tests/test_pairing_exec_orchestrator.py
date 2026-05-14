@@ -95,6 +95,66 @@ async def test_run_starts_from_step_idx_when_resume() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_invokes_on_pg_started_after_start_pg_container_success() -> None:
+    """Après step_done(start_pg_container), l'orchestrator appelle on_pg_started.
+
+    Sert au refresh du pool asyncpg côté backend : le step 6 vient d'écrire
+    le password override, le step 7 vient de redémarrer Postgres avec ce
+    password — il faut refresh le pool sinon le backend reste en 503.
+    """
+    executor = AsyncMock()
+    executor.open = AsyncMock()
+    executor.close = AsyncMock()
+    executor.exec_step = AsyncMock(return_value=StepResult(exit_code=0, stdout="", stderr=""))
+
+    pg_started_calls = {"n": 0}
+
+    async def on_pg_started() -> None:
+        pg_started_calls["n"] += 1
+
+    orch = PairingExecOrchestrator(
+        executor=executor, payload=_payload(), on_event=AsyncMock(),
+        on_pg_started=on_pg_started,
+    )
+    await orch.run()
+    # Une seule fois — pas par step, juste au step_done de start_pg_container
+    assert pg_started_calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_run_does_not_invoke_on_pg_started_if_start_pg_container_fails() -> None:
+    """on_pg_started ne doit PAS être appelé si start_pg_container échoue."""
+    executor = AsyncMock()
+    executor.open = AsyncMock()
+    executor.close = AsyncMock()
+
+    from app.services.pairing_exec.steps import list_steps
+
+    payload = _payload()
+    steps = list_steps(payload)
+    fail_idx = next(s.idx for s in steps if s.kind == "start_pg_container")
+
+    async def fake_exec(step, _payload):
+        if step.idx == fail_idx:
+            return StepResult(exit_code=1, stdout="", stderr="boom")
+        return StepResult(exit_code=0, stdout="", stderr="")
+
+    executor.exec_step.side_effect = fake_exec
+
+    pg_started_calls = {"n": 0}
+
+    async def on_pg_started() -> None:
+        pg_started_calls["n"] += 1
+
+    orch = PairingExecOrchestrator(
+        executor=executor, payload=payload, on_event=AsyncMock(),
+        on_pg_started=on_pg_started,
+    )
+    await orch.run()
+    assert pg_started_calls["n"] == 0
+
+
+@pytest.mark.asyncio
 async def test_run_writes_audit_log_for_each_event() -> None:
     executor = AsyncMock()
     executor.open = AsyncMock()

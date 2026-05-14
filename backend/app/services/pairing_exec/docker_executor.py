@@ -6,6 +6,7 @@ bind mounts du conteneur. Aucune config admin nécessaire.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Coroutine
 
 import aiodocker
@@ -21,10 +22,16 @@ _PG_DATA_CONTAINER_PATH = "/var/lib/postgresql/data"
 
 
 class DockerExecutor(Executor):
-    def __init__(self, *, pg_container_name: str = "harpocrate-postgres") -> None:
+    def __init__(
+        self,
+        *,
+        pg_container_name: str = "harpocrate-postgres",
+        pg_isready_timeout_seconds: int = 30,
+    ) -> None:
         self._pg_container_name = pg_container_name
         self._docker: aiodocker.Docker | None = None
         self.pg_data_host_path: str | None = None
+        self._pg_isready_timeout_seconds = pg_isready_timeout_seconds
 
     async def open(self) -> None:
         if self._docker is not None:
@@ -181,10 +188,49 @@ class DockerExecutor(Executor):
         )
 
     async def _step_start_pg(self, payload: PairingPayload) -> StepResult:
+        """Démarre le conteneur Postgres et attend qu'il accepte les connexions.
+
+        `container.start()` retourne dès que le process Postgres est lancé par
+        Docker, PAS quand Postgres est prêt à accepter des connexions. Sans
+        attendre `pg_isready`, le step suivant (`verify_streaming`) ouvre une
+        connexion `psql` au socket Unix qui n'existe pas encore et échoue.
+        """
         assert self._docker is not None
         container = await self._docker.containers.get(self._pg_container_name)
         await container.start()
-        return StepResult(exit_code=0, stdout="container started", stderr="")
+        for _ in range(self._pg_isready_timeout_seconds):
+            if await self._exec_pg_isready(container):
+                return StepResult(
+                    exit_code=0,
+                    stdout="container started and ready",
+                    stderr="",
+                )
+            await asyncio.sleep(1)
+        return StepResult(
+            exit_code=1,
+            stdout="",
+            stderr=(
+                f"timeout waiting for pg_isready after "
+                f"{self._pg_isready_timeout_seconds}s"
+            ),
+        )
+
+    async def _exec_pg_isready(self, container: object) -> bool:
+        """Retourne True si `pg_isready` répond OK dans le conteneur Postgres.
+
+        Méthode séparée pour pouvoir être mockée en test sans devoir setup
+        toute la chaîne `container.exec().start().read_out().inspect()`.
+        """
+        exec_inst = await container.exec(  # type: ignore[attr-defined]
+            cmd=["pg_isready", "-U", "postgres", "-q"],
+        )
+        async with exec_inst.start(detach=False) as stream:
+            while True:
+                msg = await stream.read_out()
+                if msg is None:
+                    break
+        info = await exec_inst.inspect()
+        return int(info.get("ExitCode", 1) or 1) == 0
 
     async def _step_verify_streaming(self, payload: PairingPayload) -> StepResult:
         assert self._docker is not None

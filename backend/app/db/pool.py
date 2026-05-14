@@ -35,6 +35,22 @@ async def close_pool() -> None:
         logger.info("db_pool_closed")
 
 
+async def refresh_pool() -> asyncpg.Pool[asyncpg.Record]:
+    """Close the current pool (if any) and re-init with current settings.
+
+    Utilisé après pairing standby : le step 6 du wizard écrit le password
+    override file, donc `settings.effective_db_dsn` retourne maintenant un DSN
+    différent. Sans refresh, le pool en mémoire continue à utiliser l'ancien
+    password et le backend tombe en 503 jusqu'à un restart manuel du process.
+    """
+    global _pool
+    if _pool is not None:
+        await _pool.close()
+        _pool = None
+        logger.info("db_pool_closed_for_refresh")
+    return await init_pool()
+
+
 async def get_pool() -> asyncpg.Pool:
     """Return the initialized pool or raise RuntimeError if not initialized."""
     if _pool is None:

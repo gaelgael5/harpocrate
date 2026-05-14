@@ -118,7 +118,17 @@ def _build_command(step: StepDescriptor, payload: PairingPayload, pg_container: 
             "EOF"
         )
     if step.kind == "start_pg_container":
-        return f"docker start {pg_container}"
+        # Démarre le conteneur puis attend que Postgres accepte les connexions.
+        # `docker start` retourne dès que le process est lancé, PAS quand
+        # Postgres écoute — sans cette boucle, le step verify_streaming juste
+        # après échoue avec 'socket No such file or directory'.
+        return (
+            f"docker start {pg_container} && "
+            "for _ in $(seq 1 30); do "
+            f"if docker exec {pg_container} pg_isready -U postgres -q; "
+            "then exit 0; fi; sleep 1; done; "
+            "echo 'timeout waiting for pg_isready' >&2; exit 1"
+        )
     if step.kind == "verify_streaming":
         return (
             f"docker exec {pg_container} psql -U postgres -At -c "

@@ -19,7 +19,7 @@ from fastapi import APIRouter, Query, WebSocket, status
 
 from app.core.config import settings
 from app.core.security import _validate_jwt
-from app.db.pool import get_pool
+from app.db.pool import get_pool, refresh_pool
 from app.db.repositories import pairing_sessions as pairing_repo
 from app.services import admin_user_resolver
 from app.services import install_mode as install_mode_svc
@@ -141,6 +141,14 @@ async def pairing_exec_ws(ws: WebSocket, session_id: UUID, token: str = Query(..
         async def on_event(ev: Event) -> None:
             await ws.send_json(serialize_event(ev))
 
+        async def on_pg_started() -> None:
+            # Le step 6 a écrit le password override file (mot de passe Postgres
+            # du master), et le step 7 vient de redémarrer Postgres avec lui.
+            # On recycle ici le pool asyncpg pour qu'il prenne le nouveau DSN
+            # — sans ce refresh, le backend reste en 503 avec
+            # 'password authentication failed' jusqu'à un restart du container.
+            await refresh_pool()
+
         orch = PairingExecOrchestrator(
             executor=executor,
             payload=pairing_payload,
@@ -149,6 +157,7 @@ async def pairing_exec_ws(ws: WebSocket, session_id: UUID, token: str = Query(..
             session_id=session_id,
             actor_user_id=user_id,
             audit_writer=audit_log_insert,
+            on_pg_started=on_pg_started,
         )
         try:
             await orch.run(start_from_step=start_from)

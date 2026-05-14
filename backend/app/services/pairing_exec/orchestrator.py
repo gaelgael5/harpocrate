@@ -27,6 +27,7 @@ logger = structlog.get_logger(__name__)
 
 EventCallback = Callable[[Event], Awaitable[None]]
 AuditWriter = Callable[..., Awaitable[None]]
+PgStartedHook = Callable[[], Awaitable[None]]
 
 
 class PairingExecOrchestrator:
@@ -40,6 +41,7 @@ class PairingExecOrchestrator:
         session_id: UUID | None = None,
         actor_user_id: UUID | None = None,
         audit_writer: AuditWriter | None = None,
+        on_pg_started: PgStartedHook | None = None,
     ) -> None:
         self._executor = executor
         self._payload = payload
@@ -48,6 +50,7 @@ class PairingExecOrchestrator:
         self._session_id = session_id
         self._actor_user_id = actor_user_id
         self._audit_writer = audit_writer
+        self._on_pg_started = on_pg_started
 
     async def _audit(self, action: str, metadata: dict[str, Any]) -> None:
         """Écrit un audit log. Tolérant aux pannes DB pendant l'exécution.
@@ -141,6 +144,21 @@ class PairingExecOrchestrator:
                             "stdout_excerpt": result.stdout[:2000],
                         },
                     )
+                    if step.kind == "start_pg_container" and self._on_pg_started:
+                        # Postgres vient de redémarrer avec les credentials du
+                        # master (via pg_basebackup). Si on est ici, le backend
+                        # tient encore son ancien pool asyncpg avec l'ancien
+                        # password ; le hook (généralement db_pool.refresh_pool)
+                        # le recycle pour éviter un 503 jusqu'au prochain
+                        # restart manuel du container.
+                        try:
+                            await self._on_pg_started()
+                        except Exception as e:
+                            logger.warning(
+                                "pairing_exec_on_pg_started_failed",
+                                error=str(e),
+                                error_type=type(e).__name__,
+                            )
                 else:
                     await self._on_event(
                         StepErrorEvent(

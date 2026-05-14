@@ -62,7 +62,7 @@ def _scheduler_with_pool() -> Any:
     """Construit un SnapshotScheduler avec un pool factice."""
     from app.services.snapshot_scheduler import SnapshotScheduler
 
-    return SnapshotScheduler(pool=MagicMock())
+    return SnapshotScheduler()
 
 
 @pytest.mark.asyncio
@@ -322,5 +322,5 @@ async def test_scheduled_backups_scheduler_uses_global_lock() -> None:
     from app.services.backup_lock import get_global_backup_lock
     from app.services.scheduled_backups_scheduler import ScheduledBackupsScheduler
 
-    sched = ScheduledBackupsScheduler(pool=MagicMock())
+    sched = ScheduledBackupsScheduler()
     assert sched.run_lock is get_global_backup_lock()

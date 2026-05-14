@@ -31,7 +31,6 @@ class SyncPublisher:
     def __init__(
         self,
         *,
-        pool: asyncpg.Pool[asyncpg.Record],
         mqtt_host: str,
         mqtt_port: int,
         mqtt_username: str | None,
@@ -39,7 +38,6 @@ class SyncPublisher:
         instance_id: str,
         cluster_id: str,
     ) -> None:
-        self._pool = pool
         self._host = mqtt_host
         self._port = mqtt_port
         self._username = mqtt_username or None
@@ -51,8 +49,14 @@ class SyncPublisher:
         self._stop = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
 
+    @staticmethod
+    async def _get_pool() -> asyncpg.Pool[asyncpg.Record]:
+        from app.db.pool import get_pool
+
+        return await get_pool()
+
     async def start(self) -> None:
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             self._cursor = await sync_repo.get_push_cursor(conn)
         self._task = asyncio.create_task(self._loop(), name="sync-publisher")
         logger.info(
@@ -71,7 +75,7 @@ class SyncPublisher:
 
     async def reset_cursor(self, new_cursor: int) -> None:
         """Reset manuel du cursor (admin ou négociation node_hello)."""
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             await sync_repo.set_push_cursor(conn, new_cursor)
         self._cursor = new_cursor
         logger.info("sync_publisher_cursor_reset", new_cursor=new_cursor)
@@ -116,7 +120,7 @@ class SyncPublisher:
                     )
 
     async def _publish_batch(self, client: aiomqtt.Client) -> int:
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             rows = await sync_repo.fetch_outbound_batch(
                 conn,
                 emitter_id=self._instance_id,
@@ -129,7 +133,7 @@ class SyncPublisher:
             payload = self._row_to_message_bytes(row)
             await client.publish(self._topic, payload=payload, qos=1)
             self._cursor = int(row["seq"])
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             await sync_repo.set_push_cursor(conn, self._cursor)
         logger.debug(
             "sync_publisher_batch",
@@ -140,7 +144,7 @@ class SyncPublisher:
 
     async def _publish_node_hello(self, client: aiomqtt.Client) -> None:
         """Annonce notre état de réplication courant (filet de sécurité au démarrage)."""
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             states = await sync_repo.list_states(conn)
         replication_state = {
             row["peer_emitter"]: {

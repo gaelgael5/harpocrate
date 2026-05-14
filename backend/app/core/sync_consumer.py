@@ -34,7 +34,6 @@ class SyncConsumer:
     def __init__(
         self,
         *,
-        pool: asyncpg.Pool[asyncpg.Record],
         mqtt_host: str,
         mqtt_port: int,
         mqtt_username: str | None,
@@ -42,7 +41,6 @@ class SyncConsumer:
         instance_id: str,
         cluster_id: str,
     ) -> None:
-        self._pool = pool
         self._host = mqtt_host
         self._port = mqtt_port
         self._username = mqtt_username or None
@@ -52,6 +50,12 @@ class SyncConsumer:
         self._topic = proto.topic_for_cluster(cluster_id)
         self._stop = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
+
+    @staticmethod
+    async def _get_pool() -> asyncpg.Pool[asyncpg.Record]:
+        from app.db.pool import get_pool
+
+        return await get_pool()
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop(), name="sync-consumer")
@@ -130,7 +134,7 @@ class SyncConsumer:
         peer = str(data["emitter_id"])
         seq = int(data["seq"])
 
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             state = await sync_repo.get_state_for_peer(conn, peer)
             last_applied = int(state["last_applied_seq"]) if state else 0
 

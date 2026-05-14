@@ -70,7 +70,6 @@ async def init_sync_replication(
     await _set_instance_id_session(pool, settings.instance_id)
 
     _publisher = SyncPublisher(
-        pool=pool,
         mqtt_host=settings.sync_mqtt_host,
         mqtt_port=settings.sync_mqtt_port,
         mqtt_username=settings.sync_mqtt_username or None,
@@ -79,7 +78,6 @@ async def init_sync_replication(
         cluster_id=settings.sync_cluster_id,
     )
     _consumer = SyncConsumer(
-        pool=pool,
         mqtt_host=settings.sync_mqtt_host,
         mqtt_port=settings.sync_mqtt_port,
         mqtt_username=settings.sync_mqtt_username or None,

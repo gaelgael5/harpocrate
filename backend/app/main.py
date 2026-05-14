@@ -94,13 +94,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # LOT_21A — démarre la sync cluster (LISTEN/NOTIFY + refresh 5s).
     # Le start() effectue un refresh initial AVANT de retourner, donc l'app
     # n'accepte aucun trafic tant que `cluster_state` n'est pas synchronisé.
-    cluster_sync = init_cluster_sync(pool)
+    # ClusterSync ne capture plus le pool — chaque op fetch via get_pool()
+    # (résilience à refresh_pool() post-pairing standby).
+    cluster_sync = init_cluster_sync()
     await cluster_sync.start()
 
     # LOT_21B — réplication MQTT inter-instances (no-op si HARPOCRATE_SYNC_ENABLED=false).
     await sync_svc.init_sync_replication(pool)
 
-    scheduler = sched_svc.init_scheduler(pool)
+    scheduler = sched_svc.init_scheduler()
     try:
         await scheduler.start()
     except Exception as exc:
@@ -108,17 +110,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Sauvegardes planifiées (cron-like) — boucle in-process avec asyncio.Lock
     # global pour sérialisation. Indépendant du snapshot scheduler ci-dessus.
-    scheduled_backups_scheduler = scheduled_sched_svc.init_scheduler(pool)
+    scheduled_backups_scheduler = scheduled_sched_svc.init_scheduler()
     try:
         await scheduled_backups_scheduler.start()
     except Exception as exc:
         logger.warning("scheduled_backups_scheduler_start_failed", error=str(exc))
 
+    # Closures background : on n'utilise PAS la variable `pool` du lifespan
+    # (qui pointe vers l'ancien pool après refresh_pool post-pairing). Chaque
+    # tick refait `await get_pool()` (importé en tête) pour le pool actuel.
     async def _wallet_purge_loop() -> None:
         while True:
             await asyncio.sleep(3600)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     await wallets_svc.purge_expired_wallets(conn)
             except Exception as exc:
                 logger.warning("wallet_purge_failed", error=str(exc))
@@ -135,7 +141,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(30)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     await repl_svc.refresh_nodes_state(conn)
             except Exception as exc:
                 logger.warning("replication_refresh_failed", error=str(exc))
@@ -149,7 +156,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(3600)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     await repl_svc.purge_old_observations(conn)
             except Exception as exc:
                 logger.warning("replication_purge_failed", error=str(exc))
@@ -161,7 +169,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(300)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     expired = await recovery_repo.expire_pending(conn)
                 if expired > 0:
                     logger.info("recovery_sessions_expired", count=expired)

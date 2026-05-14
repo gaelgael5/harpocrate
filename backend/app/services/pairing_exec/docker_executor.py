@@ -218,11 +218,18 @@ class DockerExecutor(Executor):
     async def _exec_pg_isready(self, container: object) -> bool:
         """Retourne True si `pg_isready` répond OK dans le conteneur Postgres.
 
-        Méthode séparée pour pouvoir être mockée en test sans devoir setup
-        toute la chaîne `container.exec().start().read_out().inspect()`.
+        Utilise `$POSTGRES_USER` (env var du conteneur Postgres) pour le
+        startup packet. Hardcoder `-U postgres` est faux : avec
+        `POSTGRES_USER=harpocrate` (cas standard de la stack), le role
+        `postgres` n'existe pas dans `pg_authid` et `pg_isready` retourne
+        exit_code 1 (rejected) — la boucle ne sort jamais et le step finit
+        en timeout au lieu de step_done.
         """
         exec_inst = await container.exec(  # type: ignore[attr-defined]
-            cmd=["pg_isready", "-U", "postgres", "-q"],
+            cmd=[
+                "sh", "-c",
+                'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q',
+            ],
         )
         async with exec_inst.start(detach=False) as stream:
             while True:
@@ -230,7 +237,10 @@ class DockerExecutor(Executor):
                 if msg is None:
                     break
         info = await exec_inst.inspect()
-        return int(info.get("ExitCode", 1) or 1) == 0
+        exit_code = info.get("ExitCode")
+        if exit_code is None:
+            return False
+        return int(exit_code) == 0
 
     async def _step_verify_streaming(self, payload: PairingPayload) -> StepResult:
         assert self._docker is not None

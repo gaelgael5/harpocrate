@@ -160,6 +160,62 @@ async def test_start_pg_waits_pg_isready_before_returning_done(
 
 
 @pytest.mark.asyncio
+async def test_exec_pg_isready_uses_postgres_user_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`pg_isready` doit interpoler `$POSTGRES_USER` du conteneur, PAS hardcoder.
+
+    Régression : la stack par défaut a `POSTGRES_USER=harpocrate`. Hardcoder
+    `-U postgres` envoie un startup packet avec un role inexistant dans
+    `pg_authid` → pg_isready exit_code 1 (rejected) → la boucle wait ne sort
+    jamais et le step finit en faux timeout. La commande doit être un shell
+    qui interpole l'env var DU conteneur Postgres.
+    """
+    fake_pg = AsyncMock()
+    fake_pg.show = AsyncMock(
+        return_value={
+            "Mounts": [{"Destination": "/var/lib/postgresql/data", "Source": "/host/pg"}]
+        }
+    )
+    captured_cmds: list[list[str]] = []
+
+    async def fake_exec(*args: object, **kwargs: object) -> object:
+        captured_cmds.append(list(kwargs.get("cmd", [])))  # type: ignore[arg-type]
+        stream = AsyncMock()
+        stream.read_out = AsyncMock(return_value=None)
+        ctx = AsyncMock()
+        ctx.__aenter__ = AsyncMock(return_value=stream)
+        ctx.__aexit__ = AsyncMock(return_value=None)
+        exec_inst = AsyncMock()
+        exec_inst.start = lambda **_: ctx
+        exec_inst.inspect = AsyncMock(return_value={"ExitCode": 0})
+        return exec_inst
+
+    fake_pg.exec = fake_exec
+
+    fake_docker = AsyncMock()
+    fake_docker.containers.get = AsyncMock(return_value=fake_pg)
+    monkeypatch.setattr(
+        "app.services.pairing_exec.docker_executor.aiodocker.Docker",
+        lambda: fake_docker,
+    )
+
+    ex = DockerExecutor()
+    await ex.open()
+    ready = await ex._exec_pg_isready(fake_pg)
+    assert ready is True
+    # La commande doit être un shell qui interpole $POSTGRES_USER côté container
+    joined = " ".join(captured_cmds[0])
+    assert "$POSTGRES_USER" in joined, f"cmd hardcode le user au lieu de l'env: {joined!r}"
+    assert "postgres" not in joined.replace("$POSTGRES_USER", "").replace(
+        "pg_isready", ""
+    ).replace("$POSTGRES_DB", ""), (
+        f"cmd contient encore un 'postgres' littéral suspect: {joined!r}"
+    )
+    await ex.close()
+
+
+@pytest.mark.asyncio
 async def test_start_pg_returns_error_when_pg_isready_times_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

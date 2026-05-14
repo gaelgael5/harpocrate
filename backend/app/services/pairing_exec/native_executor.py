@@ -122,10 +122,15 @@ def _build_command(step: StepDescriptor, payload: PairingPayload, pg_container: 
         # `docker start` retourne dès que le process est lancé, PAS quand
         # Postgres écoute — sans cette boucle, le step verify_streaming juste
         # après échoue avec 'socket No such file or directory'.
+        # Le `-U "$POSTGRES_USER"` interpole l'env var DU conteneur Postgres
+        # (pas du host) via `sh -c` exécuté à l'intérieur du conteneur. Hardcoder
+        # `postgres` casse quand POSTGRES_USER=harpocrate (le role n'existe pas
+        # dans pg_authid, exit_code 1 forever).
         return (
             f"docker start {pg_container} && "
             "for _ in $(seq 1 30); do "
-            f"if docker exec {pg_container} pg_isready -U postgres -q; "
+            f"if docker exec {pg_container} sh -c "
+            "'pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -q'; "
             "then exit 0; fi; sleep 1; done; "
             "echo 'timeout waiting for pg_isready' >&2; exit 1"
         )

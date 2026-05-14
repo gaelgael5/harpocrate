@@ -136,10 +136,7 @@ class DockerExecutor(Executor):
     async def _step_verify_streaming(self, payload: PairingPayload) -> StepResult:
         assert self._docker is not None
         container = await self._docker.containers.get(self._pg_container_name)
-        sql = (
-            "SELECT pid, status, sender_host, sender_port "
-            "FROM pg_stat_wal_receiver;"
-        )
+        sql = "SELECT pid, status, sender_host, sender_port FROM pg_stat_wal_receiver;"
         exec_inst = await container.exec(cmd=["psql", "-U", "postgres", "-At", "-c", sql])
         stream = exec_inst.start(detach=False)
         output_chunks: list[bytes] = []

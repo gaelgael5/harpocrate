@@ -69,50 +69,79 @@ class PairingExecOrchestrator:
             for step in steps:
                 if step.idx < start_from_step:
                     continue
-                await self._on_event(StepStartedEvent(
-                    step_idx=step.idx, title=step.title, command=step.kind,
-                ))
-                await self._audit("pairing.exec_step_started", {
-                    "step_idx": step.idx,
-                    "kind": step.kind,
-                    "title": step.title,
-                })
+                await self._on_event(
+                    StepStartedEvent(
+                        step_idx=step.idx,
+                        title=step.title,
+                        command=step.kind,
+                    )
+                )
+                await self._audit(
+                    "pairing.exec_step_started",
+                    {
+                        "step_idx": step.idx,
+                        "kind": step.kind,
+                        "title": step.title,
+                    },
+                )
                 try:
                     result = await self._executor.exec_step(step, self._payload)
                 except Exception as e:
-                    await self._on_event(StepErrorEvent(
-                        step_idx=step.idx, exit_code=-1, stdout="", stderr=str(e),
-                        error_type=type(e).__name__,
-                    ))
-                    await self._audit("pairing.exec_step_error", {
-                        "step_idx": step.idx,
-                        "exit_code": -1,
-                        "stderr_excerpt": str(e)[:2000],
-                        "error_type": type(e).__name__,
-                    })
+                    await self._on_event(
+                        StepErrorEvent(
+                            step_idx=step.idx,
+                            exit_code=-1,
+                            stdout="",
+                            stderr=str(e),
+                            error_type=type(e).__name__,
+                        )
+                    )
+                    await self._audit(
+                        "pairing.exec_step_error",
+                        {
+                            "step_idx": step.idx,
+                            "exit_code": -1,
+                            "stderr_excerpt": str(e)[:2000],
+                            "error_type": type(e).__name__,
+                        },
+                    )
                     return
                 if result.is_success:
-                    await self._on_event(StepDoneEvent(
-                        step_idx=step.idx, exit_code=result.exit_code,
-                        stdout=result.stdout, stderr=result.stderr,
-                    ))
-                    await self._audit("pairing.exec_step_done", {
-                        "step_idx": step.idx,
-                        "exit_code": result.exit_code,
-                        "stdout_excerpt": result.stdout[:2000],
-                    })
+                    await self._on_event(
+                        StepDoneEvent(
+                            step_idx=step.idx,
+                            exit_code=result.exit_code,
+                            stdout=result.stdout,
+                            stderr=result.stderr,
+                        )
+                    )
+                    await self._audit(
+                        "pairing.exec_step_done",
+                        {
+                            "step_idx": step.idx,
+                            "exit_code": result.exit_code,
+                            "stdout_excerpt": result.stdout[:2000],
+                        },
+                    )
                 else:
-                    await self._on_event(StepErrorEvent(
-                        step_idx=step.idx, exit_code=result.exit_code,
-                        stdout=result.stdout, stderr=result.stderr,
-                        error_type="NonZeroExit",
-                    ))
-                    await self._audit("pairing.exec_step_error", {
-                        "step_idx": step.idx,
-                        "exit_code": result.exit_code,
-                        "stderr_excerpt": result.stderr[:2000],
-                        "error_type": "NonZeroExit",
-                    })
+                    await self._on_event(
+                        StepErrorEvent(
+                            step_idx=step.idx,
+                            exit_code=result.exit_code,
+                            stdout=result.stdout,
+                            stderr=result.stderr,
+                            error_type="NonZeroExit",
+                        )
+                    )
+                    await self._audit(
+                        "pairing.exec_step_error",
+                        {
+                            "step_idx": step.idx,
+                            "exit_code": result.exit_code,
+                            "stderr_excerpt": result.stderr[:2000],
+                            "error_type": "NonZeroExit",
+                        },
+                    )
                     return
             await self._on_event(ExecutionCompleteEvent())
         finally:

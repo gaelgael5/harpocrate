@@ -1,8 +1,13 @@
-"""Déclaration des 7 étapes du wizard pairing standby.
+"""Déclaration des 8 étapes du wizard pairing standby.
 
 Chaque `StepDescriptor` porte le titre FR, une description longue (le « pourquoi »)
 et un identifiant `kind` qui pilote le dispatch côté Executor (DockerExecutor ou
 NativeSshExecutor traduisent ce kind en commande concrète).
+
+L'étape 0 (`verify_master_reachable`) est une pré-vérification non destructive :
+elle valide que la connexion réseau au master fonctionne AVANT de toucher au
+data dir local. Sans elle, un master injoignable laisse le standby cassé
+(data dir renommé sans nouveau data dir pour le remplacer).
 """
 
 from __future__ import annotations
@@ -11,6 +16,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 StepKind = Literal[
+    "verify_master_reachable",
     "stop_pg_container",
     "backup_pg_data_dir",
     "pg_basebackup_from_master",
@@ -42,6 +48,17 @@ def list_steps(payload: PairingPayload) -> list[StepDescriptor]:
     return [
         StepDescriptor(
             idx=0,
+            kind="verify_master_reachable",
+            title="Vérifier que le master est joignable",
+            description=(
+                f"Teste la connexion réseau et la replication au master "
+                f"({payload.master_host}:{payload.master_port}) avec l'user "
+                f"'{payload.replication_user}'. Étape NON destructive : "
+                f"si elle échoue, le data dir local reste intact."
+            ),
+        ),
+        StepDescriptor(
+            idx=1,
             kind="stop_pg_container",
             title="Arrêter le conteneur Postgres local",
             description=(
@@ -50,7 +67,7 @@ def list_steps(payload: PairingPayload) -> list[StepDescriptor]:
             ),
         ),
         StepDescriptor(
-            idx=1,
+            idx=2,
             kind="backup_pg_data_dir",
             title="Sauvegarder le data dir actuel",
             description=(
@@ -59,7 +76,7 @@ def list_steps(payload: PairingPayload) -> list[StepDescriptor]:
             ),
         ),
         StepDescriptor(
-            idx=2,
+            idx=3,
             kind="pg_basebackup_from_master",
             title="pg_basebackup depuis le master",
             description=(
@@ -69,25 +86,25 @@ def list_steps(payload: PairingPayload) -> list[StepDescriptor]:
             ),
         ),
         StepDescriptor(
-            idx=3,
+            idx=4,
             kind="verify_standby_signal",
             title="Vérifier standby.signal",
             description="Le fichier signal doit exister pour que Postgres démarre en mode standby.",
         ),
         StepDescriptor(
-            idx=4,
+            idx=5,
             kind="verify_auto_conf",
             title="Vérifier postgresql.auto.conf",
             description="Doit contenir une ligne primary_conninfo=… avec le bon host/user.",
         ),
         StepDescriptor(
-            idx=5,
+            idx=6,
             kind="start_pg_container",
             title="Démarrer le conteneur Postgres",
             description="Postgres démarre en mode standby (recovery).",
         ),
         StepDescriptor(
-            idx=6,
+            idx=7,
             kind="verify_streaming",
             title="Vérifier le streaming WAL actif",
             description=(

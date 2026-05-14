@@ -86,6 +86,12 @@ class NativeSshExecutor(Executor):
 
 def _build_command(step: StepDescriptor, payload: PairingPayload, pg_container: str) -> str:
     pg_data = "/var/lib/postgresql/16/data"
+    if step.kind == "verify_master_reachable":
+        # Pré-vérif non destructive du master (port TCP + auth replication).
+        return (
+            f"pg_isready -h {payload.master_host} -p {payload.master_port} "
+            f"-U {payload.replication_user} -t 5"
+        )
     if step.kind == "stop_pg_container":
         return f"docker stop {pg_container}"
     if step.kind == "backup_pg_data_dir":

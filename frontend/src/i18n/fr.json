@@ -1017,6 +1017,7 @@
       "start": "Démarrer l'exécution"
     },
     "steps": {
+      "verify_master_reachable":   { "title": "Vérifier que le master est joignable", "description": "Pré-vérification non destructive : pg_isready vers le master. Si ça échoue, on n'a rien cassé localement et tu peux retenter après correction de la conf master." },
       "stop_pg_container":         { "title": "Arrêter le conteneur Postgres local", "description": "On stoppe l'instance Postgres pour pouvoir remplacer son data dir. Si elle écrit, on attend la fin gracieuse." },
       "backup_pg_data_dir":        { "title": "Sauvegarder le data dir actuel",      "description": "Le data dir actuel est renommé en .bak.<timestamp> pour permettre un rollback manuel." },
       "pg_basebackup_from_master": { "title": "pg_basebackup depuis le master",      "description": "Copie l'intégralité de la base depuis le master en streaming. Peut prendre plusieurs minutes." },

@@ -54,6 +54,7 @@ class DockerExecutor(Executor):
             raise RuntimeError("executor_not_opened")
 
         dispatcher: dict[str, object] = {
+            "verify_master_reachable": self._step_verify_master_reachable,
             "stop_pg_container": self._step_stop_pg,
             "backup_pg_data_dir": self._step_backup_data_dir,
             "pg_basebackup_from_master": self._step_pg_basebackup,
@@ -76,6 +77,27 @@ class DockerExecutor(Executor):
     # ------------------------------------------------------------------
     # Handlers privés — un par kind
     # ------------------------------------------------------------------
+
+    async def _step_verify_master_reachable(self, payload: PairingPayload) -> StepResult:
+        """Pré-vérif non destructive : pg_isready depuis un conteneur éphémère.
+
+        Si le master n'est pas joignable (firewall, port fermé, master down),
+        ce step échoue AVANT que `stop_pg_container` ne touche au standby.
+        Le data dir local reste intact, l'admin peut retry après avoir
+        corrigé la conf master.
+        """
+        cmd = [
+            "pg_isready",
+            "-h", payload.master_host,
+            "-p", str(payload.master_port),
+            "-U", payload.replication_user,
+            "-t", "5",
+        ]
+        return await self._run_ephemeral(
+            image="postgres:16-alpine",
+            cmd=cmd,
+            binds=[],
+        )
 
     async def _step_stop_pg(self, payload: PairingPayload) -> StepResult:
         assert self._docker is not None

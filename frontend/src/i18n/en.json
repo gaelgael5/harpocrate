@@ -1016,6 +1016,7 @@
       "start": "Start execution"
     },
     "steps": {
+      "verify_master_reachable":   { "title": "Check that the master is reachable", "description": "Non-destructive pre-check: pg_isready against the master. If it fails, nothing local is touched and you can retry after fixing the master config." },
       "stop_pg_container":         { "title": "Stop the local Postgres container", "description": "We stop Postgres so its data dir can be replaced. If it is writing, we wait for a graceful shutdown." },
       "backup_pg_data_dir":        { "title": "Back up the current data dir",      "description": "The current data dir is renamed to .bak.<timestamp> so a manual rollback stays possible." },
       "pg_basebackup_from_master": { "title": "pg_basebackup from the master",     "description": "Copies the whole database from the master in streaming mode. May take several minutes." },

@@ -31,6 +31,7 @@ import { getAccessToken } from "@/lib/oidc";
 import { useSessionStore } from "@/stores/session";
 
 const STEP_KINDS = [
+  "verify_master_reachable",
   "stop_pg_container",
   "backup_pg_data_dir",
   "pg_basebackup_from_master",

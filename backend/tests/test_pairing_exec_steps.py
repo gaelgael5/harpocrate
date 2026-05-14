@@ -19,15 +19,22 @@ def _payload() -> PairingPayload:
     )
 
 
-def test_list_steps_returns_seven_entries() -> None:
+def test_list_steps_returns_eight_entries() -> None:
     steps = list_steps(_payload())
-    assert len(steps) == 7
+    assert len(steps) == 8
     assert all(isinstance(s, StepDescriptor) for s in steps)
 
 
-def test_list_steps_have_unique_indices_0_to_6() -> None:
+def test_list_steps_have_unique_indices_0_to_7() -> None:
     steps = list_steps(_payload())
-    assert [s.idx for s in steps] == list(range(7))
+    assert [s.idx for s in steps] == list(range(8))
+
+
+def test_list_steps_first_is_verify_master_reachable() -> None:
+    """L'étape 0 doit être non-destructive (pré-vérif du master)."""
+    steps = list_steps(_payload())
+    assert steps[0].kind == "verify_master_reachable"
+    assert steps[0].idx == 0
 
 
 def test_list_steps_titles_in_french() -> None:

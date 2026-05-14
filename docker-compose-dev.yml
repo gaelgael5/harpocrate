@@ -22,12 +22,30 @@ services:
     image: postgres:16-alpine
     container_name: harpocrate-postgres
     restart: unless-stopped
+    # Active la streaming replication par défaut :
+    #   - wal_level=replica permet aux standbys de se connecter
+    #   - max_wal_senders / max_replication_slots dimensionnent le nombre de
+    #     standbys simultanés (10 = large pour du dev)
+    # Sans ça, un standby qui lance pg_basebackup vers cette instance reçoit
+    # "WAL streaming not enabled" et le wizard pairing échoue à l'étape 0.
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    # Expose Postgres sur 0.0.0.0:5432 pour permettre à un standby externe
+    # (LXC voisin, autre VM) de s'y connecter pour pg_basebackup. Acceptable
+    # en dev sur réseau interne ; en prod, restreindre via firewall ou
+    # tunneliser via WireGuard.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "5432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro

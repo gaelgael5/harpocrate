@@ -40,8 +40,8 @@ async def test_run_emits_started_done_for_each_step_then_complete() -> None:
     orch = PairingExecOrchestrator(executor=executor, payload=_payload(), on_event=on_event)
     await orch.run()
 
-    # 7 steps x (started + done) + 1 complete = 15 events
-    assert len(events) == 15
+    # 8 steps x (started + done) + 1 complete = 17 events
+    assert len(events) == 17
     assert isinstance(events[0], StepStartedEvent)
     assert isinstance(events[1], StepDoneEvent)
     assert isinstance(events[-1], ExecutionCompleteEvent)
@@ -89,7 +89,7 @@ async def test_run_starts_from_step_idx_when_resume() -> None:
     orch = PairingExecOrchestrator(executor=executor, payload=_payload(), on_event=on_event)
     await orch.run(start_from_step=4)
 
-    assert executor.exec_step.call_count == 3  # steps 4, 5, 6
+    assert executor.exec_step.call_count == 4  # steps 4, 5, 6, 7
     first_started_idx = next(e.step_idx for e in events if isinstance(e, StepStartedEvent))
     assert first_started_idx == 4
 
@@ -121,5 +121,5 @@ async def test_run_writes_audit_log_for_each_event() -> None:
     await orch.run()
 
     action_names = [a[0] for a in audit_calls]
-    assert action_names.count("pairing.exec_step_started") == 7
-    assert action_names.count("pairing.exec_step_done") == 7
+    assert action_names.count("pairing.exec_step_started") == 8
+    assert action_names.count("pairing.exec_step_done") == 8

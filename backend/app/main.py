@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, Response
 from app.api.v1 import (
     admin_anomalies,
     admin_backups,
+    admin_install_mode,
     admin_maintenance,
     admin_remote_backups,
     admin_replication,
@@ -255,6 +256,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 
+app.include_router(admin_install_mode.router, prefix="/v1")
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
 app.include_router(admin_ssh_terminal.router, prefix="/v1")

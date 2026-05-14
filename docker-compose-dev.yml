@@ -46,6 +46,12 @@ services:
     # marge de 5s pour les fermetures pool DB / cluster sync stop.
     stop_grace_period: 35s
     stop_signal: SIGTERM
+    # Root dans le conteneur dev — nécessaire pour accéder à
+    # /var/run/docker.sock (monté ci-dessous) en mode pairing-exec auto.
+    # Le socket Docker hôte est en mode 660 root:docker ; sans root dans le
+    # conteneur, aiodocker plante en Permission denied. ACCEPTÉ ICI car
+    # compose-dev = environnement de test, jamais utilisé en prod.
+    user: "0:0"
     environment:
       HARPOCRATE_DB_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       HARPOCRATE_KEYCLOAK_URL: ${HARPOCRATE_KEYCLOAK_URL}

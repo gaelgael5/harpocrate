@@ -96,7 +96,14 @@ class ClusterSync:
         """Maintient une connexion dédiée pour LISTEN, reconnecte si déco."""
         while not self._stop_event.is_set():
             try:
-                self._listen_conn = await asyncpg.connect(dsn=settings.db_dsn)
+                # `effective_db_dsn` (et pas `db_dsn`) pour respecter le
+                # password override écrit par le wizard pairing standby. Sans
+                # ça, après pairing, le LISTEN essaie de se reconnecter avec
+                # l'ancien password (du .env) et boucle sur
+                # "password authentication failed for user harpocrate".
+                self._listen_conn = await asyncpg.connect(
+                    dsn=settings.effective_db_dsn
+                )
                 for channel in _NOTIFY_CHANNELS:
                     await self._listen_conn.add_listener(channel, self._on_notify)
                 logger.info("cluster_listen_connected", channels=list(_NOTIFY_CHANNELS))

@@ -375,7 +375,7 @@ async def _create_snapshot_record(
         tmp = Path(tmpdir)
 
         proc = await asyncio.create_subprocess_exec(
-            "pg_dump", settings.db_dsn,
+            "pg_dump", settings.effective_db_dsn,
             "--format=plain", "--serializable-deferrable", "--no-owner", "--no-acl",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

@@ -1,8 +1,8 @@
 """WebSocket — exécution serveur du wizard pairing (LOT pairing-exec).
 
-Auth identique à l'ancien ssh_terminal : token JWT en query string, vérifie
-le rôle admin. Premier frame du client = `open_docker` ou `open_native` (avec
-credentials SSH). L'orchestrator tourne et push les events dans le WS.
+Auth : token JWT en query string, vérifie le rôle admin.
+Premier frame du client = `open_docker` ou `open_native` (avec credentials SSH).
+L'orchestrator tourne et push les events dans le WS.
 
 Re-tentative : le client peut envoyer `{type: "retry", from_step_idx: N}` dans
 la trame d'ouverture (champ `from_step_idx`) pour relancer l'exécution depuis

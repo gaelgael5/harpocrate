@@ -151,10 +151,7 @@ class Settings(BaseSettings):
     recovery_anomaly_threshold: int = Field(default=5, ge=1)
     recovery_anomaly_window_hours: int = Field(default=24, ge=1)
 
-    # ─── SSH terminal admin (LOT 1) ───────────────────────────────────────────
-    # Durée d'inactivité avant fermeture automatique de la session SSH (secondes).
-    # Défaut 30 min ; ajustable sans redémarrage via var d'env.
-    ssh_terminal_idle_timeout_seconds: int = Field(default=1800, ge=60)
+    # ─── Pairing (LOT 2) ──────────────────────────────────────────────────────
     # Durée de validité d'un code de pairing (LOT 2).
     pairing_code_ttl_seconds: int = Field(default=600, ge=30)
     # Nombre max de tentatives de saisie du code de pairing avant invalidation.

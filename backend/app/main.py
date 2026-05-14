@@ -23,7 +23,6 @@ from app.api.v1 import (
     admin_scheduled_backups,
     admin_secret_types,
     admin_snapshots,
-    admin_ssh_terminal,
     admin_system,
     api_key_openapi,
     api_keys,
@@ -260,7 +259,6 @@ async def log_requests(request: Request, call_next: object) -> Response:
 app.include_router(admin_install_mode.router, prefix="/v1")
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
-app.include_router(admin_ssh_terminal.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
 app.include_router(admin_scheduled_backups.router, prefix="/v1")
 app.include_router(admin_replication.router, prefix="/v1")

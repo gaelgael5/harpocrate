@@ -169,6 +169,11 @@ class Settings(BaseSettings):
     # le master. En prod, utilise un certificat public valide (Cloudflare,
     # Let's Encrypt). Logge un warning structlog à chaque appel quand activé.
     replication_insecure_skip_tls_verify: bool = Field(default=False)
+    # Hôte SSH de l'instance locale — utilisé par le mode d'exécution natif du
+    # wizard pairing (open_native). Si None, le mode natif est refusé (erreur
+    # self_ssh_host_not_configured renvoyée au client).
+    harpocrate_self_ssh_host: str | None = None
+    harpocrate_self_ssh_port: int = 22
 
     @property
     def keycloak_configured(self) -> bool:

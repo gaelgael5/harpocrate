@@ -27,11 +27,13 @@ class DockerExecutor(Executor):
         *,
         pg_container_name: str = "harpocrate-postgres",
         pg_isready_timeout_seconds: int = 30,
+        verify_streaming_timeout_seconds: int = 20,
     ) -> None:
         self._pg_container_name = pg_container_name
         self._docker: aiodocker.Docker | None = None
         self.pg_data_host_path: str | None = None
         self._pg_isready_timeout_seconds = pg_isready_timeout_seconds
+        self._verify_streaming_timeout_seconds = verify_streaming_timeout_seconds
 
     async def open(self) -> None:
         if self._docker is not None:
@@ -243,13 +245,57 @@ class DockerExecutor(Executor):
         return int(exit_code) == 0
 
     async def _step_verify_streaming(self, payload: PairingPayload) -> StepResult:
+        """Vérifie pg_stat_wal_receiver pour confirmer le streaming actif.
+
+        Boucle avec timeout — après start_pg_container, la connexion vers le
+        master prend quelques secondes pour s'établir et apparaître dans
+        `pg_stat_wal_receiver`. Sans retry, le step échoue avec
+        "status not streaming" alors que la réplication est en cours
+        d'amorçage.
+
+        Le `psql` utilise `$POSTGRES_USER` (interpolé côté conteneur) car le
+        role applicatif est défini par cette env var (par défaut `harpocrate`),
+        pas `postgres` — hardcoder ce dernier provoque `role does not exist`.
+        """
         assert self._docker is not None
         container = await self._docker.containers.get(self._pg_container_name)
-        sql = "SELECT pid, status, sender_host, sender_port FROM pg_stat_wal_receiver;"
-        exec_inst = await container.exec(cmd=["psql", "-U", "postgres", "-At", "-c", sql])
+        last_stdout = ""
+        last_exit_code = 1
+        for _ in range(self._verify_streaming_timeout_seconds):
+            exit_code, stdout = await self._exec_pg_stat_wal_receiver(container)
+            last_stdout = stdout
+            last_exit_code = exit_code
+            if exit_code == 0 and "streaming" in stdout:
+                return StepResult(exit_code=0, stdout=stdout, stderr="")
+            await asyncio.sleep(1)
+        return StepResult(
+            exit_code=last_exit_code if last_exit_code != 0 else 2,
+            stdout=last_stdout,
+            stderr=(
+                last_stdout
+                if last_exit_code != 0
+                else "status not streaming after timeout"
+            ),
+        )
+
+    async def _exec_pg_stat_wal_receiver(
+        self, container: object
+    ) -> tuple[int, str]:
+        """Exécute `psql ... pg_stat_wal_receiver` et retourne (exit_code, stdout).
+
+        Méthode séparée pour faciliter le test et la retry du step.
+        """
+        sql = (
+            "SELECT pid, status, sender_host, sender_port "
+            "FROM pg_stat_wal_receiver;"
+        )
+        cmd_sh = (
+            f'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "{sql}"'
+        )
+        exec_inst = await container.exec(  # type: ignore[attr-defined]
+            cmd=["sh", "-c", cmd_sh],
+        )
         output_chunks: list[bytes] = []
-        # aiodocker Stream n'expose pas __aiter__ : on consomme via read_out()
-        # dans une boucle jusqu'à recevoir None (fin du flux).
         async with exec_inst.start(detach=False) as stream:
             while True:
                 msg = await stream.read_out()
@@ -258,15 +304,10 @@ class DockerExecutor(Executor):
                 if msg.data:
                     output_chunks.append(msg.data)
         info = await exec_inst.inspect()
-        exit_code = int(info.get("ExitCode", 1) or 0)
+        raw_ec = info.get("ExitCode")
+        exit_code = 1 if raw_ec is None else int(raw_ec)
         stdout = b"".join(output_chunks).decode("utf-8", errors="replace")
-        if exit_code == 0 and "streaming" not in stdout:
-            return StepResult(exit_code=2, stdout=stdout, stderr="status not streaming")
-        return StepResult(
-            exit_code=exit_code,
-            stdout=stdout,
-            stderr="" if exit_code == 0 else stdout,
-        )
+        return exit_code, stdout
 
     # ------------------------------------------------------------------
     # Helpers partagés

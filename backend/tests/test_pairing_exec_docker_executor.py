@@ -261,6 +261,125 @@ async def test_start_pg_returns_error_when_pg_isready_times_out(
 
 
 @pytest.mark.asyncio
+async def test_verify_streaming_uses_postgres_user_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verify_streaming doit utiliser `$POSTGRES_USER`, pas hardcoder `postgres`.
+
+    Même régression que pg_isready : le role `postgres` n'existe pas quand la
+    stack tourne avec POSTGRES_USER=harpocrate → psql sort 'FATAL: role
+    "postgres" does not exist' et le step finit en step_error.
+    """
+    from app.services.pairing_exec.steps import PairingPayload, StepDescriptor
+
+    fake_pg = AsyncMock()
+    fake_pg.show = AsyncMock(
+        return_value={
+            "Mounts": [{"Destination": "/var/lib/postgresql/data", "Source": "/host/pg"}]
+        }
+    )
+    captured_cmds: list[list[str]] = []
+
+    async def fake_exec(*args: object, **kwargs: object) -> object:
+        captured_cmds.append(list(kwargs.get("cmd", [])))  # type: ignore[arg-type]
+        stream = AsyncMock()
+        # Retour avec 'streaming' pour que la boucle sorte immédiatement.
+        async def read_out_sequence() -> object:
+            return None
+
+        msg = AsyncMock()
+        msg.data = b"12345|streaming|192.168.10.196|5432\n"
+        calls = {"i": 0}
+
+        async def read_out() -> object:
+            calls["i"] += 1
+            return msg if calls["i"] == 1 else None
+
+        stream.read_out = read_out
+        ctx = AsyncMock()
+        ctx.__aenter__ = AsyncMock(return_value=stream)
+        ctx.__aexit__ = AsyncMock(return_value=None)
+        exec_inst = AsyncMock()
+        exec_inst.start = lambda **_: ctx
+        exec_inst.inspect = AsyncMock(return_value={"ExitCode": 0})
+        return exec_inst
+
+    fake_pg.exec = fake_exec
+
+    fake_docker = AsyncMock()
+    fake_docker.containers.get = AsyncMock(return_value=fake_pg)
+    monkeypatch.setattr(
+        "app.services.pairing_exec.docker_executor.aiodocker.Docker",
+        lambda: fake_docker,
+    )
+    monkeypatch.setattr("asyncio.sleep", AsyncMock(return_value=None))
+
+    ex = DockerExecutor()
+    await ex.open()
+    step = StepDescriptor(idx=8, kind="verify_streaming", title="x", description="")
+    payload = PairingPayload(
+        master_host="a", master_port=5432,
+        replication_user="r", replication_password="p", application_name="b",
+    )
+    res = await ex.exec_step(step, payload)
+    assert res.is_success
+    joined = " ".join(captured_cmds[0])
+    assert "$POSTGRES_USER" in joined, (
+        f"verify_streaming hardcode le user: {joined!r}"
+    )
+    await ex.close()
+
+
+@pytest.mark.asyncio
+async def test_verify_streaming_retries_until_streaming_or_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verify_streaming retry quand pg_stat_wal_receiver est vide ou non-streaming.
+
+    Après start_pg_container, la connexion replication peut prendre quelques
+    secondes pour apparaître dans pg_stat_wal_receiver. Sans retry, le step
+    échoue avec 'status not streaming' alors que la réplication s'amorce.
+    """
+    from app.services.pairing_exec.steps import PairingPayload, StepDescriptor
+
+    fake_pg = AsyncMock()
+    fake_pg.show = AsyncMock(
+        return_value={
+            "Mounts": [{"Destination": "/var/lib/postgresql/data", "Source": "/host/pg"}]
+        }
+    )
+    fake_docker = AsyncMock()
+    fake_docker.containers.get = AsyncMock(return_value=fake_pg)
+    monkeypatch.setattr(
+        "app.services.pairing_exec.docker_executor.aiodocker.Docker",
+        lambda: fake_docker,
+    )
+    monkeypatch.setattr("asyncio.sleep", AsyncMock(return_value=None))
+
+    ex = DockerExecutor(verify_streaming_timeout_seconds=5)
+    await ex.open()
+    # Mock l'exec : 2 essais sans 'streaming', puis 'streaming' au 3e.
+    call_count = {"i": 0}
+
+    async def fake_exec_check(container: object) -> tuple[int, str]:
+        call_count["i"] += 1
+        if call_count["i"] < 3:
+            return 0, ""  # exit 0 mais pas de ligne streaming
+        return 0, "12345|streaming|192.168.10.196|5432\n"
+
+    monkeypatch.setattr(ex, "_exec_pg_stat_wal_receiver", fake_exec_check)
+    step = StepDescriptor(idx=8, kind="verify_streaming", title="x", description="")
+    payload = PairingPayload(
+        master_host="a", master_port=5432,
+        replication_user="r", replication_password="p", application_name="b",
+    )
+    res = await ex.exec_step(step, payload)
+    assert res.is_success
+    assert call_count["i"] == 3
+    await ex.close()
+
+
+@pytest.mark.asyncio
 async def test_exec_step_pg_basebackup_runs_postgres_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

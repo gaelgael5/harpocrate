@@ -135,8 +135,17 @@ def _build_command(step: StepDescriptor, payload: PairingPayload, pg_container: 
             "echo 'timeout waiting for pg_isready' >&2; exit 1"
         )
     if step.kind == "verify_streaming":
+        # Retry — la connexion replication prend quelques secondes pour
+        # apparaître dans pg_stat_wal_receiver après start_pg_container.
+        # `psql -U $POSTGRES_USER` interpolé côté conteneur (hardcoder
+        # `postgres` casse quand POSTGRES_USER=harpocrate).
         return (
-            f"docker exec {pg_container} psql -U postgres -At -c "
-            f"'SELECT pid, status FROM pg_stat_wal_receiver;'"
+            "for _ in $(seq 1 20); do "
+            f"out=$(docker exec {pg_container} sh -c "
+            "'psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -At -c "
+            "\"SELECT pid, status, sender_host, sender_port FROM pg_stat_wal_receiver;\"'); "
+            "if echo \"$out\" | grep -q streaming; then echo \"$out\"; exit 0; fi; "
+            "sleep 1; done; "
+            "echo \"$out\"; echo 'status not streaming after timeout' >&2; exit 2"
         )
     return f"echo unknown_step_kind:{step.kind} >&2; exit 99"

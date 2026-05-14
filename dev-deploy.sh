@@ -13,6 +13,13 @@
 # Usage :
 #   ./dev-deploy.sh                       # reste sur la branche courante, pull
 #   ./dev-deploy.sh feat/ma-branche       # checkout cette branche, puis pull
+#   ./dev-deploy.sh --reset               # DESTRUCTIF : down + wipe data/postgres + redeploy
+#   ./dev-deploy.sh feat/ma-branche --reset
+#
+# Le flag --reset force la suppression du data dir Postgres (`data/postgres/`).
+# Utile quand le standby a été basebackuppé depuis un master avec un
+# POSTGRES_PASSWORD différent, ou pour repartir d'une base fraîche en dev.
+# Ne supprime PAS `data/backups/` ni `.env`.
 #
 # Pour la PROD (pull GHCR, pas de build local), utiliser scripts/refresh.sh.
 
@@ -21,9 +28,29 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-git@github.com:gaelgael5/harpocrate.git}"
 COMPOSE_FILE="docker-compose-dev.yml"
 
-# Branche cible : argument positionnel optionnel. Si absent, on reste sur la
-# branche courante du repo (pas de switch automatique).
-TARGET_BRANCH="${1:-}"
+# Parse args : on accepte un mix « branche optionnelle » + « flags --xxx ».
+# Tout ce qui commence par `--` est un flag ; le reste est la branche.
+TARGET_BRANCH=""
+RESET_DATA=0
+for arg in "$@"; do
+  case "$arg" in
+    --reset)
+      RESET_DATA=1
+      ;;
+    --*)
+      echo "✗ Flag inconnu : ${arg}" >&2
+      echo "  Flags supportés : --reset" >&2
+      exit 1
+      ;;
+    *)
+      if [ -n "$TARGET_BRANCH" ]; then
+        echo "✗ Plusieurs branches passées en argument : '${TARGET_BRANCH}' et '${arg}'" >&2
+        exit 1
+      fi
+      TARGET_BRANCH="$arg"
+      ;;
+  esac
+done
 
 # ─── 0) Pré-requis : Docker installé ─────────────────────────────────────────
 
@@ -268,7 +295,27 @@ docker build -t harpocrate-frontend:dev frontend/
 # ─── 5) Stop + cleanup orphelins ────────────────────────────────────────────
 
 echo "[5/6] Arrêt de la stack (incl. orphelins)..."
-docker compose -f "$COMPOSE_FILE" down --remove-orphans || true
+if [ "$RESET_DATA" = "1" ]; then
+  # `down -v` supprime aussi les volumes nommés (au cas où on en aurait
+  # ajouté plus tard). Les bind mounts (data/postgres, data/backups) ne sont
+  # PAS impactés par -v — on les nettoie explicitement juste après.
+  docker compose -f "$COMPOSE_FILE" down -v --remove-orphans || true
+else
+  docker compose -f "$COMPOSE_FILE" down --remove-orphans || true
+fi
+
+# Reset des bind mounts si demandé. On supprime UNIQUEMENT le data dir
+# Postgres : les backups (`data/backups`) et le .env sont conservés. Les
+# fichiers du data dir Postgres appartiennent à l'uid 999 du conteneur
+# (user `postgres`) → on a besoin de root sur l'hôte pour les rm. Fallback
+# sudo si rm direct échoue (cas où l'admin lance le script sans root).
+if [ "$RESET_DATA" = "1" ]; then
+  echo "      ⚠  --reset : suppression de data/postgres (DESTRUCTIF)..."
+  if [ -d "data/postgres" ]; then
+    rm -rf data/postgres 2>/dev/null || sudo rm -rf data/postgres
+  fi
+  echo "      ✓ data/postgres supprimé — Postgres se réinitialisera avec POSTGRES_PASSWORD du .env"
+fi
 
 # ─── 6) Pull images registry restantes (postgres) puis up ──────────────────
 
@@ -311,3 +358,22 @@ cat <<EOF
   → Ouvre dans ton navigateur :   ${APP_URL}
 ═════════════════════════════════════════════════════════════════
 EOF
+
+# ─── Affichage credentials admin local ──────────────────────────────────────
+# Si l'admin local est activé dans le .env, on rappelle username + password
+# à chaque déploiement. Évite à l'admin d'aller fouiller dans .env quand il
+# lance le script depuis une nouvelle session.
+if [ -f ".env" ]; then
+  ADMIN_ENABLED="$(awk -F'=' '/^HARPOCRATE_ADMIN_LOCAL_ENABLED=/ {print $2}' .env | tr -d '\r')"
+  if [ "$ADMIN_ENABLED" = "true" ]; then
+    ADMIN_USER="$(awk -F'=' '/^HARPOCRATE_ADMIN_LOCAL_USERNAME=/ {print $2}' .env | tr -d '\r')"
+    ADMIN_PWD="$(awk -F'=' '/^HARPOCRATE_ADMIN_LOCAL_PASSWORD=/ {print $2}' .env | tr -d '\r')"
+    : "${ADMIN_USER:=admin}"
+    cat <<EOF
+  → Admin local activé :
+      username : ${ADMIN_USER}
+      password : ${ADMIN_PWD}
+═════════════════════════════════════════════════════════════════
+EOF
+  fi
+fi

@@ -179,6 +179,38 @@ passe-la en argument :
 
 ---
 
+## Mode auto — socket Docker pour le wizard pairing
+
+Pour bénéficier de l'**exécution automatique** des 7 étapes du wizard pairing
+(sans saisie SSH manuelle, sans copier-coller), Harpocrate-backend doit pouvoir
+piloter Docker. Cela nécessite de monter le socket Docker de l'hôte dans le
+conteneur backend :
+
+```yaml
+services:
+  backend:
+    ...
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # accès root équivalent
+```
+
+**Implications sécurité** : monter le socket Docker donne au conteneur backend
+un accès équivalent à root sur la machine hôte. À n'activer que si l'admin
+contrôle entièrement l'hôte et accepte cette élévation de privilèges.
+
+Sans ce bind-mount, Harpocrate retombe automatiquement sur le mode SSH : le
+wizard demande à l'admin de saisir des credentials SSH une seule fois au début
+de la session ; le backend exécute ensuite les 7 étapes via cette session SSH
+unique. Pour ce mode, configurer dans le `.env` :
+
+- `HARPOCRATE_SELF_SSH_HOST` : hostname/IP de la machine où tourne Postgres
+- `HARPOCRATE_SELF_SSH_PORT` : port SSH (défaut 22)
+
+La détection du mode est automatique — l'admin n'a rien à choisir, Harpocrate
+détecte au démarrage si le socket Docker est accessible.
+
+---
+
 ## Arborescence après installation
 
 ```

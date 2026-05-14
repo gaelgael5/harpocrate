@@ -68,6 +68,7 @@ class PairingConfirmResponse(BaseModel):
     replication_password: str
     application_name: str
     node_id: UUID
+    master_postgres_password: str
 
 
 class PairingAcceptResponse(BaseModel):

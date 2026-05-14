@@ -59,6 +59,7 @@ def test_confirm_response_shape() -> None:
         replication_password="pwd",
         application_name="app_x",
         node_id=uuid4(),
+        master_postgres_password="pg_pwd",
     )
 
 
@@ -94,6 +95,7 @@ def test_confirm_response_node_id_is_uuid() -> None:
         replication_password="p",
         application_name="a",
         node_id=uuid4(),
+        master_postgres_password="x",
     )
     with pytest.raises(ValueError):
         PairingConfirmResponse(
@@ -103,7 +105,31 @@ def test_confirm_response_node_id_is_uuid() -> None:
             replication_password="p",
             application_name="a",
             node_id="not-a-uuid",  # type: ignore[arg-type]
+            master_postgres_password="x",
         )
+
+
+def test_confirm_response_propagates_master_postgres_password() -> None:
+    """master_postgres_password DOIT être un champ déclaré du modèle.
+
+    Si absent, FastAPI filtre silencieusement la clé via response_model lors de
+    la sérialisation HTTP, et le step 6 du wizard standby
+    (write_db_credentials_override) échoue avec
+    'master_postgres_password absent du payload pairing'.
+    """
+    r = PairingConfirmResponse(
+        master_host="h",
+        master_port=5432,
+        replication_user="u",
+        replication_password="p",
+        application_name="a",
+        node_id=uuid4(),
+        master_postgres_password="secret-master-pwd",
+    )
+    assert r.master_postgres_password == "secret-master-pwd"
+    dumped = r.model_dump()
+    assert "master_postgres_password" in dumped
+    assert dumped["master_postgres_password"] == "secret-master-pwd"
 
 
 # ─── V2 tests (LOT 5) ──────────────────────────────────────────────────────────

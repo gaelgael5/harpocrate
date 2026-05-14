@@ -58,6 +58,7 @@ def test_confirm_v2_does_not_require_auth() -> None:
             "replication_password": "pwd_x",
             "application_name": "app_x",
             "node_id": "11111111-1111-1111-1111-111111111111",
+            "master_postgres_password": "pg_master_pwd_x",
         }
 
     with (
@@ -78,6 +79,10 @@ def test_confirm_v2_does_not_require_auth() -> None:
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["master_host"] == "10.0.0.1"
+    # Régression 2026-05-14 : master_postgres_password DOIT traverser response_model
+    # sinon le step 6 du wizard standby (write_db_credentials_override) échoue avec
+    # 'master_postgres_password absent du payload pairing'.
+    assert body["master_postgres_password"] == "pg_master_pwd_x"
 
 
 def test_confirm_v2_invalid_token_returns_403() -> None:
@@ -193,6 +198,7 @@ def test_confirm_v2_endpoint_replaces_when_force_true() -> None:
             "replication_password": "pwd_new",
             "application_name": "repl_b_example",
             "node_id": "33333333-3333-3333-3333-333333333333",
+            "master_postgres_password": "pg_master_pwd_force",
         }
 
     with (

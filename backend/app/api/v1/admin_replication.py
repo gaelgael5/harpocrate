@@ -345,6 +345,102 @@ async def get_standby_of(admin: AdminJwt) -> JSONResponse:
     return JSONResponse({"is_standby_of": value})
 
 
+# ─── Failover MVP — promotion manuelle du standby ────────────────────────────
+
+
+class CanPromoteResponse(BaseModel):
+    """Lecture : indique si cette instance peut être promue en master."""
+
+    can_promote: bool
+    current_role: str  # "standby" | "master" | "standalone"
+    master_url: str | None = None
+    reason_if_not: str | None = None
+
+
+class PromoteRequest(BaseModel):
+    """Body POST /promote — exige les 2 confirmations admin.
+
+    Double check-box anti-erreur (split-brain) : l'admin DOIT confirmer
+    explicitement qu'il a coupé l'ancien master ET qu'il reconfigurera les
+    clients vers ce nouveau master.
+    """
+
+    confirm_master_down: bool = Field(
+        ..., description="L'admin confirme que l'ancien master est arrêté."
+    )
+    confirm_clients_will_be_reconfigured: bool = Field(
+        ...,
+        description="L'admin confirme qu'il reconfigurera les clients après promotion.",
+    )
+
+
+class PromoteResponse(BaseModel):
+    promoted: bool
+    old_master_url: str | None = None
+
+
+@router.get("/can-promote", response_model=CanPromoteResponse)
+async def can_promote_endpoint(admin: AdminJwt) -> CanPromoteResponse:
+    """Indique si cette instance est promouvable (standby en recovery).
+
+    Utilisé par l'UI pour afficher/masquer le bouton 'Promouvoir en master'.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        elig = await streaming_svc.get_promote_eligibility(conn)
+    return CanPromoteResponse(
+        can_promote=elig.can_promote,
+        current_role=elig.current_role,
+        master_url=elig.master_url,
+        reason_if_not=elig.reason_if_not,
+    )
+
+
+@router.post(
+    "/promote",
+    response_model=PromoteResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def promote_endpoint(
+    req: PromoteRequest,
+    admin: AdminJwt,
+) -> PromoteResponse:
+    """Promeut le standby local en master via pg_promote().
+
+    Exige les 2 confirmations admin (`confirm_master_down` +
+    `confirm_clients_will_be_reconfigured`). Si l'une des deux est False
+    → 400 `missing_confirmation`. Si l'instance n'est pas en mode standby
+    → 409 `not_in_standby_mode`. Si pg_promote échoue à sortir du recovery
+    → 500 `promotion_failed`.
+    """
+    if not (req.confirm_master_down and req.confirm_clients_will_be_reconfigured):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "missing_confirmation"},
+        )
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            result = await streaming_svc.promote_standby_to_master(
+                conn,
+                actor_user_id=admin.user_id,
+            )
+        except streaming_svc.NotInStandbyModeError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": "not_in_standby_mode"},
+            ) from None
+        except streaming_svc.PromotionFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"error": "promotion_failed", "cause": str(e)},
+            ) from e
+    return PromoteResponse(
+        promoted=result.promoted,
+        old_master_url=result.old_master_url,
+    )
+
+
 @router.get("/status", response_class=JSONResponse)
 async def replication_status(admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()

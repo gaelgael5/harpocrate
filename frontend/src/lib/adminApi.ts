@@ -651,3 +651,32 @@ export interface ReplicationSelfInfo {
 export async function getReplicationSelfInfo(): Promise<ReplicationSelfInfo> {
   return api.get<ReplicationSelfInfo>("/admin/replication/self-info");
 }
+
+// ─── Failover MVP — promotion manuelle du standby ──────────────────────────
+
+export interface CanPromoteResponse {
+  can_promote: boolean;
+  current_role: "standby" | "master" | "standalone";
+  master_url: string | null;
+  reason_if_not: string | null;
+}
+
+export interface PromoteRequest {
+  confirm_master_down: boolean;
+  confirm_clients_will_be_reconfigured: boolean;
+}
+
+export interface PromoteResponse {
+  promoted: boolean;
+  old_master_url: string | null;
+}
+
+export async function fetchCanPromote(): Promise<CanPromoteResponse> {
+  return api.get<CanPromoteResponse>("/admin/replication/can-promote");
+}
+
+export async function promoteToMaster(
+  body: PromoteRequest,
+): Promise<PromoteResponse> {
+  return api.post<PromoteResponse>("/admin/replication/promote", body);
+}

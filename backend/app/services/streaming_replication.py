@@ -987,3 +987,144 @@ async def set_standby_of(
     `replication.is_standby_of` dans `system_metadata` (NULL = pas asservi).
     """
     await meta_repo.set_value(conn, "replication.is_standby_of", master_url)
+
+
+# ─── Failover MVP — promotion manuelle du standby ────────────────────────────
+
+
+class NotInStandbyModeError(Exception):
+    """Tentative de promote alors que l'instance est déjà primary.
+
+    Soulevé par `promote_standby_to_master` si `pg_is_in_recovery()` retourne
+    `false` au moment de l'appel — la promotion est idempotente, refuser
+    explicitement plutôt que de fausser le state.
+    """
+
+
+class PromotionFailedError(Exception):
+    """`pg_promote()` a été exécuté mais l'instance reste en recovery.
+
+    Peut arriver si le serveur a un problème pour rejouer le WAL final ou si
+    le timeout `wait_seconds` est dépassé. On laisse remonter à l'API pour
+    transformer en 500, mais on n'a pas nettoyé `replication.is_standby_of`
+    (impossible de savoir si la promotion a partiellement réussi).
+    """
+
+
+@dataclass(frozen=True)
+class PromoteEligibility:
+    """Résultat de `get_promote_eligibility` — utilisé par l'UI pour afficher
+    ou non le bouton 'Promouvoir en master'."""
+
+    can_promote: bool
+    current_role: Literal["standby", "master", "standalone"]
+    master_url: str | None
+    reason_if_not: str | None
+
+
+@dataclass(frozen=True)
+class PromoteResult:
+    promoted: bool
+    old_master_url: str | None
+
+
+async def get_promote_eligibility(
+    conn: asyncpg.Connection[asyncpg.Record],
+) -> PromoteEligibility:
+    """Indique si l'instance peut être promue en master.
+
+    Logique :
+      - `pg_is_in_recovery() == true` ET `is_standby_of` set → standby promouvable
+      - `pg_is_in_recovery() == false` ET `is_standby_of` set → déjà master
+      - `pg_is_in_recovery() == false` ET `is_standby_of` NULL → standalone
+    """
+    in_recovery = await conn.fetchval("SELECT pg_is_in_recovery()")
+    master_url = await meta_repo.get_value(conn, "replication.is_standby_of")
+    if in_recovery:
+        return PromoteEligibility(
+            can_promote=True,
+            current_role="standby",
+            master_url=master_url,
+            reason_if_not=None,
+        )
+    if master_url is None:
+        return PromoteEligibility(
+            can_promote=False,
+            current_role="standalone",
+            master_url=None,
+            reason_if_not="no_replication_configured",
+        )
+    return PromoteEligibility(
+        can_promote=False,
+        current_role="master",
+        master_url=master_url,
+        reason_if_not="already_master",
+    )
+
+
+async def promote_standby_to_master(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    actor_user_id: UUID | None,
+    pg_promote_timeout_seconds: int = 60,
+) -> PromoteResult:
+    """Promeut le standby local en master via `pg_promote()`.
+
+    Pré-condition : l'instance DOIT être en mode recovery (sinon
+    NotInStandbyModeError). Post-conditions :
+      - `pg_is_in_recovery()` retourne `false`
+      - `system_metadata.replication.is_standby_of` est `NULL`
+      - audit log écrit (action=`replication.promoted_to_master`)
+
+    Si `pg_promote()` termine mais l'instance reste en recovery,
+    `PromotionFailedError` est levée — `is_standby_of` reste inchangé (on ne
+    sait pas dans quel état partiel on est).
+    """
+    # Import local pour éviter une potentielle dépendance circulaire à l'import.
+    from app.services.audit import audit_log_insert
+
+    in_recovery_before = await conn.fetchval("SELECT pg_is_in_recovery()")
+    if not in_recovery_before:
+        raise NotInStandbyModeError("not_in_recovery")
+
+    old_master_url = await meta_repo.get_value(conn, "replication.is_standby_of")
+
+    # pg_promote(wait=true, wait_seconds=N) bloque jusqu'à fin de promotion
+    # ou timeout. Retourne `true` si la promotion a réussi.
+    await conn.fetchval(
+        "SELECT pg_promote(wait => true, wait_seconds => $1)",
+        pg_promote_timeout_seconds,
+    )
+
+    # Re-check : pg_promote peut retourner true alors que le serveur n'est
+    # pas totalement sorti du recovery (cas rare mais possible).
+    in_recovery_after = await conn.fetchval("SELECT pg_is_in_recovery()")
+    if in_recovery_after:
+        raise PromotionFailedError(
+            "pg_promote completed but instance still in recovery"
+        )
+
+    # Cette instance n'est plus un standby. NULL = pas asservi.
+    await meta_repo.set_value(conn, "replication.is_standby_of", None)
+
+    # Audit best-effort : si la DB hoquette pendant ce call, on continue
+    # (la promotion elle-même a réussi, on ne veut pas la rollback).
+    try:
+        await audit_log_insert(
+            conn,
+            "replication.promoted_to_master",
+            actor_user_id=actor_user_id,
+            metadata={"old_master_url": old_master_url},
+        )
+    except Exception as exc:
+        logger.warning(
+            "promote_audit_log_failed",
+            old_master_url=old_master_url,
+            error=str(exc),
+        )
+
+    logger.info(
+        "replication_promoted_to_master",
+        old_master_url=old_master_url,
+    )
+    return PromoteResult(promoted=True, old_master_url=old_master_url)

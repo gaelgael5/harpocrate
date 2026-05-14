@@ -672,6 +672,23 @@
       "fieldS3SecretAccessKey": "Secret Access Key"
     },
     "replication": {
+      "promote": {
+        "buttonLabel": "Promouvoir en master",
+        "modalTitle": "Promouvoir cette instance en master",
+        "warningTitle": "Action irréversible",
+        "warningBody": "Cette opération promeut le standby local en primary read-write. L'ancien master ({{masterUrl}}) ne doit plus accepter d'écritures sous peine de divergence permanente (split-brain).",
+        "confirmMasterDown": "Je confirme que l'ancien master est arrêté",
+        "confirmClientsReconfigured": "Je m'engage à reconfigurer les clients vers ce nouveau master",
+        "submit": "Promouvoir maintenant",
+        "cancel": "Annuler",
+        "successToast": "Promotion réussie. Cette instance est maintenant master.",
+        "errors": {
+          "missing_confirmation": "Les deux cases doivent être cochées.",
+          "not_in_standby_mode": "Cette instance n'est pas en mode standby.",
+          "promotion_failed": "La promotion a échoué : pg_promote n'a pas pu sortir du mode recovery.",
+          "unknown": "Erreur inconnue lors de la promotion."
+        }
+      },
       "title": "Réplication",
       "subtitle": "Gérez les stratégies de réplication PostgreSQL. Plusieurs stratégies peuvent être actives en parallèle (ex: streaming async + archive WAL).",
       "activeStrategy": "Stratégie active",

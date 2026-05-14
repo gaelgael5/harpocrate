@@ -40,6 +40,7 @@ import { StreamingNodesPanel } from "@/components/StreamingNodesPanel";
 import { PostgresInfoPanel } from "@/components/PostgresInfoPanel";
 import { PublicUrlPanel } from "@/components/PublicUrlPanel";
 import { AddStandbyModal } from "@/components/AddStandbyModal";
+import { PromoteToMasterButton } from "@/components/PromoteToMasterButton";
 import { useIsStandby } from "@/lib/useIsStandby";
 
 function StatusBadge({ status }: { status: string }) {
@@ -274,6 +275,10 @@ export function AdminReplicationPage() {
           </Stack>
         </Card>
       )}
+
+      {/* Failover MVP : bouton de promotion. Auto-hide si l'instance n'est
+          pas en mode standby (master ou standalone). */}
+      <PromoteToMasterButton />
 
       {/* URL publique de cette instance — à transmettre au pair pour l'appairage. */}
       <PublicUrlPanel />

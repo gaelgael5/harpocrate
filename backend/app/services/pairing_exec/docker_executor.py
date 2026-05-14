@@ -160,10 +160,14 @@ class DockerExecutor(Executor):
         container = await self._docker.containers.get(self._pg_container_name)
         sql = "SELECT pid, status, sender_host, sender_port FROM pg_stat_wal_receiver;"
         exec_inst = await container.exec(cmd=["psql", "-U", "postgres", "-At", "-c", sql])
-        stream = exec_inst.start(detach=False)
         output_chunks: list[bytes] = []
-        async with stream as s:
-            async for msg in s:
+        # aiodocker Stream n'expose pas __aiter__ : on consomme via read_out()
+        # dans une boucle jusqu'à recevoir None (fin du flux).
+        async with exec_inst.start(detach=False) as stream:
+            while True:
+                msg = await stream.read_out()
+                if msg is None:
+                    break
                 if msg.data:
                     output_chunks.append(msg.data)
         info = await exec_inst.inspect()

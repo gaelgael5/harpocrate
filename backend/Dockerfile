@@ -49,7 +49,10 @@ RUN pip install --no-cache-dir --upgrade pip \
     "aiomqtt>=2.3.0" \
     "aioftp>=0.21.4" \
     "aiodocker>=0.21" \
-    "croniter>=2.0"
+    "croniter>=2.0" \
+    "google-auth>=2.30" \
+    "google-auth-oauthlib>=1.2" \
+    "google-api-python-client>=2.130"
 
 # ATTENTION : la liste ci-dessus DOIT rester en sync avec backend/pyproject.toml.
 # Refactor à venir : faire lire pyproject.toml directement (pip install . avec

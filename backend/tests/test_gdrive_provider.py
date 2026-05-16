@@ -194,7 +194,7 @@ async def test_upload_stream_quota_exceeded(_mock_gdrive_client) -> None:
         config={"client_id": "id", "folder_name": "Backups", "folder_id": "F"},
         credentials={"client_secret": "s", "refresh_token": "r"},
     )
-    with pytest.raises(RemoteBackupProviderError, match="drive_storage_full|drive_api_error"):
+    with pytest.raises(RemoteBackupProviderError, match=r"drive_storage_full|drive_api_error"):
         await p.upload_stream("/", "x.bin", _async_chunks(b"x"))
 
 

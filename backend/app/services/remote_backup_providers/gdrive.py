@@ -149,7 +149,7 @@ class GoogleDriveProvider:
 
         # Buffer le AsyncIterator vers un fichier temp local (resumable upload sync
         # requiert un objet seekable). Le tmp est nettoyé en finally.
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".gdrive-upload")
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".gdrive-upload")  # noqa: SIM115
         tmp_path = Path(tmp.name)
         bytes_written = 0
         try:

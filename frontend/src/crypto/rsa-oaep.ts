@@ -8,12 +8,15 @@
 
 /** Copy Uint8Array to a plain ArrayBuffer, satisfying WebCrypto's BufferSource type. */
 function toBuffer(arr: Uint8Array): ArrayBuffer {
-  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer
+  return arr.buffer.slice(
+    arr.byteOffset,
+    arr.byteOffset + arr.byteLength,
+  ) as ArrayBuffer;
 }
 
 export interface RsaKeypairBytes {
-  publicKey: Uint8Array
-  privateKey: Uint8Array
+  publicKey: Uint8Array;
+  privateKey: Uint8Array;
 }
 
 /**
@@ -25,21 +28,21 @@ export async function generateRsaKeypair(
 ): Promise<RsaKeypairBytes> {
   const pair = await crypto.subtle.generateKey(
     {
-      name: 'RSA-OAEP',
+      name: "RSA-OAEP",
       modulusLength: keySize,
       publicExponent: new Uint8Array([1, 0, 1]),
-      hash: 'SHA-256',
+      hash: "SHA-256",
     },
     true,
-    ['encrypt', 'decrypt'],
-  )
+    ["encrypt", "decrypt"],
+  );
   const pub = new Uint8Array(
-    await crypto.subtle.exportKey('spki', pair.publicKey),
-  )
+    await crypto.subtle.exportKey("spki", pair.publicKey),
+  );
   const priv = new Uint8Array(
-    await crypto.subtle.exportKey('pkcs8', pair.privateKey),
-  )
-  return { publicKey: pub, privateKey: priv }
+    await crypto.subtle.exportKey("pkcs8", pair.privateKey),
+  );
+  return { publicKey: pub, privateKey: priv };
 }
 
 /**
@@ -50,19 +53,15 @@ export async function rsaOaepEncrypt(
   publicKeyDer: Uint8Array,
 ): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
-    'spki',
+    "spki",
     toBuffer(publicKeyDer),
-    { name: 'RSA-OAEP', hash: 'SHA-256' },
+    { name: "RSA-OAEP", hash: "SHA-256" },
     false,
-    ['encrypt'],
-  )
+    ["encrypt"],
+  );
   return new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: 'RSA-OAEP' },
-      key,
-      toBuffer(plaintext),
-    ),
-  )
+    await crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, toBuffer(plaintext)),
+  );
 }
 
 /**
@@ -73,17 +72,17 @@ export async function rsaOaepDecrypt(
   privateKeyDer: Uint8Array,
 ): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
-    'pkcs8',
+    "pkcs8",
     toBuffer(privateKeyDer),
-    { name: 'RSA-OAEP', hash: 'SHA-256' },
+    { name: "RSA-OAEP", hash: "SHA-256" },
     false,
-    ['decrypt'],
-  )
+    ["decrypt"],
+  );
   return new Uint8Array(
     await crypto.subtle.decrypt(
-      { name: 'RSA-OAEP' },
+      { name: "RSA-OAEP" },
       key,
       toBuffer(ciphertext),
     ),
-  )
+  );
 }

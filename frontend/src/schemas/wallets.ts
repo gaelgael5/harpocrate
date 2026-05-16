@@ -2,15 +2,15 @@
  * Zod schemas for /v1/wallets/* endpoints.
  * Mirror of backend app/models/api/wallets.py.
  */
-import { z } from 'zod'
+import { z } from "zod";
 
-const NAME_MAX = 255
-const DESC_MAX = 1000
+const NAME_MAX = 255;
+const DESC_MAX = 1000;
 
 export const WalletCreateRequestSchema = z.object({
   name: z
     .string()
-    .min(1, 'Name must not be empty')
+    .min(1, "Name must not be empty")
     .max(NAME_MAX, `Name must not exceed ${NAME_MAX} characters`),
   description: z
     .string()
@@ -20,23 +20,14 @@ export const WalletCreateRequestSchema = z.object({
   tags: z.array(z.string()).default([]),
   encrypted_wallet_key_for_owner: z
     .string()
-    .min(1, 'encrypted_wallet_key_for_owner must not be empty'),
-})
+    .min(1, "encrypted_wallet_key_for_owner must not be empty"),
+});
 
 export const WalletPatchRequestSchema = z.object({
-  name: z
-    .string()
-    .min(1)
-    .max(NAME_MAX)
-    .nullable()
-    .optional(),
-  description: z
-    .string()
-    .max(DESC_MAX)
-    .nullable()
-    .optional(),
+  name: z.string().min(1).max(NAME_MAX).nullable().optional(),
+  description: z.string().max(DESC_MAX).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
-})
+});
 
 export const WalletItemSchema = z.object({
   id: z.string().uuid(),
@@ -53,25 +44,25 @@ export const WalletItemSchema = z.object({
   deleted_at: z.string().datetime({ offset: true }).nullable().optional(),
   // LOT_58 : NULL = "None" (item virtuel côté UI)
   environment_id: z.string().uuid().nullable().optional(),
-})
+});
 
 export const WalletListResponseSchema = z.object({
   wallets: z.array(WalletItemSchema),
   next_cursor: z.string().nullable(),
   deleted_wallets: z.array(WalletItemSchema).default([]),
-})
+});
 
 export const WalletCreateResponseSchema = z.object({
   wallet_id: z.string().uuid(),
-})
+});
 
 export const UserLookupResponseSchema = z.object({
   user_id: z.string().uuid(),
   email: z.string().email(),
   display_name: z.string().nullable(),
   rsa_public_key: z.string().min(1),
-})
+});
 
-export type WalletItem = z.infer<typeof WalletItemSchema>
-export type WalletListResponse = z.infer<typeof WalletListResponseSchema>
-export type UserLookupResponse = z.infer<typeof UserLookupResponseSchema>
+export type WalletItem = z.infer<typeof WalletItemSchema>;
+export type WalletListResponse = z.infer<typeof WalletListResponseSchema>;
+export type UserLookupResponse = z.infer<typeof UserLookupResponseSchema>;

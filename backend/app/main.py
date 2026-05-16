@@ -1,4 +1,5 @@
 """FastAPI app — lifespan gère le pool asyncpg, JWKS, cluster sync (LOT_21A)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,11 +13,14 @@ from fastapi.responses import JSONResponse, Response
 from app.api.v1 import (
     admin_anomalies,
     admin_backups,
+    admin_install_mode,
     admin_maintenance,
+    admin_pairing_exec,
     admin_remote_backups,
-    admin_scheduled_backups,
     admin_replication,
+    admin_replication_pairing,
     admin_replication_sync,
+    admin_scheduled_backups,
     admin_secret_types,
     admin_snapshots,
     admin_system,
@@ -47,10 +51,11 @@ from app.core.logging import configure_logging, logger
 from app.db.pool import close_pool, get_pool, init_pool
 from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
+from app.middleware.db_availability import db_availability_middleware
 from app.services import local_admin_bootstrap
 from app.services import replication as replication_svc
-from app.services import seed_types as seed_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
+from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
 from app.services import sync_replication_service as sync_svc
 from app.services import wallets as wallets_svc
@@ -70,7 +75,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await init_pool()
     await apply_migrations()
-    await prefetch_jwks()
+    if settings.keycloak_configured:
+        await prefetch_jwks()
+    else:
+        logger.info("keycloak_not_configured_skipping_jwks_prefetch")
 
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -87,13 +95,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # LOT_21A — démarre la sync cluster (LISTEN/NOTIFY + refresh 5s).
     # Le start() effectue un refresh initial AVANT de retourner, donc l'app
     # n'accepte aucun trafic tant que `cluster_state` n'est pas synchronisé.
-    cluster_sync = init_cluster_sync(pool)
+    # ClusterSync ne capture plus le pool — chaque op fetch via get_pool()
+    # (résilience à refresh_pool() post-pairing standby).
+    cluster_sync = init_cluster_sync()
     await cluster_sync.start()
 
     # LOT_21B — réplication MQTT inter-instances (no-op si HARPOCRATE_SYNC_ENABLED=false).
     await sync_svc.init_sync_replication(pool)
 
-    scheduler = sched_svc.init_scheduler(pool)
+    scheduler = sched_svc.init_scheduler()
     try:
         await scheduler.start()
     except Exception as exc:
@@ -101,17 +111,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Sauvegardes planifiées (cron-like) — boucle in-process avec asyncio.Lock
     # global pour sérialisation. Indépendant du snapshot scheduler ci-dessus.
-    scheduled_backups_scheduler = scheduled_sched_svc.init_scheduler(pool)
+    scheduled_backups_scheduler = scheduled_sched_svc.init_scheduler()
     try:
         await scheduled_backups_scheduler.start()
     except Exception as exc:
         logger.warning("scheduled_backups_scheduler_start_failed", error=str(exc))
 
+    # Closures background : on n'utilise PAS la variable `pool` du lifespan
+    # (qui pointe vers l'ancien pool après refresh_pool post-pairing). Chaque
+    # tick refait `await get_pool()` (importé en tête) pour le pool actuel.
     async def _wallet_purge_loop() -> None:
         while True:
             await asyncio.sleep(3600)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     await wallets_svc.purge_expired_wallets(conn)
             except Exception as exc:
                 logger.warning("wallet_purge_failed", error=str(exc))
@@ -124,10 +138,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ne pas spammer le master.
     async def _replication_refresh_loop() -> None:
         from app.services import streaming_replication as repl_svc
+
         while True:
             await asyncio.sleep(30)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     await repl_svc.refresh_nodes_state(conn)
             except Exception as exc:
                 logger.warning("replication_refresh_failed", error=str(exc))
@@ -137,10 +153,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # LOT réplication itération 2 — purge horaire des observations > 7 jours.
     async def _replication_purge_loop() -> None:
         from app.services import streaming_replication as repl_svc
+
         while True:
             await asyncio.sleep(3600)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     await repl_svc.purge_old_observations(conn)
             except Exception as exc:
                 logger.warning("replication_purge_failed", error=str(exc))
@@ -152,7 +170,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(300)
             try:
-                async with pool.acquire() as conn:
+                current_pool = await get_pool()
+                async with current_pool.acquire() as conn:
                     expired = await recovery_repo.expire_pending(conn)
                 if expired > 0:
                     logger.info("recovery_sessions_expired", count=expired)
@@ -218,9 +237,8 @@ async def _invalid_secret_path_handler(_request: Request, exc: InvalidSecretPath
 @app.middleware("http")
 async def _cluster_middleware(request: Request, call_next: object) -> Response:
     import typing
-    _call_next = typing.cast(
-        "typing.Callable[[Request], typing.Awaitable[Response]]", call_next
-    )
+
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
     return await cluster_coherence_middleware(request, _call_next)
 
 
@@ -229,9 +247,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
     """Log HTTP requests. Body NEVER read or logged for /secrets paths."""
     import typing
 
-    _call_next = typing.cast(
-        "typing.Callable[[Request], typing.Awaitable[Response]]", call_next
-    )
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
     path = request.url.path
     is_secrets_path = "/secrets" in path
     body_logged = not is_secrets_path
@@ -248,13 +264,30 @@ async def log_requests(request: Request, call_next: object) -> Response:
     return response
 
 
+# Ordre Starlette : le `@app.middleware` enregistré en DERNIER est le PLUS
+# EXTERNE. `db_availability_middleware` doit englober tous les autres pour
+# intercepter les exceptions de connexion DB qui remontent depuis les routes
+# (typiquement pendant le wizard pairing standby quand Postgres est stoppé).
+# Le 503 retourné ici reste visible par `log_requests` qui logue le statut
+# correctement.
+@app.middleware("http")
+async def _db_availability_middleware(request: Request, call_next: object) -> Response:
+    import typing
+
+    _call_next = typing.cast("typing.Callable[[Request], typing.Awaitable[Response]]", call_next)
+    return await db_availability_middleware(request, _call_next)
+
+
 # ─── Routers ──────────────────────────────────────────────────────────────────
 
+app.include_router(admin_install_mode.router, prefix="/v1")
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
 app.include_router(admin_scheduled_backups.router, prefix="/v1")
 app.include_router(admin_replication.router, prefix="/v1")
+app.include_router(admin_replication_pairing.router, prefix="/v1")
+app.include_router(admin_pairing_exec.router, prefix="/v1")
 app.include_router(admin_replication_sync.router, prefix="/v1")
 app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")

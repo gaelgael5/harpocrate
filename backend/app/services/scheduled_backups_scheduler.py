@@ -34,18 +34,28 @@ TICK_INTERVAL_SECONDS = 60
 
 
 class ScheduledBackupsScheduler:
-    """Boucle de tick + sérialisation des exécutions."""
+    """Boucle de tick + sérialisation des exécutions.
 
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    Ne capture pas le pool au boot : chaque acquisition fetch le pool actuel
+    via `app.db.pool.get_pool()`. Garantit la résilience face à
+    `refresh_pool()` (déclenché après pairing standby).
+    """
+
+    def __init__(self) -> None:
         from app.services.backup_lock import get_global_backup_lock
 
-        self._pool = pool
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         # Lock partagé avec le snapshot_scheduler : pas deux pg_dump en
         # parallèle. Sert aussi à sérialiser les runs de schedules entre eux
         # (tick auto + run-now).
         self._run_lock = get_global_backup_lock()
+
+    @staticmethod
+    async def _get_pool() -> asyncpg.Pool:
+        from app.db.pool import get_pool
+
+        return await get_pool()
 
     @property
     def run_lock(self) -> asyncio.Lock:
@@ -81,7 +91,7 @@ class ScheduledBackupsScheduler:
         déclenchements en chaîne après un long down.
         """
         now = datetime.now(timezone.utc)
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             schedules = await svc.list_schedules(conn)
             for sched in schedules:
                 if not sched.enabled:
@@ -121,7 +131,7 @@ class ScheduledBackupsScheduler:
     async def _tick(self) -> None:
         """Un tick : récupère les due, exécute en série (sous lock)."""
         now = datetime.now(timezone.utc)
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             due_rows = await repo.list_due(conn, now=now)
         if not due_rows:
             return
@@ -155,7 +165,7 @@ class ScheduledBackupsScheduler:
 
         result: svc.RunResult
         try:
-            async with self._pool.acquire() as conn:
+            async with (await self._get_pool()).acquire() as conn:
                 result = await svc.run_schedule(conn, schedule)
         except Exception as exc:  # noqa: BLE001 — on remonte tout pour persistance
             result = svc.RunResult(status="failed", error=f"unexpected: {exc}")
@@ -166,7 +176,7 @@ class ScheduledBackupsScheduler:
             schedule.cron_expression, after=datetime.now(timezone.utc)
         )
 
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             await repo.mark_run(
                 conn,
                 schedule_id=schedule.id,
@@ -208,7 +218,7 @@ class ScheduledBackupsScheduler:
         Utilisé par l'endpoint `POST /admin/scheduled-backups/{id}/run-now`.
         """
         async with self._run_lock:
-            async with self._pool.acquire() as conn:
+            async with (await self._get_pool()).acquire() as conn:
                 schedule = await svc.get_schedule(conn, schedule_id)
                 if schedule is None:
                     return svc.RunResult(
@@ -217,7 +227,7 @@ class ScheduledBackupsScheduler:
 
             started_at = datetime.now(timezone.utc)
             try:
-                async with self._pool.acquire() as conn:
+                async with (await self._get_pool()).acquire() as conn:
                     result = await svc.run_schedule(conn, schedule)
             except Exception as exc:  # noqa: BLE001
                 result = svc.RunResult(
@@ -226,7 +236,7 @@ class ScheduledBackupsScheduler:
 
             # On met à jour last_run_* mais on ne touche PAS à next_run_at —
             # un run manuel ne doit pas décaler le créneau planifié.
-            async with self._pool.acquire() as conn:
+            async with (await self._get_pool()).acquire() as conn:
                 await conn.execute(
                     """
                     UPDATE scheduled_backup
@@ -247,12 +257,16 @@ class ScheduledBackupsScheduler:
 _scheduler: ScheduledBackupsScheduler | None = None
 
 
-def init_scheduler(pool: asyncpg.Pool) -> ScheduledBackupsScheduler:
+def init_scheduler() -> ScheduledBackupsScheduler:
     """À appeler une fois dans le lifespan FastAPI. Idempotent (réutilise
-    l'instance si déjà créée — utile pour le hot-reload uvicorn en dev)."""
+    l'instance si déjà créée — utile pour le hot-reload uvicorn en dev).
+
+    Ne prend plus de pool en argument : le scheduler fetch `get_pool()` à
+    chaque tick, survit donc à `refresh_pool()` post-pairing.
+    """
     global _scheduler
     if _scheduler is None:
-        _scheduler = ScheduledBackupsScheduler(pool)
+        _scheduler = ScheduledBackupsScheduler()
     return _scheduler
 
 

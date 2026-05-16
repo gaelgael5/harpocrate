@@ -2,7 +2,7 @@
  * Zod schemas for /v1/wallets/{id}/api-keys/* endpoints.
  * Mirror of backend app/models/api/api_keys.py — LOT_08.
  */
-import { z } from 'zod'
+import { z } from "zod";
 
 // ─── Requêtes ─────────────────────────────────────────────────────────────────
 
@@ -24,19 +24,19 @@ export const ApiKeyCreateRequestSchema = z.object({
   encrypted_wallet_key: z.string().min(1),
   encrypted_decryption_key_for_owner: z.string().min(1),
   decryption_key: z.string().min(1),
-})
+});
 
 export const ApiKeyPatchRequestSchema = z.object({
   name: z.string().min(1).max(256).nullable().optional(),
   description: z.string().max(1000).nullable().optional(),
-})
+});
 
 // ─── Réponses ─────────────────────────────────────────────────────────────────
 
 export const ApiKeyCreateResponseSchema = z.object({
   api_key_id: z.string().uuid(),
   token: z.string().min(1),
-})
+});
 
 export const ApiKeyItemSchema = z.object({
   id: z.string().uuid(),
@@ -48,27 +48,34 @@ export const ApiKeyItemSchema = z.object({
   revoked_at: z.string().datetime({ offset: true }).nullable(),
   last_used_at: z.string().datetime({ offset: true }).nullable(),
   created_at: z.string().datetime({ offset: true }),
-})
+});
 
 export const ApiKeyListResponseSchema = z.object({
   api_keys: z.array(ApiKeyItemSchema),
-})
+});
 
 // ─── Types exportés ───────────────────────────────────────────────────────────
 
-export type ApiKeyCreateRequest = z.infer<typeof ApiKeyCreateRequestSchema>
-export type ApiKeyPatchRequest = z.infer<typeof ApiKeyPatchRequestSchema>
-export type ApiKeyCreateResponse = z.infer<typeof ApiKeyCreateResponseSchema>
-export type ApiKeyItem = z.infer<typeof ApiKeyItemSchema>
-export type ApiKeyListResponse = z.infer<typeof ApiKeyListResponseSchema>
+export type ApiKeyCreateRequest = z.infer<typeof ApiKeyCreateRequestSchema>;
+export type ApiKeyPatchRequest = z.infer<typeof ApiKeyPatchRequestSchema>;
+export type ApiKeyCreateResponse = z.infer<typeof ApiKeyCreateResponseSchema>;
+export type ApiKeyItem = z.infer<typeof ApiKeyItemSchema>;
+export type ApiKeyListResponse = z.infer<typeof ApiKeyListResponseSchema>;
 
 // ─── Utilitaires permissions ──────────────────────────────────────────────────
 
 /** Noms des bits de permissions dans l'ordre croissant. */
-export const PERMISSION_NAMES = ['read', 'add', 'init', 'write', 'remove', 'share'] as const
-export type PermissionName = (typeof PERMISSION_NAMES)[number]
+export const PERMISSION_NAMES = [
+  "read",
+  "add",
+  "init",
+  "write",
+  "remove",
+  "share",
+] as const;
+export type PermissionName = (typeof PERMISSION_NAMES)[number];
 
 /** Décode un bitmap de permissions en tableau de noms. */
 export function permissionsToBadges(perms: number): PermissionName[] {
-  return PERMISSION_NAMES.filter((_, i) => (perms & (1 << i)) !== 0)
+  return PERMISSION_NAMES.filter((_, i) => (perms & (1 << i)) !== 0);
 }

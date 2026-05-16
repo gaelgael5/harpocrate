@@ -264,6 +264,142 @@ async def create_secret(
     return SecretCreateResponse(secret_id=secret_id)
 
 
+# ─── Bulk import (paste depuis l'UI : .env / JSON / format Harpocrate) ──────
+
+
+async def bulk_import_secrets(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    wallet_id: UUID,
+    items: list[dict],  # [{name, encrypted_value (b64), override: bool}]
+    caller_user_id: UUID,
+    actor_ip: str | None,
+) -> dict:
+    """Importe une liste de secrets en masse (type RAW forcé).
+
+    Pour chaque item :
+      - Si name n'existe pas → INSERT
+      - Si name existe ET override=True → UPDATE encrypted_value
+      - Si name existe ET override=False → SKIP
+
+    Pas de transaction globale : chaque item est indépendant. Une erreur
+    sur un item ne bloque pas les autres. Le rapport contient le statut
+    par item (UI peut afficher un détail).
+    """
+    from app.db.repositories import secret_types as types_repo
+
+    # Résolution unique du type RAW (commun à tous les items).
+    raw = await types_repo.get_raw_type_with_current_version_uuid(conn)
+    if raw is None:  # pragma: no cover — RAW est seedé au boot
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "raw_type_unavailable", "message": "System type RAW not seeded"},
+        )
+    type_uuid, schema_version_uuid = raw
+
+    created = 0
+    updated = 0
+    skipped = 0
+    failed = 0
+    items_report: list[dict] = []
+
+    for item in items:
+        name = item.get("name", "").strip()
+        override = bool(item.get("override", False))
+        try:
+            enc_value = base64.b64decode(item["encrypted_value"])
+        except Exception as exc:
+            failed += 1
+            items_report.append({
+                "name": name,
+                "action": "failed",
+                "error": f"invalid_base64: {exc}",
+            })
+            continue
+
+        if not name:
+            failed += 1
+            items_report.append({
+                "name": name, "action": "failed", "error": "name is required"
+            })
+            continue
+
+        existing = await secrets_repo.get_secret_by_name(
+            conn, wallet_id=wallet_id, name=name
+        )
+        try:
+            if existing is None:
+                # Nouveau secret
+                async with conn.transaction():
+                    secret_id = await secrets_repo.insert_secret(
+                        conn,
+                        wallet_id=wallet_id,
+                        name=name,
+                        description=None,
+                        encrypted_value=enc_value,
+                        tags=[],
+                        created_by_user_id=caller_user_id,
+                        type_uuid=type_uuid,
+                        schema_version_uuid=schema_version_uuid,
+                    )
+                    await audit_log_insert(
+                        conn,
+                        "secret.bulk_imported",
+                        actor_user_id=caller_user_id,
+                        actor_ip=actor_ip,
+                        target_wallet_id=wallet_id,
+                        target_secret_id=secret_id,
+                        metadata={"secret_name": name, "action": "created"},
+                    )
+                created += 1
+                items_report.append({
+                    "name": name, "action": "created", "secret_id": str(secret_id)
+                })
+            elif override:
+                # Update sur secret existant
+                async with conn.transaction():
+                    await secrets_repo.update_secret_value(
+                        conn,
+                        secret_id=existing["id"],
+                        encrypted_value=enc_value,
+                        updated_by_user_id=caller_user_id,
+                    )
+                    await audit_log_insert(
+                        conn,
+                        "secret.bulk_imported",
+                        actor_user_id=caller_user_id,
+                        actor_ip=actor_ip,
+                        target_wallet_id=wallet_id,
+                        target_secret_id=existing["id"],
+                        metadata={"secret_name": name, "action": "updated"},
+                    )
+                updated += 1
+                items_report.append({
+                    "name": name, "action": "updated", "secret_id": str(existing["id"])
+                })
+            else:
+                # Existant mais override=False → skip
+                skipped += 1
+                items_report.append({
+                    "name": name, "action": "skipped", "reason": "exists_without_override"
+                })
+        except Exception as exc:  # noqa: BLE001 — on capture pour ne pas bloquer
+            failed += 1
+            items_report.append({
+                "name": name, "action": "failed", "error": str(exc)
+            })
+
+    return {
+        "summary": {
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "failed": failed,
+        },
+        "items": items_report,
+    }
+
+
 # ─── Update secret value (PUT) ────────────────────────────────────────────────
 
 

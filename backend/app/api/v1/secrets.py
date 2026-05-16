@@ -235,6 +235,47 @@ async def create_secret(
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=result.model_dump(mode="json"))
 
 
+# ─── POST /v1/wallets/{wallet_id}/secrets/bulk-import ──────────────────────
+
+
+class BulkImportItem(BaseModel):
+    name: str
+    encrypted_value: str  # base64 (chiffré côté client avec wallet_key)
+    override: bool = False
+
+
+class BulkImportRequest(BaseModel):
+    secrets: list[BulkImportItem]
+
+
+@router.post("/bulk-import", status_code=status.HTTP_200_OK)
+async def bulk_import_secrets(
+    wallet_id: UUID,
+    req: BulkImportRequest,
+    auth: AddAuth,
+    request: Request,
+) -> JSONResponse:
+    """Importe en masse une liste de secrets (type RAW forcé).
+
+    Body JAMAIS loggé (cf middleware). Requiert [add] (et [write] implicite
+    pour les overrides — l'app n'a pas de permission write granulaire en
+    plus de add, donc add suffit pour les deux opérations).
+
+    Retourne un rapport per-item avec action (created/updated/skipped/failed).
+    Status 200 même si certains items ont échoué — le détail est dans le body.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await secrets_svc.bulk_import_secrets(
+            conn,
+            wallet_id=wallet_id,
+            items=[item.model_dump() for item in req.secrets],
+            caller_user_id=auth.caller_user_id,
+            actor_ip=_client_ip(request),
+        )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result)
+
+
 # ─── PUT /v1/wallets/{wallet_id}/secrets/{name} ───────────────────────────────
 
 

@@ -49,13 +49,23 @@ async def set_policy(conn: asyncpg.Connection, policy: GFSPolicy) -> None:
 
 
 class SnapshotScheduler:
-    def __init__(self, pool: asyncpg.Pool) -> None:
-        self._pool = pool
+    """Ne capture pas le pool : chaque acquire fetch `get_pool()` actuel.
+
+    Garantit que le scheduler survit à `refresh_pool()` (pairing standby).
+    """
+
+    def __init__(self) -> None:
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
 
+    @staticmethod
+    async def _get_pool() -> asyncpg.Pool:
+        from app.db.pool import get_pool
+
+        return await get_pool()
+
     async def start(self) -> None:
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             policy = await get_policy(conn)
         if policy.interval_minutes <= 0:
             logger.info("snapshot_scheduler_disabled")
@@ -79,17 +89,17 @@ class SnapshotScheduler:
         await self.start()
 
     async def trigger(self, force: bool = False, skip_remote: bool = False, description: str | None = None) -> backups_repo.BackupRecord:
-        async with self._pool.acquire() as conn:
+        async with (await self._get_pool()).acquire() as conn:
             policy = await get_policy(conn)
             return await self._tick(conn, policy, force=force, skip_remote=skip_remote, description=description)
 
     async def _run_loop(self, policy: GFSPolicy) -> None:
         while not self._stop.is_set():
             try:
-                async with self._pool.acquire() as conn:
+                async with (await self._get_pool()).acquire() as conn:
                     await self._tick(conn, policy)
                 # Reload policy after each tick (may have been updated)
-                async with self._pool.acquire() as conn:
+                async with (await self._get_pool()).acquire() as conn:
                     policy = await get_policy(conn)
                 if policy.interval_minutes <= 0:
                     logger.info("snapshot_scheduler_disabled_during_run")
@@ -375,7 +385,7 @@ async def _create_snapshot_record(
         tmp = Path(tmpdir)
 
         proc = await asyncio.create_subprocess_exec(
-            "pg_dump", settings.db_dsn,
+            "pg_dump", settings.effective_db_dsn,
             "--format=plain", "--serializable-deferrable", "--no-owner", "--no-acl",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -461,7 +471,9 @@ def get_scheduler() -> SnapshotScheduler:
     return _scheduler
 
 
-def init_scheduler(pool: asyncpg.Pool) -> SnapshotScheduler:
+def init_scheduler() -> SnapshotScheduler:
+    """Init le snapshot scheduler. Ne prend plus de pool — chaque acquire
+    fetch via `get_pool()` à chaque utilisation (résilience à refresh_pool)."""
     global _scheduler
-    _scheduler = SnapshotScheduler(pool)
+    _scheduler = SnapshotScheduler()
     return _scheduler

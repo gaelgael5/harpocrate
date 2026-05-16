@@ -48,6 +48,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     "asyncssh>=2.22.0" \
     "aiomqtt>=2.3.0" \
     "aioftp>=0.21.4" \
+    "aiodocker>=0.21" \
     "croniter>=2.0"
 
 # ATTENTION : la liste ci-dessus DOIT rester en sync avec backend/pyproject.toml.

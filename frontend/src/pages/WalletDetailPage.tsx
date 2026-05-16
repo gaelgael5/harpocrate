@@ -1,9 +1,9 @@
 /**
  * Wallet detail page — lists secrets with virtual directory navigation.
  */
-import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Stack,
   Title,
@@ -21,20 +21,21 @@ import {
   SimpleGrid,
   ActionIcon,
   Tooltip,
-} from '@mantine/core'
-import { modals } from '@mantine/modals'
-import { notifications } from '@mantine/notifications'
-import { useTranslation } from 'react-i18next'
-import { z } from 'zod'
+} from "@mantine/core";
+import { modals } from "@mantine/modals";
+import { notifications } from "@mantine/notifications";
+import { useTranslation } from "react-i18next";
+import { z } from "zod";
 
-import { api, ApiError } from '@/lib/api-client'
-import { invalidateWalletQueries } from '@/lib/walletQueries'
-import { fetchWalletEnvironments } from '@/lib/walletEnvironmentsApi'
-import { FolderTree } from '@/components/FolderTree'
-import { exportWallet } from '@/lib/exportImportApi'
-import { WalletItemSchema } from '@/schemas/wallets'
-import { type SecretListItem } from '@/schemas/secrets'
-import { useSessionStore } from '@/stores/session'
+import { api, ApiError } from "@/lib/api-client";
+import { invalidateWalletQueries } from "@/lib/walletQueries";
+import { fetchWalletEnvironments } from "@/lib/walletEnvironmentsApi";
+import { FolderTree } from "@/components/FolderTree";
+import { exportWallet } from "@/lib/exportImportApi";
+import { BulkImportSecretsModal } from "@/components/BulkImportSecretsModal";
+import { WalletItemSchema } from "@/schemas/wallets";
+import { type SecretListItem } from "@/schemas/secrets";
+import { useSessionStore } from "@/stores/session";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -43,13 +44,13 @@ const FolderSchema = z.object({
   full_path: z.string(),
   secrets_count: z.number(),
   subfolders_count: z.number(),
-})
+});
 
 const TreeDataSchema = z.object({
   path: z.string(),
   secrets_at_this_level_count: z.number(),
   folders: z.array(FolderSchema),
-})
+});
 
 const PathSecretSchema = z.object({
   id: z.string(),
@@ -60,15 +61,15 @@ const PathSecretSchema = z.object({
   tags: z.array(z.string()),
   created_at: z.string().nullable(),
   updated_at: z.string().nullable(),
-})
+});
 
 const PathSecretsResponseSchema = z.object({
   secrets: z.array(PathSecretSchema),
   next_cursor: z.string().nullable(),
-})
+});
 
-type Folder = z.infer<typeof FolderSchema>
-type PathSecret = z.infer<typeof PathSecretSchema>
+type Folder = z.infer<typeof FolderSchema>;
+type PathSecret = z.infer<typeof PathSecretSchema>;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -76,30 +77,34 @@ function PathBreadcrumb({
   path,
   onNavigate,
 }: {
-  path: string
-  onNavigate: (p: string) => void
+  path: string;
+  onNavigate: (p: string) => void;
 }) {
-  const { t } = useTranslation()
-  const segments = path === '/' ? [] : path.split('/').filter(Boolean)
+  const { t } = useTranslation();
+  const segments = path === "/" ? [] : path.split("/").filter(Boolean);
 
   return (
     <Breadcrumbs>
-      <Anchor onClick={() => onNavigate('/')} style={{ cursor: 'pointer' }}>
-        {t('secrets.paths.root')}
+      <Anchor onClick={() => onNavigate("/")} style={{ cursor: "pointer" }}>
+        {t("secrets.paths.root")}
       </Anchor>
       {segments.map((seg, i) => {
-        const fullPath = '/' + segments.slice(0, i + 1).join('/') + '/'
-        const isLast = i === segments.length - 1
+        const fullPath = "/" + segments.slice(0, i + 1).join("/") + "/";
+        const isLast = i === segments.length - 1;
         return isLast ? (
           <Text key={fullPath}>{seg}</Text>
         ) : (
-          <Anchor key={fullPath} onClick={() => onNavigate(fullPath)} style={{ cursor: 'pointer' }}>
+          <Anchor
+            key={fullPath}
+            onClick={() => onNavigate(fullPath)}
+            style={{ cursor: "pointer" }}
+          >
             {seg}
           </Anchor>
-        )
+        );
       })}
     </Breadcrumbs>
-  )
+  );
 }
 
 function FolderCard({
@@ -107,30 +112,36 @@ function FolderCard({
   onClick,
   onDelete,
 }: {
-  folder: Folder
-  onClick: () => void
-  onDelete: () => void
+  folder: Folder;
+  onClick: () => void;
+  onDelete: () => void;
 }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   return (
     <Card withBorder padding="sm">
       <Group justify="space-between" wrap="nowrap">
-        <Group gap="xs" style={{ cursor: 'pointer', flex: 1 }} onClick={onClick}>
+        <Group
+          gap="xs"
+          style={{ cursor: "pointer", flex: 1 }}
+          onClick={onClick}
+        >
           <Text>📁</Text>
           <Stack gap={0}>
-            <Text size="sm" fw={500}>{folder.name}</Text>
+            <Text size="sm" fw={500}>
+              {folder.name}
+            </Text>
             <Text size="xs" c="dimmed">
-              {t('secrets.paths.secretsCount', { count: folder.secrets_count })}
+              {t("secrets.paths.secretsCount", { count: folder.secrets_count })}
             </Text>
           </Stack>
         </Group>
-        <Tooltip label={t('secrets.paths.deleteFolder')}>
+        <Tooltip label={t("secrets.paths.deleteFolder")}>
           <ActionIcon
             variant="subtle"
             color="red"
             onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
+              e.stopPropagation();
+              onDelete();
             }}
             aria-label="delete-folder"
           >
@@ -139,17 +150,23 @@ function FolderCard({
         </Tooltip>
       </Group>
     </Card>
-  )
+  );
 }
 
-function SecretCard({ secret, walletId }: { secret: SecretListItem | PathSecret; walletId: string }) {
-  const navigate = useNavigate()
+function SecretCard({
+  secret,
+  walletId,
+}: {
+  secret: SecretListItem | PathSecret;
+  walletId: string;
+}) {
+  const navigate = useNavigate();
 
   return (
     <Card
       withBorder
       padding="sm"
-      style={{ cursor: 'pointer' }}
+      style={{ cursor: "pointer" }}
       onClick={() => navigate(`/wallets/${walletId}/secrets/${secret.id}`)}
     >
       <Group justify="space-between">
@@ -158,9 +175,13 @@ function SecretCard({ secret, walletId }: { secret: SecretListItem | PathSecret;
             {secret.name}
           </Text>
           {secret.is_placeholder ? (
-            <Badge color="orange" size="sm">placeholder</Badge>
+            <Badge color="orange" size="sm">
+              placeholder
+            </Badge>
           ) : (
-            <Badge color="green" size="sm">v{secret.generation_version}</Badge>
+            <Badge color="green" size="sm">
+              v{secret.generation_version}
+            </Badge>
           )}
         </Group>
         <Group gap="xs">
@@ -177,185 +198,231 @@ function SecretCard({ secret, walletId }: { secret: SecretListItem | PathSecret;
         </Text>
       )}
     </Card>
-  )
+  );
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export function WalletDetailPage() {
-  const { t } = useTranslation()
-  const { walletId } = useParams<{ walletId: string }>()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const currentUser = useSessionStore((s) => s.user)
-  const [currentPath, setCurrentPath] = useState('/')
+  const { t } = useTranslation();
+  const { walletId } = useParams<{ walletId: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const currentUser = useSessionStore((s) => s.user);
+  const [currentPath, setCurrentPath] = useState("/");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const deleteMutation = useMutation({
-    mutationFn: () => api.delete(`/wallets/${walletId ?? ''}`),
+    mutationFn: () => api.delete(`/wallets/${walletId ?? ""}`),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
-      void queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
-      notifications.show({ color: 'green', message: t('wallets.deleteSuccess') })
-      navigate('/wallets')
+      void queryClient.invalidateQueries({ queryKey: ["wallets"] });
+      void queryClient.invalidateQueries({ queryKey: ["wallet", walletId] });
+      notifications.show({
+        color: "green",
+        message: t("wallets.deleteSuccess"),
+      });
+      navigate("/wallets");
     },
-    onError: () => notifications.show({ color: 'red', message: t('wallets.deleteError') }),
-  })
+    onError: () =>
+      notifications.show({ color: "red", message: t("wallets.deleteError") }),
+  });
 
   const restoreMutation = useMutation({
-    mutationFn: () => api.post(`/wallets/${walletId ?? ''}/restore`, {}),
+    mutationFn: () => api.post(`/wallets/${walletId ?? ""}/restore`, {}),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['wallets'] })
-      void queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
-      notifications.show({ color: 'green', message: t('wallets.restoreSuccess') })
+      void queryClient.invalidateQueries({ queryKey: ["wallets"] });
+      void queryClient.invalidateQueries({ queryKey: ["wallet", walletId] });
+      notifications.show({
+        color: "green",
+        message: t("wallets.restoreSuccess"),
+      });
     },
-    onError: () => notifications.show({ color: 'red', message: t('wallets.restoreError') }),
-  })
+    onError: () =>
+      notifications.show({ color: "red", message: t("wallets.restoreError") }),
+  });
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderPath: string) => {
       // 1. Compter les secrets pour la confirmation
       const countRaw = await api.get<unknown>(
-        `/wallets/${walletId ?? ''}/secrets/by-path/count?path=${encodeURIComponent(folderPath)}`,
-      )
-      const count = (countRaw as { count: number }).count
-      return { folderPath, count }
+        `/wallets/${walletId ?? ""}/secrets/by-path/count?path=${encodeURIComponent(folderPath)}`,
+      );
+      const count = (countRaw as { count: number }).count;
+      return { folderPath, count };
     },
     onSuccess: ({ folderPath, count }) => {
       modals.openConfirmModal({
-        title: t('secrets.paths.deleteFolderTitle'),
+        title: t("secrets.paths.deleteFolderTitle"),
         children: (
           <Text size="sm">
-            {t('secrets.paths.deleteFolderConfirm', { path: folderPath, count })}
+            {t("secrets.paths.deleteFolderConfirm", {
+              path: folderPath,
+              count,
+            })}
           </Text>
         ),
-        labels: { confirm: t('secrets.paths.deleteFolder'), cancel: t('common.cancel') },
-        confirmProps: { color: 'red' },
+        labels: {
+          confirm: t("secrets.paths.deleteFolder"),
+          cancel: t("common.cancel"),
+        },
+        confirmProps: { color: "red" },
         onConfirm: async () => {
           try {
             const r = await api.delete<{ deleted: number }>(
-              `/wallets/${walletId ?? ''}/secrets/by-path?path=${encodeURIComponent(folderPath)}`,
-            )
+              `/wallets/${walletId ?? ""}/secrets/by-path?path=${encodeURIComponent(folderPath)}`,
+            );
             notifications.show({
-              color: 'green',
-              message: t('secrets.paths.deleteFolderSuccess', { count: r.deleted }),
-            })
-            if (walletId) await invalidateWalletQueries(queryClient, walletId)
+              color: "green",
+              message: t("secrets.paths.deleteFolderSuccess", {
+                count: r.deleted,
+              }),
+            });
+            if (walletId) await invalidateWalletQueries(queryClient, walletId);
           } catch (err) {
-            const msg = err instanceof ApiError ? err.message : String(err)
-            notifications.show({ color: 'red', title: t('common.error'), message: msg })
+            const msg = err instanceof ApiError ? err.message : String(err);
+            notifications.show({
+              color: "red",
+              title: t("common.error"),
+              message: msg,
+            });
           }
         },
-      })
+      });
     },
     onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+      const msg = err instanceof ApiError ? err.message : String(err);
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: msg,
+      });
     },
-  })
+  });
 
   function handleDelete() {
     modals.openConfirmModal({
-      title: t('wallets.deleteConfirmTitle'),
-      children: <Text size="sm">{t('wallets.deleteConfirmDesc')}</Text>,
-      labels: { confirm: t('wallets.delete'), cancel: t('common.cancel') },
-      confirmProps: { color: 'red' },
+      title: t("wallets.deleteConfirmTitle"),
+      children: <Text size="sm">{t("wallets.deleteConfirmDesc")}</Text>,
+      labels: { confirm: t("wallets.delete"), cancel: t("common.cancel") },
+      confirmProps: { color: "red" },
       onConfirm: () => deleteMutation.mutate(),
-    })
+    });
   }
 
   async function handleExport() {
-    if (!walletId) return
+    if (!walletId) return;
     try {
-      const data = await exportWallet(walletId)
-      const json = JSON.stringify(data, null, 2)
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const safeName = (data.wallet.name ?? 'wallet').replace(/[^A-Za-z0-9_-]/g, '_')
-      const date = new Date().toISOString().slice(0, 10)
-      a.download = `vault-${safeName}-${date}.json`
-      a.click()
-      URL.revokeObjectURL(url)
-      notifications.show({ color: 'green', message: t('wallets.export.success') })
+      const data = await exportWallet(walletId);
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = (data.wallet.name ?? "wallet").replace(
+        /[^A-Za-z0-9_-]/g,
+        "_",
+      );
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `vault-${safeName}-${date}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notifications.show({
+        color: "green",
+        message: t("wallets.export.success"),
+      });
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      notifications.show({ color: 'red', title: t('common.error'), message: msg })
+      const msg = err instanceof ApiError ? err.message : String(err);
+      notifications.show({
+        color: "red",
+        title: t("common.error"),
+        message: msg,
+      });
     }
   }
 
-  const { data: wallet, isLoading: walletLoading, error: walletError } = useQuery({
-    queryKey: ['wallet', walletId],
+  const {
+    data: wallet,
+    isLoading: walletLoading,
+    error: walletError,
+  } = useQuery({
+    queryKey: ["wallet", walletId],
     queryFn: async () => {
-      const raw = await api.get<unknown>(`/wallets/${walletId ?? ''}`)
-      return WalletItemSchema.parse(raw)
+      const raw = await api.get<unknown>(`/wallets/${walletId ?? ""}`);
+      return WalletItemSchema.parse(raw);
     },
     enabled: !!walletId,
-  })
+  });
 
   // LOT_58 : on charge la liste des envs pour résoudre wallet.environment_id
   // → name (le backend ne renvoie que l'id sur le wallet pour rester atomique).
   const { data: environments } = useQuery({
-    queryKey: ['wallet-environments'],
+    queryKey: ["wallet-environments"],
     queryFn: fetchWalletEnvironments,
-  })
+  });
 
   const { data: treeData, isLoading: treeLoading } = useQuery({
-    queryKey: ['wallet-tree', walletId, currentPath],
+    queryKey: ["wallet-tree", walletId, currentPath],
     queryFn: async () => {
       const raw = await api.get<unknown>(
-        `/wallets/${walletId ?? ''}/tree?path=${encodeURIComponent(currentPath)}`
-      )
-      return TreeDataSchema.parse(raw)
+        `/wallets/${walletId ?? ""}/tree?path=${encodeURIComponent(currentPath)}`,
+      );
+      return TreeDataSchema.parse(raw);
     },
     enabled: !!walletId,
-  })
+  });
 
   const { data: pathSecrets, isLoading: pathSecretsLoading } = useQuery({
-    queryKey: ['wallet-secrets-path', walletId, currentPath],
+    queryKey: ["wallet-secrets-path", walletId, currentPath],
     queryFn: async () => {
       const raw = await api.get<unknown>(
-        `/wallets/${walletId ?? ''}/secrets?path=${encodeURIComponent(currentPath)}`
-      )
-      return PathSecretsResponseSchema.parse(raw)
+        `/wallets/${walletId ?? ""}/secrets?path=${encodeURIComponent(currentPath)}`,
+      );
+      return PathSecretsResponseSchema.parse(raw);
     },
     enabled: !!walletId,
-  })
+  });
 
-  const secretsLoading = treeLoading || pathSecretsLoading
+  const secretsLoading = treeLoading || pathSecretsLoading;
 
   if (walletLoading) {
     return (
       <Center py="xl">
         <Loader />
       </Center>
-    )
+    );
   }
 
   if (walletError) {
-    const msg = walletError instanceof ApiError ? walletError.message : t('errors.serverError')
-    return <Alert color="red">{msg}</Alert>
+    const msg =
+      walletError instanceof ApiError
+        ? walletError.message
+        : t("errors.serverError");
+    return <Alert color="red">{msg}</Alert>;
   }
 
-  if (!wallet) return null
+  if (!wallet) return null;
 
-  const prefixPath = currentPath === '/' ? '' : currentPath
-  const isOwner = wallet.owner_user_id === currentUser?.id
-  const isDeleted = !!wallet.deleted_at
+  const prefixPath = currentPath === "/" ? "" : currentPath;
+  const isOwner = wallet.owner_user_id === currentUser?.id;
+  const isDeleted = !!wallet.deleted_at;
   const purgeAt = wallet.deleted_at
     ? new Date(new Date(wallet.deleted_at).getTime() + 24 * 60 * 60 * 1000)
-    : null
+    : null;
 
   return (
     <Stack>
       {/* Bannière corbeille */}
       {isDeleted && (
-        <Alert color="red" variant="light" title={t('wallets.pendingDeletion')}>
+        <Alert color="red" variant="light" title={t("wallets.pendingDeletion")}>
           <Group justify="space-between" align="center">
             <Text size="sm">
               {purgeAt
-                ? t('wallets.purgeAt', { date: purgeAt.toLocaleString() })
-                : t('wallets.deletedAt', { date: wallet.deleted_at ? new Date(wallet.deleted_at).toLocaleString() : '' })}
+                ? t("wallets.purgeAt", { date: purgeAt.toLocaleString() })
+                : t("wallets.deletedAt", {
+                    date: wallet.deleted_at
+                      ? new Date(wallet.deleted_at).toLocaleString()
+                      : "",
+                  })}
             </Text>
             {isOwner && (
               <Button
@@ -364,7 +431,7 @@ export function WalletDetailPage() {
                 loading={restoreMutation.isPending}
                 onClick={() => restoreMutation.mutate()}
               >
-                {t('wallets.restore')}
+                {t("wallets.restore")}
               </Button>
             )}
           </Group>
@@ -378,8 +445,9 @@ export function WalletDetailPage() {
             {/* LOT_58 : nom de l'env affiché en petit à côté du titre,
                 masqué si NULL (= "None" virtuel). */}
             {wallet.environment_id && (
-              <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
-                {environments?.find((e) => e.id === wallet.environment_id)?.name ?? ''}
+              <Text size="xs" c="dimmed" style={{ fontStyle: "italic" }}>
+                {environments?.find((e) => e.id === wallet.environment_id)
+                  ?.name ?? ""}
               </Text>
             )}
           </Group>
@@ -398,39 +466,48 @@ export function WalletDetailPage() {
           <Button
             variant="subtle"
             onClick={() => {
-              void queryClient.invalidateQueries({ queryKey: ['wallet', walletId] })
-              void queryClient.invalidateQueries({ queryKey: ['wallet-tree', walletId] })
-              void queryClient.invalidateQueries({ queryKey: ['wallet-secrets-path', walletId] })
+              void queryClient.invalidateQueries({
+                queryKey: ["wallet", walletId],
+              });
+              void queryClient.invalidateQueries({
+                queryKey: ["wallet-tree", walletId],
+              });
+              void queryClient.invalidateQueries({
+                queryKey: ["wallet-secrets-path", walletId],
+              });
             }}
-            title={t('wallets.refreshHint')}
+            title={t("wallets.refreshHint")}
           >
-            ↻ {t('wallets.refresh')}
+            ↻ {t("wallets.refresh")}
           </Button>
           <Button variant="outline" onClick={() => void handleExport()}>
-            {t('wallets.export.button')}
+            {t("wallets.export.button")}
           </Button>
           {!isDeleted && (
             <>
               <Button
                 variant="outline"
-                onClick={() => navigate(`/wallets/${walletId ?? ''}/grants`)}
+                onClick={() => navigate(`/wallets/${walletId ?? ""}/grants`)}
               >
-                {t('grants.title')}
+                {t("grants.title")}
               </Button>
               <Button
                 variant="outline"
-                onClick={() => navigate(`/wallets/${walletId ?? ''}/api-keys`)}
+                onClick={() => navigate(`/wallets/${walletId ?? ""}/api-keys`)}
               >
-                {t('apiKeys.apiKeysButton')}
+                {t("apiKeys.apiKeysButton")}
+              </Button>
+              <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
+                {t("wallets.bulkImport.button")}
               </Button>
               <Button
                 onClick={() =>
-                  navigate(`/wallets/${walletId ?? ''}/secrets/new`, {
+                  navigate(`/wallets/${walletId ?? ""}/secrets/new`, {
                     state: { prefixPath },
                   })
                 }
               >
-                {t('secrets.create')}
+                {t("secrets.create")}
               </Button>
               {isOwner && (
                 <Button
@@ -439,7 +516,7 @@ export function WalletDetailPage() {
                   loading={deleteMutation.isPending}
                   onClick={handleDelete}
                 >
-                  {t('wallets.delete')}
+                  {t("wallets.delete")}
                 </Button>
               )}
             </>
@@ -457,7 +534,7 @@ export function WalletDetailPage() {
 
       <Tabs defaultValue="secrets">
         <Tabs.List>
-          <Tabs.Tab value="secrets">{t('secrets.title')}</Tabs.Tab>
+          <Tabs.Tab value="secrets">{t("secrets.title")}</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="secrets" pt="md">
@@ -466,16 +543,16 @@ export function WalletDetailPage() {
             <Stack
               gap="xs"
               style={{
-                borderRight: '1px solid var(--mantine-color-gray-3)',
+                borderRight: "1px solid var(--mantine-color-gray-3)",
                 paddingRight: 12,
-                position: 'sticky',
+                position: "sticky",
                 top: 12,
-                maxHeight: 'calc(100vh - 200px)',
-                overflowY: 'auto',
+                maxHeight: "calc(100vh - 200px)",
+                overflowY: "auto",
               }}
             >
               <Text fw={600} size="sm">
-                {t('secrets.paths.folders')}
+                {t("secrets.paths.folders")}
               </Text>
               {walletId && (
                 <FolderTree
@@ -498,7 +575,7 @@ export function WalletDetailPage() {
                   {(treeData?.folders.length ?? 0) > 0 && (
                     <Stack gap="xs">
                       <Text fw={600} size="sm">
-                        {t('secrets.paths.folders')}
+                        {t("secrets.paths.folders")}
                       </Text>
                       <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
                         {treeData?.folders.map((folder) => (
@@ -506,7 +583,9 @@ export function WalletDetailPage() {
                             key={folder.full_path}
                             folder={folder}
                             onClick={() => setCurrentPath(folder.full_path)}
-                            onDelete={() => deleteFolderMutation.mutate(folder.full_path)}
+                            onDelete={() =>
+                              deleteFolderMutation.mutate(folder.full_path)
+                            }
                           />
                         ))}
                       </SimpleGrid>
@@ -516,15 +595,19 @@ export function WalletDetailPage() {
                   {/* Secrets at current level */}
                   {(pathSecrets?.secrets.length ?? 0) === 0 &&
                   (treeData?.folders.length ?? 0) === 0 ? (
-                    <Text c="dimmed">{t('secrets.noSecrets')}</Text>
+                    <Text c="dimmed">{t("secrets.noSecrets")}</Text>
                   ) : (
                     (pathSecrets?.secrets.length ?? 0) > 0 && (
                       <Stack gap="xs">
                         <Text fw={600} size="sm">
-                          {t('secrets.paths.secretsHere')}
+                          {t("secrets.paths.secretsHere")}
                         </Text>
                         {pathSecrets?.secrets.map((s) => (
-                          <SecretCard key={s.id} secret={s} walletId={walletId ?? ''} />
+                          <SecretCard
+                            key={s.id}
+                            secret={s}
+                            walletId={walletId ?? ""}
+                          />
                         ))}
                       </Stack>
                     )
@@ -535,6 +618,23 @@ export function WalletDetailPage() {
           </Group>
         </Tabs.Panel>
       </Tabs>
+
+      <BulkImportSecretsModal
+        walletId={walletId ?? ""}
+        opened={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        onImported={() => {
+          void queryClient.invalidateQueries({
+            queryKey: ["wallet-tree", walletId],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["wallet-secrets-path", walletId],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["wallet-secrets-names", walletId],
+          });
+        }}
+      />
     </Stack>
-  )
+  );
 }

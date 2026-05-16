@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,9 +19,13 @@ class Settings(BaseSettings):
     )
 
     db_dsn: str = Field(json_schema_extra={"is_secret": True})
-    keycloak_url: str
-    keycloak_realm: str
-    keycloak_client_id: str
+    # Keycloak OIDC : optionnel — si les 3 vars sont vides, le mode OIDC est
+    # masqué côté UI (cf. /v1/config/auth-modes) et `prefetch_jwks` est skippé
+    # au boot. L'auth admin local doit alors être activée pour qu'au moins un
+    # mode de connexion soit dispo (validator `_validate_at_least_one_auth`).
+    keycloak_url: str = ""
+    keycloak_realm: str = ""
+    keycloak_client_id: str = ""
     hmac_key: str = Field(json_schema_extra={"is_secret": True})
 
     kdf_memory_kb: int = Field(default=65536, ge=65536)
@@ -86,6 +92,7 @@ class Settings(BaseSettings):
             return v
         import os
         import socket
+
         return f"{socket.gethostname()}-{os.getpid()}"
 
     # ─── Auth locale (alternative à Keycloak OIDC) ────────────────────────────
@@ -113,14 +120,6 @@ class Settings(BaseSettings):
     backup_local_path: str = Field(default="/var/lib/harpocrate/backups")
     admin_role_name: str = Field(default="harpocrate-admin")
     backup_upload_max_bytes: int = Field(default=1 * 1024 * 1024 * 1024)
-
-    # ─── S3 remote backup (LOT_13) ────────────────────────────────────────────
-    s3_endpoint: str = Field(default="")
-    s3_bucket: str = Field(default="")
-    s3_access_key_id: str = Field(default="", json_schema_extra={"is_secret": True})
-    s3_secret_access_key: str = Field(default="", json_schema_extra={"is_secret": True})
-    s3_region: str = Field(default="us-east-1")
-    s3_key_prefix: str = Field(default="harpocrate-backups/")
 
     # ─── Notifications externes via listmonk (LOT_57) ─────────────────────────
     # Harpocrate ne gère pas l'envoi de mail directement : il déclenche
@@ -154,9 +153,62 @@ class Settings(BaseSettings):
     recovery_anomaly_threshold: int = Field(default=5, ge=1)
     recovery_anomaly_window_hours: int = Field(default=24, ge=1)
 
+    # ─── Pairing (LOT 2) ──────────────────────────────────────────────────────
+    # Durée de validité d'un code de pairing (LOT 2).
+    pairing_code_ttl_seconds: int = Field(default=600, ge=30)
+    # Nombre max de tentatives de saisie du code de pairing avant invalidation.
+    pairing_max_attempts: int = Field(default=3, ge=1)
+    # Port Postgres annoncé aux standby lors de l'appairage. Doit être joignable
+    # depuis le standby sur l'hôte extrait de public_url. Par convention 5432.
+    replication_advertised_pg_port: int = Field(default=5432, ge=1, le=65535)
+    # DEV-ONLY — désactive la vérification TLS pour les calls inter-instances
+    # de l'appairage v2 (httpx.verify=False sur /pairing/confirm-v2 uniquement).
+    # Ne JAMAIS activer en prod : un MITM entre les deux instances permettrait
+    # à un attaquant de voler le token d'appairage et de se faire passer pour
+    # le master. En prod, utilise un certificat public valide (Cloudflare,
+    # Let's Encrypt). Logge un warning structlog à chaque appel quand activé.
+    replication_insecure_skip_tls_verify: bool = Field(default=False)
+    # Hôte SSH de l'instance locale — utilisé par le mode d'exécution natif du
+    # wizard pairing (open_native). Si None, le mode natif est refusé (erreur
+    # self_ssh_host_not_configured renvoyée au client).
+    harpocrate_self_ssh_host: str | None = None
+    harpocrate_self_ssh_port: int = 22
+
+    # Path d'un fichier optionnel contenant le password Postgres override.
+    # Utilisé par le wizard pairing : après pg_basebackup, le standby a une
+    # DB répliquée du master → le user `harpocrate` côté DB a le password du
+    # master, pas celui du `.env` local. Le wizard écrit ici le password du
+    # master ; le backend le lit en priorité au prochain (re)démarrage.
+    db_password_override_path: str = "/var/lib/harpocrate/db-password-override.txt"
+
     @property
-    def s3_configured(self) -> bool:
-        return bool(self.s3_bucket and self.s3_access_key_id and self.s3_secret_access_key)
+    def effective_db_dsn(self) -> str:
+        """DSN avec password override appliqué si le fichier existe et non-vide.
+
+        Permet à un standby récemment basebackuppé d'utiliser le password
+        du master sans modifier le `.env`. Si le fichier est absent, vide,
+        ou illisible → fallback sur `db_dsn` tel quel (env var classique).
+        """
+        try:
+            content = Path(self.db_password_override_path).read_text().strip()
+        except (FileNotFoundError, PermissionError, IsADirectoryError):
+            return self.db_dsn
+        if not content:
+            return self.db_dsn
+        parsed = urlparse(self.db_dsn)
+        if not parsed.hostname:
+            return self.db_dsn
+        userinfo = f"{parsed.username or ''}:{content}"
+        netloc = f"{userinfo}@{parsed.hostname}"
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        return urlunparse(parsed._replace(netloc=netloc))
+
+    @property
+    def keycloak_configured(self) -> bool:
+        """True si les 3 vars Keycloak sont remplies. Si False, le mode OIDC
+        est masqué côté UI et le prefetch JWKS est skippé au boot."""
+        return bool(self.keycloak_url and self.keycloak_realm and self.keycloak_client_id)
 
     def get_sensitive_fields(self) -> list[str]:
         """Retourne les noms des champs Settings marqués is_secret=True."""
@@ -206,6 +258,19 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "admin_local_password must not be empty when admin_local_enabled=True"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_at_least_one_auth(self) -> Settings:
+        """Au moins un mode d'auth doit être dispo, sinon personne ne peut
+        se connecter. On accepte : keycloak configuré, OU admin local activé,
+        OU les deux."""
+        if not self.keycloak_configured and not self.admin_local_enabled:
+            raise ValueError(
+                "no auth mode available: configure keycloak_url + keycloak_realm "
+                "+ keycloak_client_id, OR set admin_local_enabled=True with "
+                "username/password"
+            )
         return self
 
 

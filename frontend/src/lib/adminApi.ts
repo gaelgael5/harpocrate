@@ -1,4 +1,4 @@
-import { api } from '@/lib/api-client'
+import { api } from "@/lib/api-client";
 import {
   MaintenanceStatusSchema,
   BackupListResponseSchema,
@@ -7,8 +7,6 @@ import {
   SystemInfoSchema,
   AdminUsersResponseSchema,
   EnvConfigSchema,
-  S3BackupListResponseSchema,
-  S3PushResultSchema,
   SnapshotPolicySchema,
   SnapshotHistorySchema,
   TriggerResultSchema,
@@ -16,7 +14,6 @@ import {
   SecretTypeDetailSchema,
   ValidateSchemaResponseSchema,
   RemoteBackupConnectionListResponseSchema,
-  RemoteBackupConnectionSchema,
   RemoteBackupTestResponseSchema,
   RemoteBackupPushResultSchema,
   ScheduledBackupListResponseSchema,
@@ -31,15 +28,12 @@ import {
   type SystemInfo,
   type AdminUsersResponse,
   type EnvConfig,
-  type S3BackupListResponse,
-  type S3PushResult,
   type SnapshotPolicy,
   type SnapshotHistory,
   type TriggerResult,
   type SecretTypeListResponse,
   type SecretTypeDetail,
   type ValidateSchemaResponse,
-  type RemoteBackupConnection,
   type RemoteBackupConnectionListResponse,
   type RemoteBackupTestResponse,
   type RemoteBackupPushResult,
@@ -48,229 +42,221 @@ import {
   type ScheduledBackupRunResult,
   type ReplicationStrategyListResponse,
   type ReplicationStatusResponse,
-} from '@/schemas/admin'
+} from "@/schemas/admin";
 
 export async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
-  const raw = await api.get<unknown>('/admin/maintenance/status')
-  return MaintenanceStatusSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/maintenance/status");
+  return MaintenanceStatusSchema.parse(raw);
 }
 
 export async function enableMaintenance(body: {
-  reason: string
-  delay_seconds?: number
-  estimated_duration_minutes?: number
+  reason: string;
+  delay_seconds?: number;
+  estimated_duration_minutes?: number;
 }): Promise<MaintenanceStatus> {
-  const raw = await api.post<unknown>('/admin/maintenance/enable', body)
-  return MaintenanceStatusSchema.parse(raw)
+  const raw = await api.post<unknown>("/admin/maintenance/enable", body);
+  return MaintenanceStatusSchema.parse(raw);
 }
 
 export async function disableMaintenance(): Promise<MaintenanceStatus> {
-  const raw = await api.post<unknown>('/admin/maintenance/disable', {})
-  return MaintenanceStatusSchema.parse(raw)
+  const raw = await api.post<unknown>("/admin/maintenance/disable", {});
+  return MaintenanceStatusSchema.parse(raw);
 }
 
 export async function fetchBackups(): Promise<BackupListResponse> {
-  const raw = await api.get<unknown>('/admin/backups')
-  return BackupListResponseSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/backups");
+  return BackupListResponseSchema.parse(raw);
 }
 
-export async function fetchBackup(id: string): Promise<Backup> {
-  const raw = await api.get<unknown>(`/admin/backups/${id}`)
-  return BackupSchema.parse(raw)
-}
-
-export async function createBackup(body: { description?: string }): Promise<Backup> {
-  const raw = await api.post<unknown>('/admin/backups', body)
-  return BackupSchema.parse(raw)
+export async function createBackup(body: {
+  description?: string;
+}): Promise<Backup> {
+  const raw = await api.post<unknown>("/admin/backups", body);
+  return BackupSchema.parse(raw);
 }
 
 export async function deleteBackup(id: string): Promise<void> {
-  await api.delete<void>(`/admin/backups/${id}`)
+  await api.delete<void>(`/admin/backups/${id}`);
 }
 
 export function backupDownloadUrl(id: string): string {
-  return `/v1/admin/backups/${id}/download`
+  return `/v1/admin/backups/${id}/download`;
 }
 
 export async function restoreBackup(
   id: string,
-  body: { age_private_key: string; confirmation: string; auto_enable_maintenance: boolean },
+  body: {
+    age_private_key: string;
+    confirmation: string;
+    auto_enable_maintenance: boolean;
+  },
 ): Promise<RestoreResult> {
-  const raw = await api.post<unknown>(`/admin/backups/${id}/restore`, body)
-  return RestoreResultSchema.parse(raw)
+  const raw = await api.post<unknown>(`/admin/backups/${id}/restore`, body);
+  return RestoreResultSchema.parse(raw);
 }
 
 export async function fetchSystemInfo(): Promise<SystemInfo> {
-  const raw = await api.get<unknown>('/admin/system/info')
-  return SystemInfoSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/system/info");
+  return SystemInfoSchema.parse(raw);
 }
 
 export async function fetchAdminUsers(params?: {
-  limit?: number
-  offset?: number
+  limit?: number;
+  offset?: number;
 }): Promise<AdminUsersResponse> {
-  const q = new URLSearchParams()
-  if (params?.limit) q.set('limit', String(params.limit))
-  if (params?.offset) q.set('offset', String(params.offset))
-  const raw = await api.get<unknown>(`/admin/users?${q.toString()}`)
-  return AdminUsersResponseSchema.parse(raw)
+  const q = new URLSearchParams();
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  const raw = await api.get<unknown>(`/admin/users?${q.toString()}`);
+  return AdminUsersResponseSchema.parse(raw);
 }
 
 export async function fetchEnvConfig(): Promise<EnvConfig> {
-  const raw = await api.get<unknown>('/admin/system/env')
-  return EnvConfigSchema.parse(raw)
-}
-
-export async function fetchS3Backups(): Promise<S3BackupListResponse> {
-  const raw = await api.get<unknown>('/admin/backups/s3')
-  return S3BackupListResponseSchema.parse(raw)
-}
-
-export async function pushBackupToS3(backupId: string): Promise<S3PushResult> {
-  const raw = await api.post<unknown>(`/admin/backups/${backupId}/push-s3`, {})
-  return S3PushResultSchema.parse(raw)
-}
-
-export async function pullBackupFromS3(s3Key: string): Promise<Backup> {
-  const raw = await api.post<unknown>('/admin/backups/s3/pull', { s3_key: s3Key })
-  return BackupSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/system/env");
+  return EnvConfigSchema.parse(raw);
 }
 
 export async function fetchSnapshotPolicy(): Promise<SnapshotPolicy> {
-  const raw = await api.get<unknown>('/admin/snapshots/policy')
-  return SnapshotPolicySchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/snapshots/policy");
+  return SnapshotPolicySchema.parse(raw);
 }
 
-export async function updateSnapshotPolicy(policy: SnapshotPolicy): Promise<SnapshotPolicy> {
-  const raw = await api.put<unknown>('/admin/snapshots/policy', policy)
-  return SnapshotPolicySchema.parse(raw)
+export async function updateSnapshotPolicy(
+  policy: SnapshotPolicy,
+): Promise<SnapshotPolicy> {
+  const raw = await api.put<unknown>("/admin/snapshots/policy", policy);
+  return SnapshotPolicySchema.parse(raw);
 }
 
 export async function triggerSnapshot(body: {
-  force?: boolean
-  skip_remote?: boolean
-  description?: string
+  force?: boolean;
+  skip_remote?: boolean;
+  description?: string;
 }): Promise<TriggerResult> {
-  const raw = await api.post<unknown>('/admin/snapshots/trigger', body)
-  return TriggerResultSchema.parse(raw)
+  const raw = await api.post<unknown>("/admin/snapshots/trigger", body);
+  return TriggerResultSchema.parse(raw);
 }
 
 export async function fetchSnapshotHistory(params?: {
-  tier?: string
-  limit?: number
+  tier?: string;
+  limit?: number;
 }): Promise<SnapshotHistory> {
-  const q = new URLSearchParams()
-  if (params?.tier) q.set('tier', params.tier)
-  if (params?.limit) q.set('limit', String(params.limit))
-  const raw = await api.get<unknown>(`/admin/snapshots/history?${q.toString()}`)
-  return SnapshotHistorySchema.parse(raw)
+  const q = new URLSearchParams();
+  if (params?.tier) q.set("tier", params.tier);
+  if (params?.limit) q.set("limit", String(params.limit));
+  const raw = await api.get<unknown>(
+    `/admin/snapshots/history?${q.toString()}`,
+  );
+  return SnapshotHistorySchema.parse(raw);
 }
 
 // ─── Secret Types API ─────────────────────────────────────────────────────
 
 export async function fetchSecretTypes(params?: {
-  q?: string
-  include_deprecated?: boolean
+  q?: string;
+  include_deprecated?: boolean;
 }): Promise<SecretTypeListResponse> {
-  const q = new URLSearchParams()
-  if (params?.q) q.set('q', params.q)
-  if (params?.include_deprecated) q.set('include_deprecated', 'true')
-  const raw = await api.get<unknown>(`/admin/secret-types?${q.toString()}`)
-  return SecretTypeListResponseSchema.parse(raw)
+  const q = new URLSearchParams();
+  if (params?.q) q.set("q", params.q);
+  if (params?.include_deprecated) q.set("include_deprecated", "true");
+  const raw = await api.get<unknown>(`/admin/secret-types?${q.toString()}`);
+  return SecretTypeListResponseSchema.parse(raw);
 }
 
-export async function fetchSecretType(typeUuid: string): Promise<SecretTypeDetail> {
-  const raw = await api.get<unknown>(`/admin/secret-types/${typeUuid}`)
-  return SecretTypeDetailSchema.parse(raw)
+export async function fetchSecretType(
+  typeUuid: string,
+): Promise<SecretTypeDetail> {
+  const raw = await api.get<unknown>(`/admin/secret-types/${typeUuid}`);
+  return SecretTypeDetailSchema.parse(raw);
 }
 
 export async function createSecretType(body: {
-  type: string
-  sous_type: string
-  label?: string
-  description?: string
-  schema_data: Record<string, unknown>
-  schema_ui?: Record<string, unknown>
-  notes?: string
+  type: string;
+  sous_type: string;
+  label?: string;
+  description?: string;
+  schema_data: Record<string, unknown>;
+  schema_ui?: Record<string, unknown>;
+  notes?: string;
 }): Promise<{ type_uuid: string; version_uuid: string }> {
-  return api.post<{ type_uuid: string; version_uuid: string }>('/admin/secret-types', body)
+  return api.post<{ type_uuid: string; version_uuid: string }>(
+    "/admin/secret-types",
+    body,
+  );
 }
 
 export async function addSecretTypeVersion(
   typeUuid: string,
   body: {
-    schema_data: Record<string, unknown>
-    schema_ui?: Record<string, unknown>
-    notes?: string
-    set_as_current?: boolean
-  }
+    schema_data: Record<string, unknown>;
+    schema_ui?: Record<string, unknown>;
+    notes?: string;
+    set_as_current?: boolean;
+  },
 ): Promise<{ version_uuid: string; version: number }> {
   return api.post<{ version_uuid: string; version: number }>(
     `/admin/secret-types/${typeUuid}/schemas`,
-    body
-  )
+    body,
+  );
 }
 
 export async function deleteSecretType(typeUuid: string): Promise<void> {
-  return api.delete<void>(`/admin/secret-types/${typeUuid}`)
+  return api.delete<void>(`/admin/secret-types/${typeUuid}`);
 }
 
 export async function deleteSecretTypeVersion(
   typeUuid: string,
-  versionUuid: string
+  versionUuid: string,
 ): Promise<void> {
-  return api.delete<void>(`/admin/secret-types/${typeUuid}/schemas/${versionUuid}`)
+  return api.delete<void>(
+    `/admin/secret-types/${typeUuid}/schemas/${versionUuid}`,
+  );
 }
 
 export async function validateJsonSchema(
-  schemaData: Record<string, unknown>
+  schemaData: Record<string, unknown>,
 ): Promise<ValidateSchemaResponse> {
-  const raw = await api.post<unknown>('/admin/secret-types/validate-schema', {
+  const raw = await api.post<unknown>("/admin/secret-types/validate-schema", {
     schema_data: schemaData,
-  })
-  return ValidateSchemaResponseSchema.parse(raw)
+  });
+  return ValidateSchemaResponseSchema.parse(raw);
 }
 
 // ─── Remote backup connections (LOT remote backups) ──────────────────────────
 
 export async function fetchRemoteBackupConnections(): Promise<RemoteBackupConnectionListResponse> {
-  const raw = await api.get<unknown>('/admin/backup-remotes')
-  return RemoteBackupConnectionListResponseSchema.parse(raw)
-}
-
-export async function fetchRemoteBackupConnection(id: string): Promise<RemoteBackupConnection> {
-  const raw = await api.get<unknown>(`/admin/backup-remotes/${id}`)
-  return RemoteBackupConnectionSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/backup-remotes");
+  return RemoteBackupConnectionListResponseSchema.parse(raw);
 }
 
 export interface RemoteBackupCreatePayload {
-  name: string
-  kind: 'sftp' | 's3' | 'ftps'
-  config: Record<string, unknown>
-  credentials: Record<string, unknown>
+  name: string;
+  kind: "sftp" | "s3" | "ftps";
+  config: Record<string, unknown>;
+  credentials: Record<string, unknown>;
 }
 
 export async function createRemoteBackupConnection(
   body: RemoteBackupCreatePayload,
 ): Promise<{ id: string }> {
-  return api.post<{ id: string }>('/admin/backup-remotes', body)
+  return api.post<{ id: string }>("/admin/backup-remotes", body);
 }
 
 export interface RemoteBackupUpdatePayload {
-  name?: string
-  config?: Record<string, unknown>
-  credentials?: Record<string, unknown>
+  name?: string;
+  config?: Record<string, unknown>;
+  credentials?: Record<string, unknown>;
 }
 
 export async function updateRemoteBackupConnection(
   id: string,
   body: RemoteBackupUpdatePayload,
 ): Promise<{ updated: number }> {
-  return api.patch<{ updated: number }>(`/admin/backup-remotes/${id}`, body)
+  return api.patch<{ updated: number }>(`/admin/backup-remotes/${id}`, body);
 }
 
 export async function deleteRemoteBackupConnection(id: string): Promise<void> {
-  await api.delete<void>(`/admin/backup-remotes/${id}`)
+  await api.delete<void>(`/admin/backup-remotes/${id}`);
 }
 
 export async function pushBackupToRemote(
@@ -280,8 +266,8 @@ export async function pushBackupToRemote(
   const raw = await api.post<unknown>(
     `/admin/backups/${backupId}/push-to-remote/${remoteId}`,
     {},
-  )
-  return RemoteBackupPushResultSchema.parse(raw)
+  );
+  return RemoteBackupPushResultSchema.parse(raw);
 }
 
 // ─── Test de connexion (deux endpoints, deux usages) ────────────────────────
@@ -291,10 +277,10 @@ export async function pushBackupToRemote(
 // l'erreur du provider. Le catch reste utile pour les vraies erreurs réseau.
 
 export interface TestRemoteBackupNewPayload {
-  kind: 'sftp' | 's3' | 'ftps'
-  config: Record<string, unknown>
-  credentials: Record<string, unknown>
-  path: string
+  kind: "sftp" | "s3" | "ftps";
+  config: Record<string, unknown>;
+  credentials: Record<string, unknown>;
+  path: string;
 }
 
 /** Teste un path avec config + creds fournis (création / nouveaux creds). */
@@ -302,22 +288,22 @@ export async function testRemoteBackupConnectionConfig(
   body: TestRemoteBackupNewPayload,
 ): Promise<RemoteBackupTestResponse> {
   try {
-    const raw = await api.post<unknown>('/admin/backup-remotes/test', body)
-    return RemoteBackupTestResponseSchema.parse(raw)
+    const raw = await api.post<unknown>("/admin/backup-remotes/test", body);
+    return RemoteBackupTestResponseSchema.parse(raw);
   } catch (err) {
-    const e = err as { code?: string; message?: string }
+    const e = err as { code?: string; message?: string };
     return {
       ok: false,
-      error: e.code ?? 'test_failed',
-      message: e.message ?? 'Connection test failed',
-    }
+      error: e.code ?? "test_failed",
+      message: e.message ?? "Connection test failed",
+    };
   }
 }
 
 export interface TestRemoteBackupStoredPayload {
-  path: string
+  path: string;
   /** Optionnel : surcharge le `config` stocké en DB (test sans sauvegarder). */
-  config?: Record<string, unknown>
+  config?: Record<string, unknown>;
 }
 
 /** Teste un path avec creds stockés en DB (édition sans resaisir creds). */
@@ -326,42 +312,45 @@ export async function testRemoteBackupConnectionStored(
   body: TestRemoteBackupStoredPayload,
 ): Promise<RemoteBackupTestResponse> {
   try {
-    const raw = await api.post<unknown>(`/admin/backup-remotes/${id}/test`, body)
-    return RemoteBackupTestResponseSchema.parse(raw)
+    const raw = await api.post<unknown>(
+      `/admin/backup-remotes/${id}/test`,
+      body,
+    );
+    return RemoteBackupTestResponseSchema.parse(raw);
   } catch (err) {
-    const e = err as { code?: string; message?: string }
+    const e = err as { code?: string; message?: string };
     return {
       ok: false,
-      error: e.code ?? 'test_failed',
-      message: e.message ?? 'Connection test failed',
-    }
+      error: e.code ?? "test_failed",
+      message: e.message ?? "Connection test failed",
+    };
   }
 }
 
 // ─── Age keygen (LOT_56) ─────────────────────────────────────────────────────
 
 export interface AgeKeypair {
-  public_key: string
-  private_key: string
+  public_key: string;
+  private_key: string;
   /** True si la clé publique a été persistée en DB et est active immédiatement. */
-  applied: boolean
-  warning: string
+  applied: boolean;
+  warning: string;
 }
 
 export async function generateAgeKeypair(): Promise<AgeKeypair> {
-  return api.post<AgeKeypair>('/admin/system/age-keygen', {})
+  return api.post<AgeKeypair>("/admin/system/age-keygen", {});
 }
 
 // ─── Replication strategies (LOT_20) ─────────────────────────────────────────
 
 export async function fetchReplicationStrategies(): Promise<ReplicationStrategyListResponse> {
-  const raw = await api.get<unknown>('/admin/replication/strategies')
-  return ReplicationStrategyListResponseSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/replication/strategies");
+  return ReplicationStrategyListResponseSchema.parse(raw);
 }
 
 export async function fetchReplicationStatus(): Promise<ReplicationStatusResponse> {
-  const raw = await api.get<unknown>('/admin/replication/status')
-  return ReplicationStatusResponseSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/replication/status");
+  return ReplicationStatusResponseSchema.parse(raw);
 }
 
 export async function activateReplicationStrategy(
@@ -370,7 +359,7 @@ export async function activateReplicationStrategy(
   return api.post<{ activated: boolean; strategy_id: string }>(
     `/admin/replication/strategies/${strategyId}/activate`,
     {},
-  )
+  );
 }
 
 export async function deactivateReplicationStrategy(
@@ -379,7 +368,7 @@ export async function deactivateReplicationStrategy(
   return api.post<{ deactivated: boolean; strategy_id: string }>(
     `/admin/replication/strategies/${strategyId}/deactivate`,
     {},
-  )
+  );
 }
 
 // ─── Streaming replication nodes (LOT réplication itération 1) ───────────────
@@ -389,40 +378,43 @@ import {
   ReplicationNodeAddResponseSchema,
   type ReplicationNodeListResponse,
   type ReplicationNodeAddResponse,
-} from '@/schemas/admin'
+} from "@/schemas/admin";
 
 export async function fetchStreamingNodes(): Promise<ReplicationNodeListResponse> {
-  const raw = await api.get<unknown>('/admin/replication/streaming/nodes')
-  return ReplicationNodeListResponseSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/replication/streaming/nodes");
+  return ReplicationNodeListResponseSchema.parse(raw);
 }
 
 export interface AddStreamingNodePayload {
-  label: string
-  host: string
-  port: number
-  role: 'standby_ro' | 'standby_failover_ready' | 'archive_only'
-  notes?: string | null
-  master_host: string
-  master_port: number
-  standby_data_dir?: string
+  label: string;
+  host: string;
+  port: number;
+  role: "standby_ro" | "standby_failover_ready" | "archive_only";
+  notes?: string | null;
+  master_host: string;
+  master_port: number;
+  standby_data_dir?: string;
 }
 
 export async function addStreamingNode(
   body: AddStreamingNodePayload,
 ): Promise<ReplicationNodeAddResponse> {
-  const raw = await api.post<unknown>('/admin/replication/streaming/nodes', body)
-  return ReplicationNodeAddResponseSchema.parse(raw)
+  const raw = await api.post<unknown>(
+    "/admin/replication/streaming/nodes",
+    body,
+  );
+  return ReplicationNodeAddResponseSchema.parse(raw);
 }
 
 export async function deleteStreamingNode(id: string): Promise<void> {
-  await api.delete<void>(`/admin/replication/streaming/nodes/${id}`)
+  await api.delete<void>(`/admin/replication/streaming/nodes/${id}`);
 }
 
 export async function reloadPgHba(): Promise<{ reloaded: boolean }> {
   return api.post<{ reloaded: boolean }>(
-    '/admin/replication/streaming/reload-pg-hba',
+    "/admin/replication/streaming/reload-pg-hba",
     {},
-  )
+  );
 }
 
 // ─── (it2) test connect / observations / lag thresholds ────────────────────
@@ -431,17 +423,21 @@ import {
   TcpPingResultSchema,
   ReplicationNodeObservationsResponseSchema,
   LagThresholdsSchema,
+  PostgresInfoSchema,
   type TcpPingResult,
   type ReplicationNodeObservationsResponse,
   type LagThresholds,
-} from '@/schemas/admin'
+  type PostgresInfo,
+} from "@/schemas/admin";
 
-export async function testStreamingNodeConnect(id: string): Promise<TcpPingResult> {
+export async function testStreamingNodeConnect(
+  id: string,
+): Promise<TcpPingResult> {
   const raw = await api.post<unknown>(
     `/admin/replication/streaming/nodes/${id}/test-connect`,
     {},
-  )
-  return TcpPingResultSchema.parse(raw)
+  );
+  return TcpPingResultSchema.parse(raw);
 }
 
 export async function fetchStreamingNodeObservations(
@@ -450,81 +446,237 @@ export async function fetchStreamingNodeObservations(
 ): Promise<ReplicationNodeObservationsResponse> {
   const raw = await api.get<unknown>(
     `/admin/replication/streaming/nodes/${id}/observations?hours=${hours}`,
-  )
-  return ReplicationNodeObservationsResponseSchema.parse(raw)
+  );
+  return ReplicationNodeObservationsResponseSchema.parse(raw);
 }
 
 export async function fetchLagThresholds(): Promise<LagThresholds> {
-  const raw = await api.get<unknown>('/admin/replication/streaming/lag-thresholds')
-  return LagThresholdsSchema.parse(raw)
+  const raw = await api.get<unknown>(
+    "/admin/replication/streaming/lag-thresholds",
+  );
+  return LagThresholdsSchema.parse(raw);
 }
 
 export async function updateLagThresholds(
   body: LagThresholds,
 ): Promise<LagThresholds> {
   const raw = await api.patch<unknown>(
-    '/admin/replication/streaming/lag-thresholds',
+    "/admin/replication/streaming/lag-thresholds",
     body,
-  )
-  return LagThresholdsSchema.parse(raw)
+  );
+  return LagThresholdsSchema.parse(raw);
+}
+
+export async function fetchPostgresInfo(): Promise<PostgresInfo> {
+  const raw = await api.get<unknown>(
+    "/admin/replication/streaming/postgres-info",
+  );
+  return PostgresInfoSchema.parse(raw);
 }
 
 // ─── Scheduled backups (cron-like) ───────────────────────────────────────────
 
 export async function fetchScheduledBackups(): Promise<ScheduledBackupListResponse> {
-  const raw = await api.get<unknown>('/admin/scheduled-backups')
-  return ScheduledBackupListResponseSchema.parse(raw)
+  const raw = await api.get<unknown>("/admin/scheduled-backups");
+  return ScheduledBackupListResponseSchema.parse(raw);
 }
 
 export interface ScheduledBackupCreatePayload {
-  name: string
-  cron_expression: string
-  remote_id: string | null
-  miss_threshold_minutes: number
-  description?: string | null
-  enabled?: boolean
+  name: string;
+  cron_expression: string;
+  remote_id: string | null;
+  miss_threshold_minutes: number;
+  description?: string | null;
+  enabled?: boolean;
 }
 
 export async function createScheduledBackup(
   body: ScheduledBackupCreatePayload,
 ): Promise<{ id: string }> {
-  return api.post<{ id: string }>('/admin/scheduled-backups', body)
+  return api.post<{ id: string }>("/admin/scheduled-backups", body);
 }
 
 export interface ScheduledBackupPatchPayload {
-  name?: string
-  cron_expression?: string
+  name?: string;
+  cron_expression?: string;
   /** Pour effacer : remote_id=null + set_remote_id=true. Pour ne pas toucher : omettre. */
-  remote_id?: string | null
-  set_remote_id?: boolean
-  miss_threshold_minutes?: number
-  description?: string | null
-  set_description?: boolean
-  enabled?: boolean
+  remote_id?: string | null;
+  set_remote_id?: boolean;
+  miss_threshold_minutes?: number;
+  description?: string | null;
+  set_description?: boolean;
+  enabled?: boolean;
 }
 
 export async function updateScheduledBackup(
   id: string,
   body: ScheduledBackupPatchPayload,
 ): Promise<{ updated: number }> {
-  return api.patch<{ updated: number }>(`/admin/scheduled-backups/${id}`, body)
+  return api.patch<{ updated: number }>(`/admin/scheduled-backups/${id}`, body);
 }
 
 export async function deleteScheduledBackup(id: string): Promise<void> {
-  await api.delete<void>(`/admin/scheduled-backups/${id}`)
+  await api.delete<void>(`/admin/scheduled-backups/${id}`);
 }
 
-export async function runScheduledBackupNow(id: string): Promise<ScheduledBackupRunResult> {
-  const raw = await api.post<unknown>(`/admin/scheduled-backups/${id}/run-now`, {})
-  return ScheduledBackupRunResultSchema.parse(raw)
+export async function runScheduledBackupNow(
+  id: string,
+): Promise<ScheduledBackupRunResult> {
+  const raw = await api.post<unknown>(
+    `/admin/scheduled-backups/${id}/run-now`,
+    {},
+  );
+  return ScheduledBackupRunResultSchema.parse(raw);
 }
 
 export async function validateCronExpression(
   cron_expression: string,
 ): Promise<CronValidationResponse> {
-  const raw = await api.post<unknown>('/admin/scheduled-backups/validate-cron', {
-    cron_expression,
-  })
-  return CronValidationResponseSchema.parse(raw)
+  const raw = await api.post<unknown>(
+    "/admin/scheduled-backups/validate-cron",
+    {
+      cron_expression,
+    },
+  );
+  return CronValidationResponseSchema.parse(raw);
 }
 
+// ─── Pairing (LOT 2-4) ───────────────────────────────────────────────────────
+
+import {
+  PairingInitResponseSchema,
+  PairingInitV2ResponseSchema,
+  PairingStatusSchema,
+  PairingStepsResponseSchema,
+  PairingAcceptResponseSchema,
+  type PairingInitResponse,
+  type PairingInitV2Response,
+  type PairingStatus,
+  type PairingStepsResponse,
+  type PairingAcceptResponse,
+} from "@/schemas/pairing";
+
+export async function initPairing(
+  partnerUrl: string,
+): Promise<PairingInitResponse> {
+  const raw = await api.post<unknown>("/admin/replication/pairing/init", {
+    partner_url: partnerUrl,
+  });
+  return PairingInitResponseSchema.parse(raw);
+}
+
+export async function acceptPairing(
+  masterUrl: string,
+  code: string,
+): Promise<PairingAcceptResponse> {
+  const raw = await api.post<unknown>("/admin/replication/pairing/accept", {
+    master_url: masterUrl,
+    code,
+  });
+  return PairingAcceptResponseSchema.parse(raw);
+}
+
+// ─── Pairing v2 (LOT 5) — échange d'URL signée ──────────────────────────────
+
+export async function initPairingV2(
+  standbyUrl: string,
+): Promise<PairingInitV2Response> {
+  const raw = await api.post<unknown>("/admin/replication/pairing/init-v2", {
+    standby_url: standbyUrl,
+  });
+  return PairingInitV2ResponseSchema.parse(raw);
+}
+
+export async function acceptPairingV2(
+  pairingUrl: string,
+  force: boolean = false,
+): Promise<PairingAcceptResponse> {
+  const raw = await api.post<unknown>("/admin/replication/pairing/accept-v2", {
+    pairing_url: pairingUrl,
+    force,
+  });
+  return PairingAcceptResponseSchema.parse(raw);
+}
+
+export async function getPairingStatus(
+  sessionId: string,
+): Promise<PairingStatus> {
+  const raw = await api.get<unknown>(
+    `/admin/replication/pairing/${sessionId}/status`,
+  );
+  return PairingStatusSchema.parse(raw);
+}
+
+export async function getPairingSteps(
+  sessionId: string,
+): Promise<PairingStepsResponse> {
+  const raw = await api.get<unknown>(
+    `/admin/replication/pairing/${sessionId}/steps`,
+  );
+  return PairingStepsResponseSchema.parse(raw);
+}
+
+export async function markStepDone(
+  sessionId: string,
+  idx: number,
+): Promise<{ current_step_idx: number }> {
+  return api.post<{ current_step_idx: number }>(
+    `/admin/replication/pairing/${sessionId}/steps/${idx}/done`,
+    {},
+  );
+}
+
+export async function markStepBack(
+  sessionId: string,
+  idx: number,
+): Promise<{ current_step_idx: number }> {
+  return api.post<{ current_step_idx: number }>(
+    `/admin/replication/pairing/${sessionId}/steps/${idx}/back`,
+    {},
+  );
+}
+
+export async function getStandbyOf(): Promise<{ is_standby_of: string | null }> {
+  return api.get<{ is_standby_of: string | null }>(
+    "/admin/replication/standby-of",
+  );
+}
+
+export interface ReplicationSelfInfo {
+  public_url: string;
+  advertised_pg_host: string;
+  advertised_pg_port: number;
+}
+
+export async function getReplicationSelfInfo(): Promise<ReplicationSelfInfo> {
+  return api.get<ReplicationSelfInfo>("/admin/replication/self-info");
+}
+
+// ─── Failover MVP — promotion manuelle du standby ──────────────────────────
+
+export interface CanPromoteResponse {
+  can_promote: boolean;
+  current_role: "standby" | "master" | "standalone";
+  master_url: string | null;
+  reason_if_not: string | null;
+}
+
+export interface PromoteRequest {
+  confirm_master_down: boolean;
+  confirm_clients_will_be_reconfigured: boolean;
+}
+
+export interface PromoteResponse {
+  promoted: boolean;
+  old_master_url: string | null;
+}
+
+export async function fetchCanPromote(): Promise<CanPromoteResponse> {
+  return api.get<CanPromoteResponse>("/admin/replication/can-promote");
+}
+
+export async function promoteToMaster(
+  body: PromoteRequest,
+): Promise<PromoteResponse> {
+  return api.post<PromoteResponse>("/admin/replication/promote", body);
+}

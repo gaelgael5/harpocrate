@@ -144,7 +144,7 @@ async def create_backup(
 
         # pg_dump → stdout
         proc = await asyncio.create_subprocess_exec(
-            "pg_dump", settings.db_dsn,
+            "pg_dump", settings.effective_db_dsn,
             "--format=plain", "--serializable-deferrable", "--no-owner", "--no-acl",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -350,7 +350,7 @@ async def restore_backup(
                 )
 
         rc, _, drop_stderr = await _run([
-            "psql", settings.db_dsn,
+            "psql", settings.effective_db_dsn,
             "-c", "DROP SCHEMA public CASCADE; CREATE SCHEMA public;",
         ])
         if rc != 0:
@@ -361,7 +361,7 @@ async def restore_backup(
             dump_bytes = gz.read()
 
         proc2 = await asyncio.create_subprocess_exec(
-            "psql", settings.db_dsn,
+            "psql", settings.effective_db_dsn,
             stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

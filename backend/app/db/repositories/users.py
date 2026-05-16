@@ -48,9 +48,17 @@ async def get_by_keycloak_sub(
     conn: asyncpg.Connection[asyncpg.Record],
     sub: str,
 ) -> UserRow | None:
-    """Retourne l'utilisateur par son keycloak_sub, ou None."""
+    """Retourne l'utilisateur par son keycloak_sub, ou None.
+
+    Filtre les rows shell `is_system=TRUE` : elles n'ont pas de matériel
+    crypto (rsa_public_key, salts, etc. = NULL), donc `_row_to_user`
+    crasherait sur `bytes(None)`. Une row shell signifie "user pas encore
+    bootstrappé" — du point de vue de `get_me`, équivalent à inexistant
+    (le caller renvoie alors 404 first_login → l'UI route vers le
+    bootstrap, qui fera `convert_system_user_to_real`).
+    """
     row = await conn.fetchrow(
-        "SELECT * FROM users WHERE keycloak_sub = $1",
+        "SELECT * FROM users WHERE keycloak_sub = $1 AND is_system = FALSE",
         sub,
     )
     return _row_to_user(row) if row else None
@@ -184,10 +192,16 @@ async def get_crypto(
     conn: asyncpg.Connection[asyncpg.Record],
     sub: str,
 ) -> UserRow | None:
-    """Récupère les blobs crypto d'un utilisateur par son sub."""
+    """Récupère les blobs crypto d'un utilisateur par son sub.
+
+    Filtre `is_system=FALSE` pour la même raison que `get_by_keycloak_sub` :
+    une row shell n'a pas de matériel crypto et `_row_to_user` planterait
+    sur `bytes(None)`. Le caller (typiquement `/v1/me/crypto`) renverra
+    alors 404 first_login.
+    """
     row = await conn.fetchrow(
         """
-        SELECT * FROM users WHERE keycloak_sub = $1
+        SELECT * FROM users WHERE keycloak_sub = $1 AND is_system = FALSE
         """,
         sub,
     )
@@ -265,7 +279,12 @@ async def get_id_and_is_system_by_email(
     conn: asyncpg.Connection[asyncpg.Record],
     email: str,
 ) -> tuple[UUID, bool] | None:
-    """Retourne (id, is_system) pour le user avec cet email, ou None."""
+    """Retourne (id, is_system) pour le user avec cet email, ou None.
+
+    Note : utiliser `get_id_is_system_sub_by_email` à la place quand on a
+    aussi besoin du `keycloak_sub` (ex: distinguer un admin local
+    bootstrappé d'un vrai user Keycloak qui aurait piqué l'email).
+    """
     row = await conn.fetchrow(
         "SELECT id, is_system FROM users WHERE email = $1",
         email,
@@ -273,6 +292,25 @@ async def get_id_and_is_system_by_email(
     if row is None:
         return None
     return row["id"], row["is_system"]
+
+
+async def get_id_is_system_sub_by_email(
+    conn: asyncpg.Connection[asyncpg.Record],
+    email: str,
+) -> tuple[UUID, bool, str | None] | None:
+    """Retourne (id, is_system, keycloak_sub) pour le user avec cet email.
+
+    Sert au lifespan local-admin pour distinguer notre admin local
+    bootstrappé (`keycloak_sub == LOCAL_ADMIN_KEYCLOAK_SUB`) d'un vrai
+    user Keycloak qui aurait piqué l'email (`keycloak_sub` différent).
+    """
+    row = await conn.fetchrow(
+        "SELECT id, is_system, keycloak_sub FROM users WHERE email = $1",
+        email,
+    )
+    if row is None:
+        return None
+    return row["id"], row["is_system"], row["keycloak_sub"]
 
 
 async def insert_system_user(

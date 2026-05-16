@@ -21,6 +21,7 @@
   "auth": {
     "login": "Connexion",
     "loginWithKeycloak": "Se connecter avec Keycloak",
+    "no_mode_available": "Aucun mode d'authentification disponible. Configure Keycloak ou active l'admin local dans .env.",
     "loggingIn": "Connexion en cours...",
     "logout": "Déconnexion",
     "unlockVault": "Déverrouiller le coffre-fort",
@@ -177,6 +178,28 @@
       "success": "Export téléchargé",
       "error": "Erreur lors de l'export"
     },
+    "bulkImport": {
+      "button": "Import en masse",
+      "title": "Importer des secrets en masse",
+      "pasteHint": "Colle ton contenu : .env (KEY=VALUE), JSON plat ({\"KEY\":\"value\"}), ou format Harpocrate ({\"format\":\"harpocrate-bulk-import\",\"secrets\":[…]}). Le format est auto-détecté.",
+      "pastePlaceholder": "FOO=bar\nDATABASE_URL=postgres://...\n# ou\n{\"FOO\":\"bar\"}",
+      "detected": "Format {{format}} détecté — {{count}} secret(s) à importer",
+      "next": "Suivant →",
+      "reviewHint": "Vérifie les noms et coche les secrets à importer. Les conflits sont surlignés en orange — décoche « Override » pour conserver l'existant.",
+      "colInclude": "Importer",
+      "colName": "Nom",
+      "colValue": "Valeur (preview)",
+      "colType": "Type",
+      "colOverride": "Conflit",
+      "colAction": "Action",
+      "colDetail": "Détail",
+      "overrideLabel": "Override",
+      "newSecret": "nouveau",
+      "importBtn": "Importer {{count}} secret(s)",
+      "doneTitle": "Import terminé",
+      "doneMessage": "Créés : {{created}} · Mis à jour : {{updated}} · Ignorés : {{skipped}} · Échoués : {{failed}}",
+      "reportSummary": "Créés : {{created}} · Mis à jour : {{updated}} · Ignorés : {{skipped}} · Échoués : {{failed}}"
+    },
     "import": {
       "button": "Importer",
       "title": "Importer un coffre-fort",
@@ -209,6 +232,12 @@
     "hideValue": "Masquer",
     "copyValue": "Copier sans afficher",
     "editValue": "Modifier la valeur",
+    "editProperties": "Modifier les propriétés",
+    "editPropertiesTitle": "Propriétés du secret",
+    "descriptionLabel": "Description",
+    "tagsLabel": "Tags",
+    "tagsHint": "Appuie sur Entrée pour ajouter un tag.",
+    "meta_saved": "Propriétés mises à jour",
     "generating": "Génération...",
     "placeholder": "Placeholder (sans valeur)",
     "generate": {
@@ -643,6 +672,23 @@
       "fieldS3SecretAccessKey": "Secret Access Key"
     },
     "replication": {
+      "promote": {
+        "buttonLabel": "Promouvoir en master",
+        "modalTitle": "Promouvoir cette instance en master",
+        "warningTitle": "Action irréversible",
+        "warningBody": "Cette opération promeut le standby local en primary read-write. L'ancien master ({{masterUrl}}) ne doit plus accepter d'écritures sous peine de divergence permanente (split-brain).",
+        "confirmMasterDown": "Je confirme que l'ancien master est arrêté",
+        "confirmClientsReconfigured": "Je m'engage à reconfigurer les clients vers ce nouveau master",
+        "submit": "Promouvoir maintenant",
+        "cancel": "Annuler",
+        "successToast": "Promotion réussie. Cette instance est maintenant master.",
+        "errors": {
+          "missing_confirmation": "Les deux cases doivent être cochées.",
+          "not_in_standby_mode": "Cette instance n'est pas en mode standby.",
+          "promotion_failed": "La promotion a échoué : pg_promote n'a pas pu sortir du mode recovery.",
+          "unknown": "Erreur inconnue lors de la promotion."
+        }
+      },
       "title": "Réplication",
       "subtitle": "Gérez les stratégies de réplication PostgreSQL. Plusieurs stratégies peuvent être actives en parallèle (ex: streaming async + archive WAL).",
       "activeStrategy": "Stratégie active",
@@ -656,6 +702,85 @@
       "activateSuccess": "Stratégie activée",
       "deactivateSuccess": "Stratégie désactivée",
       "nodes": "Nœuds",
+      "selfInfo": {
+        "title": "URL publique de cette instance",
+        "subtitle": "Copie cette URL et transmets-la à l'admin de l'instance qui veut s'appairer avec celle-ci (ou la coller dans la modale « Ajouter un standby » de l'autre côté)."
+      },
+      "postgresInfo": {
+        "title": "Paramètres Postgres de cette instance",
+        "subtitle": "Lecture seule des paramètres `pg_settings` utiles pour configurer un standby. Copie ces valeurs côté serveur standby pour matcher la config (version, paths, wal_level, …).",
+        "versionFull": "Version complète",
+        "serverAddr": "Adresse serveur (vue par cette connexion)",
+        "unixSocket": "socket UNIX local",
+        "warnFlag": "⚠ à corriger",
+        "group": {
+          "identity": "Identité",
+          "replication": "Réplication",
+          "paths": "Fichiers de configuration"
+        },
+        "field": {
+          "serverVersion": "Version serveur",
+          "port": "Port d'écoute",
+          "listenAddresses": "Adresses d'écoute",
+          "walLevel": "Niveau WAL (doit être ≥ replica)",
+          "maxWalSenders": "Max WAL senders (≥ 1)",
+          "maxReplicationSlots": "Max slots de réplication",
+          "walKeepSize": "WAL conservés (taille)",
+          "archiveMode": "Mode archive",
+          "dataDirectory": "Répertoire de données",
+          "configFile": "postgresql.conf",
+          "hbaFile": "pg_hba.conf"
+        }
+      },
+      "pairing": {
+        "addStandby": "Ajouter un standby",
+        "modal": {
+          "title": "Appairer un nouveau standby",
+          "step1Hint": "Colle ici l'URL publique de l'instance qui deviendra standby (à copier depuis le panneau « URL publique de cette instance » de l'autre côté).",
+          "partnerUrl": "URL du standby",
+          "generate": "Générer l'URL d'appairage",
+          "step2Hint": "Copie cette URL et transmets-la à l'admin du standby. Elle expire dans {{minutes}} minutes et n'est affichée qu'une seule fois.",
+          "pairingUrl": "URL d'appairage à transmettre",
+          "copyPairingUrl": "Copier l'URL d'appairage"
+        },
+        "becomeStandby": {
+          "title": "Ajouter en tant que standby",
+          "subtitle": "Colle l'URL d'appairage que l'admin du master t'a transmise. Une fois validée, le wizard SSH s'ouvre automatiquement.",
+          "pairingUrl": "URL d'appairage",
+          "pairingUrlHint": "Format : https://master.example/pair?sid=…&t=…",
+          "submit": "Ajouter en tant que standby",
+          "replaceModal": {
+            "title": "Un node existe déjà côté master",
+            "intro": "Un node de réplication portant cette URL est déjà enregistré sur le master. Le remplacer supprimera l'ancien rôle Postgres et créera un nouveau bundle de credentials.",
+            "existingLabel": "URL :",
+            "existingHost": "Hôte :",
+            "existingAppName": "Application name :",
+            "existingState": "Dernier état :",
+            "existingSeen": "Vu pour la dernière fois :",
+            "neverSeen": "jamais",
+            "cancel": "Annuler",
+            "replace": "Remplacer le node"
+          }
+        },
+        "wizard": {
+          "title": "Assistant d'appairage standby",
+          "subtitleA": "Connecte-toi en SSH à la machine qui héberge ce conteneur Postgres.",
+          "subtitleB": "Une fois connecté, suis les étapes ci-contre.",
+          "stepProgress": "Étape {{current}} sur {{total}}",
+          "command": "Commande à exécuter",
+          "copy": "Copier",
+          "copied": "Copié",
+          "markDone": "Étape exécutée → suivant",
+          "back": "← Étape précédente",
+          "completed": "Appairage terminé !",
+          "completedSubtitle": "Cette instance est maintenant standby de {{master}}.",
+          "abort": "Abandonner"
+        },
+        "banner": {
+          "title": "Mode asservi (standby)",
+          "message": "Cette instance Harpocrate est asservie au master {{master}}. Les actions de gestion réplication sont désactivées sur cette instance."
+        }
+      },
       "streaming": {
         "title": "Streaming async — standby",
         "subtitle": "Liste des serveurs PostgreSQL en réplication streaming. Ajout d'un standby : Harpocrate crée le rôle côté master et vous fournit les commandes à exécuter en SSH côté standby.",
@@ -723,6 +848,26 @@
         "thresholdCriticalHint": "Anomalie de severity 'critical' au-delà.",
         "thresholdsCriticalLessThanWarning": "Le seuil critique doit être ≥ au seuil warning.",
         "thresholdsSaved": "Seuils enregistrés"
+      }
+    },
+    "ssh": {
+      "credentials": {
+        "title": "Connexion SSH",
+        "subtitle": "Renseigne les identifiants pour ouvrir la session. Ils ne sont jamais enregistrés.",
+        "host": "Hôte",
+        "port": "Port",
+        "username": "Utilisateur",
+        "password": "Mot de passe",
+        "privateKey": "Clé privée (collée)",
+        "passphrase": "Passphrase (optionnelle)",
+        "connect": "Se connecter",
+        "cancel": "Annuler"
+      },
+      "terminal": {
+        "connecting": "Connexion en cours…",
+        "connected": "Connecté",
+        "disconnected": "Déconnecté",
+        "errorGeneric": "Erreur de connexion SSH"
       }
     },
     "scheduledBackups": {
@@ -873,6 +1018,40 @@
     "schemaReadOnly": "Schéma (lecture seule)",
     "viewVersion": "Voir la version v{{n}}",
     "prefillFromPrevious": "Pré-rempli depuis v{{n}}"
+  },
+  "pairingExec": {
+    "pending": "en attente",
+    "running": "en cours",
+    "done": "terminée",
+    "error": "erreur",
+    "retryFrom": "Réessayer depuis l'étape {{n}}",
+    "credsModal": {
+      "title": "Identifiants SSH (machine Postgres)",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "privKey": "Clé privée",
+      "passphrase": "Passphrase (si protégée)",
+      "start": "Démarrer l'exécution"
+    },
+    "steps": {
+      "verify_master_reachable":   { "title": "Vérifier que le master est joignable", "description": "Pré-vérification non destructive : pg_isready vers le master. Si ça échoue, on n'a rien cassé localement et tu peux retenter après correction de la conf master." },
+      "stop_pg_container":         { "title": "Arrêter le conteneur Postgres local", "description": "On stoppe l'instance Postgres pour pouvoir remplacer son data dir. Si elle écrit, on attend la fin gracieuse." },
+      "backup_pg_data_dir":        { "title": "Sauvegarder le data dir actuel",      "description": "Le data dir actuel est renommé en .bak.<timestamp> pour permettre un rollback manuel." },
+      "pg_basebackup_from_master": { "title": "pg_basebackup depuis le master",      "description": "Copie l'intégralité de la base depuis le master en streaming. Peut prendre plusieurs minutes." },
+      "verify_standby_signal":     { "title": "Vérifier standby.signal",             "description": "Le fichier signal doit exister pour démarrer en mode standby." },
+      "verify_auto_conf":          { "title": "Vérifier postgresql.auto.conf",       "description": "Doit contenir primary_conninfo avec le bon host/user." },
+      "write_db_credentials_override": { "title": "Écrire le password Postgres du master", "description": "Après pg_basebackup, le user 'harpocrate' côté DB a le password du master, pas celui du .env local. On l'écrit dans un fichier override que le backend lira au prochain démarrage." },
+      "start_pg_container":        { "title": "Démarrer le conteneur Postgres",      "description": "Postgres démarre en mode standby (recovery)." },
+      "verify_streaming":          { "title": "Vérifier le streaming WAL actif",     "description": "Une ligne status='streaming' dans pg_stat_wal_receiver confirme le flux." }
+    },
+    "errors": {
+      "self_ssh_host_not_configured": "HARPOCRATE_SELF_SSH_HOST n'est pas configuré dans le .env du serveur. Renseigne-le pour utiliser le mode natif, ou monte /var/run/docker.sock dans le conteneur backend pour passer en mode auto.",
+      "session_not_found": "Session de pairing introuvable. Relance le wizard depuis le master.",
+      "payload_incomplete": "Payload de pairing incomplet. Relance l'appairage depuis le master.",
+      "invalid_open_frame": "Trame d'ouverture invalide (incohérence frontend/backend).",
+      "invalid_token": "Token JWT invalide ou expiré.",
+      "not_admin": "Le compte connecté n'a pas le rôle administrateur."
+    }
   },
   "devMode": {
     "banner": "Mode développement actif — instance non destinée à la production. N'y stockez aucun secret réel."

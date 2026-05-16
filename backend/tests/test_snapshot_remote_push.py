@@ -10,11 +10,10 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-
 
 _REMOTE_ID_1 = UUID("aaaaaaaa-0000-0000-0000-000000000001")
 _REMOTE_ID_2 = UUID("aaaaaaaa-0000-0000-0000-000000000002")
@@ -62,7 +61,7 @@ def _scheduler_with_pool() -> Any:
     """Construit un SnapshotScheduler avec un pool factice."""
     from app.services.snapshot_scheduler import SnapshotScheduler
 
-    return SnapshotScheduler(pool=MagicMock())
+    return SnapshotScheduler()
 
 
 @pytest.mark.asyncio
@@ -322,5 +321,5 @@ async def test_scheduled_backups_scheduler_uses_global_lock() -> None:
     from app.services.backup_lock import get_global_backup_lock
     from app.services.scheduled_backups_scheduler import ScheduledBackupsScheduler
 
-    sched = ScheduledBackupsScheduler(pool=MagicMock())
+    sched = ScheduledBackupsScheduler()
     assert sched.run_lock is get_global_backup_lock()

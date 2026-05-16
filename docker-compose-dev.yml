@@ -22,12 +22,30 @@ services:
     image: postgres:16-alpine
     container_name: harpocrate-postgres
     restart: unless-stopped
+    # Active la streaming replication par défaut :
+    #   - wal_level=replica permet aux standbys de se connecter
+    #   - max_wal_senders / max_replication_slots dimensionnent le nombre de
+    #     standbys simultanés (10 = large pour du dev)
+    # Sans ça, un standby qui lance pg_basebackup vers cette instance reçoit
+    # "WAL streaming not enabled" et le wizard pairing échoue à l'étape 0.
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    # Expose Postgres sur 0.0.0.0:5432 pour permettre à un standby externe
+    # (LXC voisin, autre VM) de s'y connecter pour pg_basebackup. Acceptable
+    # en dev sur réseau interne ; en prod, restreindre via firewall ou
+    # tunneliser via WireGuard.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "5432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -46,6 +64,12 @@ services:
     # marge de 5s pour les fermetures pool DB / cluster sync stop.
     stop_grace_period: 35s
     stop_signal: SIGTERM
+    # Root dans le conteneur dev — nécessaire pour accéder à
+    # /var/run/docker.sock (monté ci-dessous) en mode pairing-exec auto.
+    # Le socket Docker hôte est en mode 660 root:docker ; sans root dans le
+    # conteneur, aiodocker plante en Permission denied. ACCEPTÉ ICI car
+    # compose-dev = environnement de test, jamais utilisé en prod.
+    user: "0:0"
     environment:
       HARPOCRATE_DB_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       HARPOCRATE_KEYCLOAK_URL: ${HARPOCRATE_KEYCLOAK_URL}
@@ -75,6 +99,14 @@ services:
       HARPOCRATE_RECOVERY_MAX_ATTEMPTS: ${HARPOCRATE_RECOVERY_MAX_ATTEMPTS:-3}
       HARPOCRATE_RECOVERY_ANOMALY_THRESHOLD: ${HARPOCRATE_RECOVERY_ANOMALY_THRESHOLD:-5}
       HARPOCRATE_RECOVERY_ANOMALY_WINDOW_HOURS: ${HARPOCRATE_RECOVERY_ANOMALY_WINDOW_HOURS:-24}
+      # Réplication — appairage inter-instances (LOT 5). Activable en dev
+      # pour autoriser les certs auto-signés sur /pairing/confirm-v2.
+      HARPOCRATE_REPLICATION_INSECURE_SKIP_TLS_VERIFY: ${HARPOCRATE_REPLICATION_INSECURE_SKIP_TLS_VERIFY:-false}
+      # Pairing exec mode natif — host/port SSH de la machine Postgres pour
+      # exécuter le wizard quand le socket Docker n'est pas monté côté backend.
+      # Laisser vide si on utilise le mode docker_compose_auto (socket monté).
+      HARPOCRATE_SELF_SSH_HOST: ${HARPOCRATE_SELF_SSH_HOST:-}
+      HARPOCRATE_SELF_SSH_PORT: ${HARPOCRATE_SELF_SSH_PORT:-22}
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,6 +119,18 @@ services:
       - ./releases:/app/releases:ro
       # Backups locaux .tar.age — persistent à travers les rebuilds d'images.
       - ./data/backups:/var/lib/harpocrate/backups
+      # Password Postgres override — écrit par le wizard pairing après
+      # pg_basebackup (le standby hérite des credentials du master). Lu en
+      # priorité par Settings.effective_db_dsn au démarrage du backend.
+      # Doit exister sur l'hôte (touché par dev-deploy.sh) sinon Docker
+      # crée un répertoire vide.
+      - ./data/db-password-override.txt:/var/lib/harpocrate/db-password-override.txt:ro
+      # Pairing exec — mode docker_compose_auto. Monter le socket Docker
+      # permet à aiodocker d'orchestrer `docker stop/start/exec` sur le
+      # conteneur `harpocrate-postgres` depuis le backend. ATTENTION : accès
+      # équivalent à root sur l'hôte. Activé en dev uniquement (compose-dev).
+      # En prod, voir docker-compose.yml + Install-dev.md pour les implications.
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test:
         - "CMD-SHELL"

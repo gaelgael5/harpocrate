@@ -6,10 +6,14 @@
  *
  * window.matchMedia is not implemented in jsdom; Mantine requires it for its
  * colour-scheme logic. We stub it here so Mantine components can render in tests.
+ *
+ * ResizeObserver is not implemented in jsdom; Mantine's SegmentedControl /
+ * FloatingIndicator uses it internally. We stub it here so those components
+ * can render without throwing.
  */
-import '@testing-library/jest-dom'
+import "@testing-library/jest-dom";
 
-Object.defineProperty(window, 'matchMedia', {
+Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({
     matches: false,
@@ -21,4 +25,12 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: () => {},
     dispatchEvent: () => false,
   }),
-})
+});
+
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

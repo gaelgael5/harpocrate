@@ -57,3 +57,45 @@ async def test_get_pool_raises_if_not_initialized() -> None:
     pool_mod._pool = None
     with pytest.raises(RuntimeError, match="not initialized"):
         await pool_mod.get_pool()
+
+
+async def test_refresh_pool_closes_old_and_recreates() -> None:
+    """refresh_pool : ferme l'ancien pool et en recrée un nouveau via init_pool.
+
+    Utilisé après pairing standby : le step 6 vient d'écrire le password
+    override file, le DSN effectif a changé, le pool doit prendre en compte
+    le nouveau password sinon le backend reste en 503 jusqu'à un restart.
+    """
+    pool_a = AsyncMock()
+    pool_a.close = AsyncMock()
+    pool_b = AsyncMock()
+    pool_b.close = AsyncMock()
+    pools_iter = iter([pool_a, pool_b])
+
+    async def fake_create(**kwargs: object) -> object:
+        return next(pools_iter)
+
+    with patch("asyncpg.create_pool", side_effect=fake_create):
+        from app.db import pool as pool_mod
+
+        pool_mod._pool = None
+        first = await pool_mod.init_pool()
+        assert first is pool_a
+
+        refreshed = await pool_mod.refresh_pool()
+        pool_a.close.assert_awaited_once()
+        assert refreshed is pool_b
+        assert pool_mod._pool is pool_b
+
+
+async def test_refresh_pool_handles_uninitialized() -> None:
+    """refresh_pool quand jamais init : se contente d'init, pas de close."""
+    new_pool = AsyncMock()
+    new_pool.close = AsyncMock()
+    with patch("asyncpg.create_pool", new_callable=AsyncMock, return_value=new_pool):
+        from app.db import pool as pool_mod
+
+        pool_mod._pool = None
+        refreshed = await pool_mod.refresh_pool()
+        assert refreshed is new_pool
+        new_pool.close.assert_not_awaited()

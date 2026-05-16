@@ -54,26 +54,60 @@ async def test_inserts_when_absent() -> None:
 
 @pytest.mark.asyncio
 async def test_idempotent_when_already_system_user() -> None:
-    """Une row is_system=TRUE existante → pas de re-INSERT."""
+    """Row shell (is_system=TRUE, keycloak_sub=NULL) → pas de re-INSERT,
+    UPDATE idempotent du keycloak_sub vers 'local-admin'."""
     from app.services import local_admin_bootstrap
 
     conn = MagicMock()
-    conn.fetchrow = AsyncMock(return_value={"id": uuid4(), "is_system": True})
-    conn.fetchval = AsyncMock()  # ne devrait pas être appelé
+    conn.fetchrow = AsyncMock(return_value={
+        "id": uuid4(), "is_system": True, "keycloak_sub": None,
+    })
+    conn.fetchval = AsyncMock()
+    conn.execute = AsyncMock(return_value="UPDATE 1")
     pool = _make_pool(conn)
 
     await local_admin_bootstrap.ensure_local_admin_user(pool)
 
     assert conn.fetchval.await_count == 0
+    assert conn.execute.await_count == 1
+    assert "UPDATE users" in conn.execute.await_args.args[0]
+    assert "keycloak_sub" in conn.execute.await_args.args[0]
 
 
 @pytest.mark.asyncio
-async def test_raises_when_email_used_by_real_user() -> None:
-    """Si un vrai user (is_system=FALSE) a déjà cet email, refus explicite."""
+async def test_idempotent_when_local_admin_already_bootstrapped() -> None:
+    """Notre admin local APRÈS bootstrap (is_system=FALSE +
+    keycloak_sub='local-admin') → pas d'erreur, on passe."""
     from app.services import local_admin_bootstrap
 
     conn = MagicMock()
-    conn.fetchrow = AsyncMock(return_value={"id": uuid4(), "is_system": False})
+    conn.fetchrow = AsyncMock(return_value={
+        "id": uuid4(),
+        "is_system": False,
+        "keycloak_sub": local_admin_bootstrap.LOCAL_ADMIN_KEYCLOAK_SUB,
+    })
+    conn.fetchval = AsyncMock()
+    conn.execute = AsyncMock(return_value="UPDATE 0")
+    pool = _make_pool(conn)
+
+    # Ne doit pas raise.
+    await local_admin_bootstrap.ensure_local_admin_user(pool)
+
+    assert conn.fetchval.await_count == 0  # pas d'insert
+
+
+@pytest.mark.asyncio
+async def test_raises_when_email_used_by_real_keycloak_user() -> None:
+    """Si un vrai user Keycloak (is_system=FALSE + autre keycloak_sub) a
+    déjà cet email, refus explicite — sinon on écraserait son compte."""
+    from app.services import local_admin_bootstrap
+
+    conn = MagicMock()
+    conn.fetchrow = AsyncMock(return_value={
+        "id": uuid4(),
+        "is_system": False,
+        "keycloak_sub": "kc-real-user-123",
+    })
     pool = _make_pool(conn)
 
     with pytest.raises(local_admin_bootstrap.LocalAdminEmailConflictError):

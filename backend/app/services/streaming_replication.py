@@ -27,7 +27,7 @@ import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 import asyncpg
@@ -37,6 +37,9 @@ from app.db.repositories import replication_nodes as nodes_repo
 from app.db.repositories import system_metadata as meta_repo
 from app.services import system_anomalies as anomaly_svc
 
+if TYPE_CHECKING:
+    from app.services.pairing import ExistingNodeInfo
+
 
 logger = structlog.get_logger(__name__)
 
@@ -45,7 +48,7 @@ logger = structlog.get_logger(__name__)
 LAG_THRESHOLDS_KEY = "replication_lag_thresholds"
 
 DEFAULT_LAG_THRESHOLDS: dict[str, int] = {
-    "warning_bytes": 64 * 1024 * 1024,    # 64 MB
+    "warning_bytes": 64 * 1024 * 1024,  # 64 MB
     "critical_bytes": 512 * 1024 * 1024,  # 512 MB
 }
 
@@ -143,9 +146,7 @@ def _build_bundle(
     Le `standby_data_dir` est par défaut le path Debian/Ubuntu (PG 16). Si
     l'admin utilise un layout différent (Docker, RPM...), il adapte.
     """
-    pg_hba = (
-        f"host    replication    {replication_user}    {standby_host}/32    scram-sha-256"
-    )
+    pg_hba = f"host    replication    {replication_user}    {standby_host}/32    scram-sha-256"
 
     pg_basebackup = (
         f"# À exécuter côté STANDBY, en tant que postgres :\n"
@@ -234,9 +235,7 @@ def _row_to_dto(row: asyncpg.Record) -> ReplicationNode:
         application_name=row["application_name"],
         role=row["role"],
         notes=row["notes"],
-        last_seen_at=(
-            row["last_seen_at"].isoformat() if row["last_seen_at"] else None
-        ),
+        last_seen_at=(row["last_seen_at"].isoformat() if row["last_seen_at"] else None),
         last_state=row["last_state"],
         last_lag_bytes=row["last_lag_bytes"],
         created_at=row["created_at"].isoformat(),
@@ -258,11 +257,76 @@ async def list_nodes(
     return [_row_to_dto(r) for r in rows]
 
 
-async def get_node(
-    conn: asyncpg.Connection, node_id: UUID
-) -> ReplicationNode | None:
+async def get_node(conn: asyncpg.Connection, node_id: UUID) -> ReplicationNode | None:
     row = await nodes_repo.get_by_id(conn, node_id)
     return _row_to_dto(row) if row else None
+
+
+async def _create_role_and_insert_node(
+    conn: asyncpg.Connection,
+    *,
+    strategy_id: UUID,
+    label: str,
+    host: str,
+    port: int,
+    role: str,
+    notes: str | None,
+    replication_user: str,
+    application_name: str,
+    password: str,
+    created_by_user_id: UUID | None,
+) -> UUID:
+    """CREATE ROLE + INSERT row dans une seule transaction.
+
+    Le password est échappé pour le littéral SQL (doublement des single quotes).
+    Sur erreur, la transaction est rollback atomiquement (CREATE ROLE + INSERT
+    forment une unité). Les `UniqueViolationError` propagent silencieusement
+    pour que le caller les traduise en exception métier ; toute autre erreur
+    est loggée avec son contexte avant propagation.
+    """
+    async with conn.transaction():
+        safe_password = password.replace("'", "''")
+        await conn.execute(
+            f"CREATE ROLE {replication_user} REPLICATION LOGIN PASSWORD '{safe_password}'"
+        )
+        try:
+            node_id = await nodes_repo.insert(
+                conn,
+                strategy_id=strategy_id,
+                label=label,
+                host=host,
+                port=port,
+                replication_user=replication_user,
+                application_name=application_name,
+                role=role,
+                notes=notes,
+                created_by_user_id=created_by_user_id,
+            )
+        except asyncpg.UniqueViolationError:
+            raise
+        except Exception:
+            logger.warning(
+                "replication_node_insert_failed",
+                replication_user=replication_user,
+                label=label,
+                application_name=application_name,
+                strategy_id=str(strategy_id),
+            )
+            raise
+        # Crée le replication slot physique côté master. pg_basebackup --slot=
+        # côté standby suppose que le slot existe déjà. Le nom du slot = celui
+        # de l'application_name pour pouvoir corréler facilement les rows de
+        # pg_stat_replication / pg_replication_slots à un node Harpocrate.
+        slot_exists = await conn.fetchval(
+            "SELECT 1 FROM pg_replication_slots WHERE slot_name = $1",
+            application_name,
+        )
+        if not slot_exists:
+            await conn.execute(
+                "SELECT pg_create_physical_replication_slot($1)",
+                application_name,
+            )
+        return node_id
 
 
 async def add_node(
@@ -278,50 +342,81 @@ async def add_node(
     master_port: int,
     standby_data_dir: str = "/var/lib/postgresql/16/main",
     created_by_user_id: UUID | None = None,
+    replace_existing: bool = False,
 ) -> tuple[UUID, NodeBundle]:
     """Crée le rôle Postgres + insère le node + retourne le bundle.
 
     Tout est en transaction : si l'INSERT échoue, on DROP le rôle pour ne
-    pas laisser d'orphelin côté master.
+    pas laisser d'orphelin côté master. Si l'INSERT échoue à cause d'un
+    conflit d'unicité sur `label` ou `application_name` :
+      - `replace_existing=False` (défaut) : lève `NodeAlreadyExistsError`
+        avec les détails du node existant.
+      - `replace_existing=True` : supprime l'ancien node (DROP ROLE +
+        DELETE row) puis réessaie l'insert dans une nouvelle transaction.
     """
+    from app.services.pairing import NodeAlreadyExistsError
+
     replication_user = make_replication_user(label)
     application_name = make_application_name(label)
     password = generate_password()
 
-    async with conn.transaction():
-        # 1) CREATE ROLE — pas de quote_ident ici, le user est généré par
-        # `make_replication_user` qui n'utilise que [a-z0-9_] (pas d'injection
-        # possible). Le password est passé en littéral après escape standard.
-        # asyncpg ne paramétrise pas les CREATE ROLE — on écrit en SQL brut
-        # avec un pg_quote_literal-like (doublement des single quotes).
-        safe_password = password.replace("'", "''")
-        await conn.execute(
-            f"CREATE ROLE {replication_user} REPLICATION LOGIN PASSWORD '{safe_password}'"
+    try:
+        node_id = await _create_role_and_insert_node(
+            conn,
+            strategy_id=strategy_id,
+            label=label,
+            host=host,
+            port=port,
+            role=role,
+            notes=notes,
+            replication_user=replication_user,
+            application_name=application_name,
+            password=password,
+            created_by_user_id=created_by_user_id,
         )
-
-        try:
-            node_id = await nodes_repo.insert(
-                conn,
-                strategy_id=strategy_id,
-                label=label,
-                host=host,
-                port=port,
-                replication_user=replication_user,
-                application_name=application_name,
-                role=role,
-                notes=notes,
-                created_by_user_id=created_by_user_id,
-            )
-        except Exception:
-            # Best-effort cleanup : on tente de drop le rôle pour ne pas
-            # laisser d'orphelin si l'INSERT a échoué (typiquement un label
-            # déjà pris). La transaction sera rollback de toute façon, donc
-            # le CREATE ROLE l'est aussi — mais on log au cas où.
+    except asyncpg.UniqueViolationError as exc:
+        existing = await _load_existing_node_details(
+            conn,
+            label=label,
+            application_name=application_name,
+        )
+        if existing is None:
             logger.warning(
-                "replication_node_insert_failed_role_will_be_rolled_back",
+                "replication_node_unique_violation_on_unknown_constraint",
+                label=label,
+                application_name=application_name,
                 replication_user=replication_user,
+                constraint_name=getattr(exc, "constraint_name", None),
             )
             raise
+        if not replace_existing:
+            raise NodeAlreadyExistsError(existing) from exc
+
+        # Remplacement explicite : delete (DROP ROLE + DELETE row) + retry.
+        # La transaction précédente a déjà rollbacké (UniqueViolation la
+        # rollbacke automatiquement) — on ouvre une nouvelle transaction.
+        existing_id = UUID(existing["id"])
+        await delete_node(conn, existing_id)
+        node_id = await _create_role_and_insert_node(
+            conn,
+            strategy_id=strategy_id,
+            label=label,
+            host=host,
+            port=port,
+            role=role,
+            notes=notes,
+            replication_user=replication_user,
+            application_name=application_name,
+            password=password,
+            created_by_user_id=created_by_user_id,
+        )
+        logger.info(
+            "replication_node_replaced",
+            old_node_id=str(existing_id),
+            new_label=label,
+            new_node_id=str(node_id),
+            new_replication_user=replication_user,
+        )
 
     bundle = _build_bundle(
         node_id=node_id,
@@ -343,9 +438,41 @@ async def add_node(
     return node_id, bundle
 
 
-async def delete_node(
-    conn: asyncpg.Connection, node_id: UUID
-) -> bool:
+async def _load_existing_node_details(
+    conn: asyncpg.Connection,
+    *,
+    label: str,
+    application_name: str,
+) -> ExistingNodeInfo | None:
+    """Récupère le node existant qui a déclenché la `UniqueViolationError`.
+
+    Le conflit peut venir de l'index sur `LOWER(label)` ou sur
+    `LOWER(application_name)` — on cherche les deux.
+    """
+    row = await conn.fetchrow(
+        """
+        SELECT id, label, host, application_name, last_state, last_seen_at
+        FROM replication_nodes
+        WHERE LOWER(label) = LOWER($1) OR LOWER(application_name) = LOWER($2)
+        LIMIT 1
+        """,
+        label,
+        application_name,
+    )
+    if row is None:
+        return None
+    last_seen_at = row["last_seen_at"]
+    return {
+        "id": str(row["id"]),
+        "label": row["label"],
+        "host": row["host"],
+        "application_name": row["application_name"],
+        "last_state": row["last_state"],
+        "last_seen_at": last_seen_at.isoformat() if last_seen_at is not None else None,
+    }
+
+
+async def delete_node(conn: asyncpg.Connection, node_id: UUID) -> bool:
     """Supprime un node : DROP ROLE côté master + DELETE row.
 
     Si le DROP ROLE échoue (le rôle est utilisé par une connexion active),
@@ -357,7 +484,29 @@ async def delete_node(
         return False
 
     async with conn.transaction():
-        # On drop d'abord le rôle. Si ça échoue, la transaction rollback
+        # Drop le slot de réplication s'il existe encore. Sans ça, un slot
+        # orphelin reste actif côté master et bloque la création d'un nouveau
+        # slot du même nom lors d'un replace.
+        slot_exists = await conn.fetchval(
+            "SELECT 1 FROM pg_replication_slots WHERE slot_name = $1",
+            node.application_name,
+        )
+        if slot_exists:
+            try:
+                await conn.execute(
+                    "SELECT pg_drop_replication_slot($1)",
+                    node.application_name,
+                )
+            except asyncpg.PostgresError as exc:
+                logger.warning(
+                    "replication_slot_drop_failed",
+                    node_id=str(node_id),
+                    slot_name=node.application_name,
+                    error=str(exc),
+                )
+                raise
+
+        # On drop ensuite le rôle. Si ça échoue, la transaction rollback
         # et la row reste en DB — l'admin peut retry après avoir débranché
         # le standby.
         try:
@@ -408,9 +557,7 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
 
     # Mise à jour des nodes vus.
     for row in pg_stat_rows:
-        node_row = await nodes_repo.get_by_application_name(
-            conn, row["application_name"]
-        )
+        node_row = await nodes_repo.get_by_application_name(conn, row["application_name"])
         if node_row is None:
             continue  # standby physique inconnu de Harpocrate, on ignore
         state = row["state"] if row["state"] in ("streaming", "catchup") else "unknown"
@@ -453,7 +600,10 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
             # On historise quand même pour ne pas avoir de "trou" dans le
             # graph de la page détaillée (lag_bytes=NULL côté disconnected).
             await record_observation(
-                conn, node_id=n["id"], state="disconnected", lag_bytes=None,
+                conn,
+                node_id=n["id"],
+                state="disconnected",
+                lag_bytes=None,
                 observed_at=now,
             )
             continue
@@ -462,7 +612,10 @@ async def refresh_nodes_state(conn: asyncpg.Connection) -> int:
             n["id"],
         )
         await record_observation(
-            conn, node_id=n["id"], state="disconnected", lag_bytes=None,
+            conn,
+            node_id=n["id"],
+            state="disconnected",
+            lag_bytes=None,
             observed_at=now,
         )
         updated += 1
@@ -525,9 +678,7 @@ async def tcp_ping(host: str, port: int, *, timeout: float = 2.0) -> TcpPingResu
     return TcpPingResult(ok=True, latency_ms=round(latency, 2), error=None)
 
 
-async def test_node_connect(
-    conn: asyncpg.Connection, node_id: UUID
-) -> TcpPingResult | None:
+async def test_node_connect(conn: asyncpg.Connection, node_id: UUID) -> TcpPingResult | None:
     """Récupère le node + lance tcp_ping. None si node introuvable."""
     node = await get_node(conn, node_id)
     if node is None:
@@ -649,9 +800,7 @@ async def set_lag_thresholds(
         # On tolère l'inversion mais on remonte une erreur claire — sinon
         # check_lag_threshold ne déclencherait jamais le seuil critical.
         raise ValueError("warning_bytes must be <= critical_bytes")
-    new = LagThresholds(
-        warning_bytes=warning_bytes, critical_bytes=critical_bytes
-    )
+    new = LagThresholds(warning_bytes=warning_bytes, critical_bytes=critical_bytes)
     await meta_repo.set_value(conn, LAG_THRESHOLDS_KEY, new.to_dict())
     logger.info(
         "replication_lag_thresholds_updated",
@@ -745,3 +894,237 @@ async def check_lag_threshold(
         },
     )
     return severity
+
+
+# ─── (it2.5) Postgres info — pour copier la config master vers standby ──────
+
+
+# Liste des paramètres `pg_settings` utiles pour configurer une réplication.
+# Choisi pour matcher exactement ce dont l'admin a besoin pour configurer un
+# standby :
+#   - `version`              : matcher la version PG entre master et standby
+#                              (sinon pg_basebackup refuse)
+#   - `data_directory`       : utile au pg_basebackup côté standby (souvent
+#                              identique des deux côtés)
+#   - `config_file`/`hba_file`: paths absolus côté master, à connaître pour
+#                              modifier pg_hba.conf
+#   - `wal_level`            : doit valoir 'replica' (ou 'logical') sinon le
+#                              standby ne peut pas streamer
+#   - `max_wal_senders`      : doit être >= nombre de standbys + 1 marge
+#   - `max_replication_slots`: idem si on utilise des slots
+#   - `port` / `listen_addresses` : pour construire `primary_conninfo`
+#
+# Tous lus en une seule query via `pg_settings WHERE name = ANY(...)`.
+_PG_SETTINGS_TO_EXPOSE: tuple[str, ...] = (
+    "data_directory",
+    "config_file",
+    "hba_file",
+    "wal_level",
+    "max_wal_senders",
+    "max_replication_slots",
+    "wal_keep_size",
+    "archive_mode",
+    "port",
+    "listen_addresses",
+    "server_version",
+)
+
+
+@dataclass(frozen=True)
+class PostgresInfo:
+    """Snapshot des params Postgres de l'instance courante."""
+
+    settings: dict[str, str]  # name → value (string)
+    version: str  # full version string (SELECT version())
+    server_addr: str | None  # IP côté serveur, NULL si socket UNIX local
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "settings": self.settings,
+            "version": self.version,
+            "server_addr": self.server_addr,
+        }
+
+
+async def get_postgres_info(conn: asyncpg.Connection) -> PostgresInfo:
+    """Lit les paramètres Postgres utiles à la configuration d'un standby.
+
+    Tout est lu en lecture seule. Aucun side-effect.
+    """
+    settings_rows = await conn.fetch(
+        "SELECT name, setting FROM pg_settings WHERE name = ANY($1::text[])",
+        list(_PG_SETTINGS_TO_EXPOSE),
+    )
+    settings = {row["name"]: row["setting"] for row in settings_rows}
+
+    # version() retourne la chaîne complète "PostgreSQL 16.1 on x86_64-...".
+    version = await conn.fetchval("SELECT version()")
+
+    # inet_server_addr() = IP du serveur PG vue depuis cette connexion ;
+    # NULL si on est connecté via socket UNIX local. Utile pour confirmer
+    # à l'admin où PG écoute réellement.
+    server_addr_raw = await conn.fetchval("SELECT inet_server_addr()::text")
+    server_addr = server_addr_raw if server_addr_raw else None
+
+    return PostgresInfo(
+        settings=settings,
+        version=str(version) if version else "",
+        server_addr=server_addr,
+    )
+
+
+# ─── (LOT 3 stub) Hook is_standby_of ─────────────────────────────────────────
+
+
+async def set_standby_of(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    master_url: str | None,
+) -> None:
+    """Marque ou démarque cette instance comme asservie à un master (LOT 3 stub).
+
+    Implémentation complète dans LOT 5. À ce stade : juste set la clé
+    `replication.is_standby_of` dans `system_metadata` (NULL = pas asservi).
+    """
+    await meta_repo.set_value(conn, "replication.is_standby_of", master_url)
+
+
+# ─── Failover MVP — promotion manuelle du standby ────────────────────────────
+
+
+class NotInStandbyModeError(Exception):
+    """Tentative de promote alors que l'instance est déjà primary.
+
+    Soulevé par `promote_standby_to_master` si `pg_is_in_recovery()` retourne
+    `false` au moment de l'appel — la promotion est idempotente, refuser
+    explicitement plutôt que de fausser le state.
+    """
+
+
+class PromotionFailedError(Exception):
+    """`pg_promote()` a été exécuté mais l'instance reste en recovery.
+
+    Peut arriver si le serveur a un problème pour rejouer le WAL final ou si
+    le timeout `wait_seconds` est dépassé. On laisse remonter à l'API pour
+    transformer en 500, mais on n'a pas nettoyé `replication.is_standby_of`
+    (impossible de savoir si la promotion a partiellement réussi).
+    """
+
+
+@dataclass(frozen=True)
+class PromoteEligibility:
+    """Résultat de `get_promote_eligibility` — utilisé par l'UI pour afficher
+    ou non le bouton 'Promouvoir en master'."""
+
+    can_promote: bool
+    current_role: Literal["standby", "master", "standalone"]
+    master_url: str | None
+    reason_if_not: str | None
+
+
+@dataclass(frozen=True)
+class PromoteResult:
+    promoted: bool
+    old_master_url: str | None
+
+
+async def get_promote_eligibility(
+    conn: asyncpg.Connection[asyncpg.Record],
+) -> PromoteEligibility:
+    """Indique si l'instance peut être promue en master.
+
+    Logique :
+      - `pg_is_in_recovery() == true` ET `is_standby_of` set → standby promouvable
+      - `pg_is_in_recovery() == false` ET `is_standby_of` set → déjà master
+      - `pg_is_in_recovery() == false` ET `is_standby_of` NULL → standalone
+    """
+    in_recovery = await conn.fetchval("SELECT pg_is_in_recovery()")
+    master_url = await meta_repo.get_value(conn, "replication.is_standby_of")
+    if in_recovery:
+        return PromoteEligibility(
+            can_promote=True,
+            current_role="standby",
+            master_url=master_url,
+            reason_if_not=None,
+        )
+    if master_url is None:
+        return PromoteEligibility(
+            can_promote=False,
+            current_role="standalone",
+            master_url=None,
+            reason_if_not="no_replication_configured",
+        )
+    return PromoteEligibility(
+        can_promote=False,
+        current_role="master",
+        master_url=master_url,
+        reason_if_not="already_master",
+    )
+
+
+async def promote_standby_to_master(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    actor_user_id: UUID | None,
+    pg_promote_timeout_seconds: int = 60,
+) -> PromoteResult:
+    """Promeut le standby local en master via `pg_promote()`.
+
+    Pré-condition : l'instance DOIT être en mode recovery (sinon
+    NotInStandbyModeError). Post-conditions :
+      - `pg_is_in_recovery()` retourne `false`
+      - `system_metadata.replication.is_standby_of` est `NULL`
+      - audit log écrit (action=`replication.promoted_to_master`)
+
+    Si `pg_promote()` termine mais l'instance reste en recovery,
+    `PromotionFailedError` est levée — `is_standby_of` reste inchangé (on ne
+    sait pas dans quel état partiel on est).
+    """
+    # Import local pour éviter une potentielle dépendance circulaire à l'import.
+    from app.services.audit import audit_log_insert
+
+    in_recovery_before = await conn.fetchval("SELECT pg_is_in_recovery()")
+    if not in_recovery_before:
+        raise NotInStandbyModeError("not_in_recovery")
+
+    old_master_url = await meta_repo.get_value(conn, "replication.is_standby_of")
+
+    # pg_promote(wait=true, wait_seconds=N) bloque jusqu'à fin de promotion
+    # ou timeout. Retourne `true` si la promotion a réussi.
+    await conn.fetchval(
+        "SELECT pg_promote(wait => true, wait_seconds => $1)",
+        pg_promote_timeout_seconds,
+    )
+
+    # Re-check : pg_promote peut retourner true alors que le serveur n'est
+    # pas totalement sorti du recovery (cas rare mais possible).
+    in_recovery_after = await conn.fetchval("SELECT pg_is_in_recovery()")
+    if in_recovery_after:
+        raise PromotionFailedError(
+            "pg_promote completed but instance still in recovery"
+        )
+
+    # Cette instance n'est plus un standby. NULL = pas asservi.
+    await meta_repo.set_value(conn, "replication.is_standby_of", None)
+
+    # Audit best-effort : si la DB hoquette pendant ce call, on continue
+    # (la promotion elle-même a réussi, on ne veut pas la rollback).
+    try:
+        await audit_log_insert(
+            conn,
+            "replication.promoted_to_master",
+            actor_user_id=actor_user_id,
+            metadata={"old_master_url": old_master_url},
+        )
+    except Exception as exc:
+        logger.warning(
+            "promote_audit_log_failed",
+            old_master_url=old_master_url,
+            error=str(exc),
+        )
+
+    logger.info(
+        "replication_promoted_to_master",
+        old_master_url=old_master_url,
+    )
+    return PromoteResult(promoted=True, old_master_url=old_master_url)

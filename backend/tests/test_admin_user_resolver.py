@@ -47,12 +47,16 @@ def _patch_pool(monkeypatch: pytest.MonkeyPatch, conn: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_local_admin_resolves_via_email(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_local_admin_resolves_via_keycloak_sub(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Depuis l'unification : le local-admin est lookupé par keycloak_sub
+    (qui vaut 'local-admin' en DB), comme un user Keycloak normal."""
     from app.services import admin_user_resolver
 
     expected_id = uuid4()
     conn = MagicMock()
-    conn.fetchrow = AsyncMock(return_value={"id": expected_id, "is_system": True})
+    conn.fetchval = AsyncMock(return_value=expected_id)  # get_id_by_keycloak_sub
     _patch_pool(monkeypatch, conn)
 
     resolved = await admin_user_resolver.resolve_admin_user_id(
@@ -65,23 +69,27 @@ async def test_local_admin_resolves_via_email(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
-async def test_local_admin_missing_row_raises_500(monkeypatch: pytest.MonkeyPatch) -> None:
-    from fastapi import HTTPException
-
+async def test_local_admin_missing_row_creates_shell_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Si la row local-admin manque (lifespan bootstrap pas exécuté), on
+    crée un shell à la volée plutôt que de raise 500. Plus résilient."""
     from app.services import admin_user_resolver
 
+    new_id = uuid4()
     conn = MagicMock()
-    conn.fetchrow = AsyncMock(return_value=None)  # row absente
+    # 1er fetchval: get_id_by_keycloak_sub → None
+    # 2e fetchval: insert_system_user → new_id
+    conn.fetchval = AsyncMock(side_effect=[None, new_id])
     _patch_pool(monkeypatch, conn)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await admin_user_resolver.resolve_admin_user_id(
-            keycloak_sub="local-admin",
-            email="admin@harpocrate.local",
-            display_name=None,
-        )
-    assert exc_info.value.status_code == 500
-    assert exc_info.value.detail["error"] == "local_admin_not_provisioned"
+    resolved = await admin_user_resolver.resolve_admin_user_id(
+        keycloak_sub="local-admin",
+        email="admin@harpocrate.local",
+        display_name=None,
+    )
+    assert resolved == new_id
+    assert conn.fetchval.await_count == 2
 
 
 @pytest.mark.asyncio

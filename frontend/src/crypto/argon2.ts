@@ -2,12 +2,12 @@
  * Argon2id KDF wrapper using hash-wasm.
  * hash-wasm is preferred over argon2-browser due to better Vite compatibility.
  */
-import { argon2id } from 'hash-wasm'
+import { argon2id } from "hash-wasm";
 
 export interface KdfParams {
-  memory_kb: number
-  iterations: number
-  parallelism: number
+  memory_kb: number;
+  iterations: number;
+  parallelism: number;
 }
 
 // Default parameters matching backend floors (OVERVIEW.md §3) :
@@ -17,7 +17,7 @@ export const DEFAULT_KDF_PARAMS: KdfParams = {
   memory_kb: 65536,
   iterations: 3,
   parallelism: 4,
-}
+};
 
 /**
  * Derives a 32-byte key from a passphrase and salt using Argon2id.
@@ -35,9 +35,9 @@ export async function deriveKey(
     iterations: params.iterations,
     memorySize: params.memory_kb,
     hashLength: 32,
-    outputType: 'binary',
-  })
-  return result as Uint8Array
+    outputType: "binary",
+  });
+  return result as Uint8Array;
 }
 
 /**
@@ -56,9 +56,9 @@ export async function deriveKeyFromSeed(
     iterations: params.iterations,
     memorySize: params.memory_kb,
     hashLength: 32,
-    outputType: 'binary',
-  })
-  return result as Uint8Array
+    outputType: "binary",
+  });
+  return result as Uint8Array;
 }
 
 /**
@@ -81,7 +81,7 @@ export async function hashAuthSecret(
     iterations: params.iterations,
     memorySize: params.memory_kb,
     hashLength: 32,
-    outputType: 'encoded',
-  })
-  return result as string
+    outputType: "encoded",
+  });
+  return result as string;
 }

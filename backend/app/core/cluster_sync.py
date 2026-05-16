@@ -53,10 +53,16 @@ def _parse_dt(raw: object) -> datetime.datetime | None:
 
 
 class ClusterSync:
-    """Tâche asyncio long-running qui synchronise `cluster_state` avec Postgres."""
+    """Tâche asyncio long-running qui synchronise `cluster_state` avec Postgres.
 
-    def __init__(self, pool: asyncpg.Pool[asyncpg.Record]) -> None:
-        self._pool = pool
+    N'accepte pas de pool en argument : chaque opération récupère le pool actuel
+    via `db_pool.get_pool()`. Garantit que le composant survive à un
+    `db_pool.refresh_pool()` (utilisé après pairing standby pour appliquer le
+    nouveau password Postgres) — capturer un pool au boot le laisserait pointer
+    vers un pool closed.
+    """
+
+    def __init__(self) -> None:
         self._stop_event = asyncio.Event()
         self._tasks: list[asyncio.Task[None]] = []
         self._listen_conn: asyncpg.Connection[asyncpg.Record] | None = None
@@ -93,10 +99,37 @@ class ClusterSync:
     # ─── LISTEN/NOTIFY ────────────────────────────────────────────────────────
 
     async def _listen_loop(self) -> None:
-        """Maintient une connexion dédiée pour LISTEN, reconnecte si déco."""
+        """Maintient une connexion dédiée pour LISTEN, reconnecte si déco.
+
+        Sur un Postgres en mode standby (recovery), `LISTEN` est refusé par
+        le serveur ("cannot execute LISTEN during recovery"). On détecte ce
+        cas via `pg_is_in_recovery()` et on entre en sleep long (60s) en
+        attendant une éventuelle promotion du standby en primaire. Aucun
+        log d'erreur tant qu'on est en standby — état nominal pour ce mode.
+        """
+        standby_mode_logged = False
         while not self._stop_event.is_set():
             try:
-                self._listen_conn = await asyncpg.connect(dsn=settings.db_dsn)
+                # `effective_db_dsn` (et pas `db_dsn`) pour respecter le
+                # password override écrit par le wizard pairing standby.
+                conn = await asyncpg.connect(dsn=settings.effective_db_dsn)
+                in_recovery = await conn.fetchval("SELECT pg_is_in_recovery()")
+                if in_recovery:
+                    # Standby : pas de LISTEN possible. Le refresh périodique
+                    # (SELECT) suffit pour suivre le `cluster_state` répliqué
+                    # via WAL.
+                    await conn.close()
+                    if not standby_mode_logged:
+                        logger.info("cluster_listen_skipped_standby_mode")
+                        standby_mode_logged = True
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(
+                            self._stop_event.wait(),
+                            timeout=60.0,
+                        )
+                    continue
+                standby_mode_logged = False
+                self._listen_conn = conn
                 for channel in _NOTIFY_CHANNELS:
                     await self._listen_conn.add_listener(channel, self._on_notify)
                 logger.info("cluster_listen_connected", channels=list(_NOTIFY_CHANNELS))
@@ -184,7 +217,10 @@ class ClusterSync:
 
     async def _refresh_from_db(self) -> None:
         """Lit l'état partagé en DB et applique sur le `cluster_state`."""
-        async with self._pool.acquire() as conn:
+        from app.db.pool import get_pool
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
             epoch_row = await conn.fetchrow(
                 "SELECT epoch FROM server_session_epoch LIMIT 1"
             )
@@ -239,9 +275,10 @@ class ClusterSync:
 _sync: ClusterSync | None = None
 
 
-def init_cluster_sync(pool: asyncpg.Pool[asyncpg.Record]) -> ClusterSync:
+def init_cluster_sync() -> ClusterSync:
+    """Singleton init — n'accepte plus de pool (chaque op fetch via get_pool())."""
     global _sync
-    _sync = ClusterSync(pool)
+    _sync = ClusterSync()
     return _sync
 
 

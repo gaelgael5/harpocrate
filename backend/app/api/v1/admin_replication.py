@@ -14,6 +14,7 @@ Auth : AdminJwt uniquement.
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field
 from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
 from app.db.repositories import replication_strategies as strat_repo
+from app.db.repositories import system_metadata as meta_repo
 from app.services import replication as svc
 from app.services import streaming_replication as streaming_svc
 
@@ -35,9 +37,11 @@ async def list_strategies(admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await strat_repo.list_strategies(conn)
-    return JSONResponse({
-        "strategies": [svc.row_to_dict(r) for r in rows],
-    })
+    return JSONResponse(
+        {
+            "strategies": [svc.row_to_dict(r) for r in rows],
+        }
+    )
 
 
 @router.post(
@@ -107,9 +111,7 @@ async def list_streaming_nodes(admin: AdminJwt) -> JSONResponse:
     status_code=status.HTTP_201_CREATED,
     response_class=JSONResponse,
 )
-async def add_streaming_node(
-    body: AddNodeRequest, admin: AdminJwt
-) -> JSONResponse:
+async def add_streaming_node(body: AddNodeRequest, admin: AdminJwt) -> JSONResponse:
     """Ajoute un standby et retourne le bundle de config (1 fois — le password
     n'est plus jamais ré-affichable après cette réponse)."""
     pool = await get_pool()
@@ -192,6 +194,23 @@ async def delete_streaming_node(node_id: UUID, admin: AdminJwt) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/streaming/postgres-info", response_class=JSONResponse)
+async def get_postgres_info(admin: AdminJwt) -> JSONResponse:
+    """Expose les paramètres Postgres de l'instance courante (master) :
+    version, paths config/data/hba, wal_level, max_wal_senders, etc.
+
+    Utilisé par l'UI Réplication pour aider l'admin à configurer un standby :
+    il peut lire ces valeurs côté master et copier les bons paramètres dans
+    la config standby (postgresql.conf, primary_conninfo, etc.).
+
+    Lecture seule, aucun side-effect.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        info = await streaming_svc.get_postgres_info(conn)
+    return JSONResponse(info.to_dict())
+
+
 @router.post("/streaming/reload-pg-hba", response_class=JSONResponse)
 async def reload_pg_hba(admin: AdminJwt) -> JSONResponse:
     """À appeler après que l'admin a modifié pg_hba.conf manuellement côté
@@ -206,9 +225,7 @@ async def reload_pg_hba(admin: AdminJwt) -> JSONResponse:
 # ─── (it2) test-connect / observations / lag-thresholds ────────────────────
 
 
-@router.post(
-    "/streaming/nodes/{node_id}/test-connect", response_class=JSONResponse
-)
+@router.post("/streaming/nodes/{node_id}/test-connect", response_class=JSONResponse)
 async def test_node_connect(node_id: UUID, admin: AdminJwt) -> JSONResponse:
     """Ping TCP du standby host:port. Pas d'auth Postgres testée (le
     password de réplication n'est pas stocké côté Harpocrate).
@@ -228,9 +245,7 @@ async def test_node_connect(node_id: UUID, admin: AdminJwt) -> JSONResponse:
     return JSONResponse(result.to_dict())
 
 
-@router.get(
-    "/streaming/nodes/{node_id}/observations", response_class=JSONResponse
-)
+@router.get("/streaming/nodes/{node_id}/observations", response_class=JSONResponse)
 async def list_node_observations(
     node_id: UUID,
     admin: AdminJwt,
@@ -238,14 +253,14 @@ async def list_node_observations(
 ) -> JSONResponse:
     """Historique des observations d'un node sur les `hours` dernières heures
     (max 168 = 7 jours, la rétention de la table)."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     if hours <= 0 or hours > 168:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "hours must be in (0, 168]"},
         )
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(UTC) - timedelta(hours=hours)
     pool = await get_pool()
     async with pool.acquire() as conn:
         node = await streaming_svc.get_node(conn, node_id)
@@ -254,9 +269,7 @@ async def list_node_observations(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "node_not_found"},
             )
-        rows = await streaming_svc.list_observations(
-            conn, node_id=node_id, since=since
-        )
+        rows = await streaming_svc.list_observations(conn, node_id=node_id, since=since)
     return JSONResponse(
         {
             "node": node.to_dict(),
@@ -286,9 +299,7 @@ async def get_lag_thresholds(admin: AdminJwt) -> JSONResponse:
 
 
 @router.patch("/streaming/lag-thresholds", response_class=JSONResponse)
-async def set_lag_thresholds(
-    body: LagThresholdsBody, admin: AdminJwt
-) -> JSONResponse:
+async def set_lag_thresholds(body: LagThresholdsBody, admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
     async with pool.acquire() as conn:
         try:
@@ -305,6 +316,131 @@ async def set_lag_thresholds(
     return JSONResponse(new.to_dict())
 
 
+@router.get("/self-info", response_class=JSONResponse)
+async def get_self_info(admin: AdminJwt) -> JSONResponse:
+    """Retourne les infos publiques à transmettre au pair lors d'un appairage :
+    URL publique du backend Harpocrate, hostname extrait, port Postgres annoncé.
+    """
+    from urllib.parse import urlparse
+
+    from app.core.config import settings
+
+    public_url = settings.public_url
+    hostname = urlparse(public_url).hostname or ""
+    return JSONResponse(
+        {
+            "public_url": public_url,
+            "advertised_pg_host": hostname,
+            "advertised_pg_port": settings.replication_advertised_pg_port,
+        }
+    )
+
+
+@router.get("/standby-of", response_class=JSONResponse)
+async def get_standby_of(admin: AdminJwt) -> JSONResponse:
+    """Retourne l'URL du master si cette instance est asservie, sinon None."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        value = await meta_repo.get_value(conn, "replication.is_standby_of")
+    return JSONResponse({"is_standby_of": value})
+
+
+# ─── Failover MVP — promotion manuelle du standby ────────────────────────────
+
+
+class CanPromoteResponse(BaseModel):
+    """Lecture : indique si cette instance peut être promue en master."""
+
+    can_promote: bool
+    current_role: str  # "standby" | "master" | "standalone"
+    master_url: str | None = None
+    reason_if_not: str | None = None
+
+
+class PromoteRequest(BaseModel):
+    """Body POST /promote — exige les 2 confirmations admin.
+
+    Double check-box anti-erreur (split-brain) : l'admin DOIT confirmer
+    explicitement qu'il a coupé l'ancien master ET qu'il reconfigurera les
+    clients vers ce nouveau master.
+    """
+
+    confirm_master_down: bool = Field(
+        ..., description="L'admin confirme que l'ancien master est arrêté."
+    )
+    confirm_clients_will_be_reconfigured: bool = Field(
+        ...,
+        description="L'admin confirme qu'il reconfigurera les clients après promotion.",
+    )
+
+
+class PromoteResponse(BaseModel):
+    promoted: bool
+    old_master_url: str | None = None
+
+
+@router.get("/can-promote", response_model=CanPromoteResponse)
+async def can_promote_endpoint(admin: AdminJwt) -> CanPromoteResponse:
+    """Indique si cette instance est promouvable (standby en recovery).
+
+    Utilisé par l'UI pour afficher/masquer le bouton 'Promouvoir en master'.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        elig = await streaming_svc.get_promote_eligibility(conn)
+    return CanPromoteResponse(
+        can_promote=elig.can_promote,
+        current_role=elig.current_role,
+        master_url=elig.master_url,
+        reason_if_not=elig.reason_if_not,
+    )
+
+
+@router.post(
+    "/promote",
+    response_model=PromoteResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def promote_endpoint(
+    req: PromoteRequest,
+    admin: AdminJwt,
+) -> PromoteResponse:
+    """Promeut le standby local en master via pg_promote().
+
+    Exige les 2 confirmations admin (`confirm_master_down` +
+    `confirm_clients_will_be_reconfigured`). Si l'une des deux est False
+    → 400 `missing_confirmation`. Si l'instance n'est pas en mode standby
+    → 409 `not_in_standby_mode`. Si pg_promote échoue à sortir du recovery
+    → 500 `promotion_failed`.
+    """
+    if not (req.confirm_master_down and req.confirm_clients_will_be_reconfigured):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "missing_confirmation"},
+        )
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        try:
+            result = await streaming_svc.promote_standby_to_master(
+                conn,
+                actor_user_id=admin.user_id,
+            )
+        except streaming_svc.NotInStandbyModeError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": "not_in_standby_mode"},
+            ) from None
+        except streaming_svc.PromotionFailedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"error": "promotion_failed", "cause": str(e)},
+            ) from e
+    return PromoteResponse(
+        promoted=result.promoted,
+        old_master_url=result.old_master_url,
+    )
+
+
 @router.get("/status", response_class=JSONResponse)
 async def replication_status(admin: AdminJwt) -> JSONResponse:
     pool = await get_pool()
@@ -315,7 +451,9 @@ async def replication_status(admin: AdminJwt) -> JSONResponse:
 
     row, strategy = active
     live_status = await strategy.get_status()
-    return JSONResponse({
-        "strategy": svc.row_to_dict(row),
-        "live": live_status,
-    })
+    return JSONResponse(
+        {
+            "strategy": svc.row_to_dict(row),
+            "live": live_status,
+        }
+    )

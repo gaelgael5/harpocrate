@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.models.api.auth_local import AuthModesResponse, LocalLoginRequest, LocalLoginResponse
+from app.services.local_admin_bootstrap import LOCAL_ADMIN_KEYCLOAK_SUB
 
 log = structlog.get_logger(__name__)
 
@@ -30,7 +31,7 @@ def _build_local_jwt() -> str:
     hmac_key = base64.b64decode(settings.hmac_key)
     now = int(time.time())
     payload = {
-        "sub": "local-admin",
+        "sub": LOCAL_ADMIN_KEYCLOAK_SUB,
         "email": settings.admin_local_email,
         "name": settings.admin_local_display_name,
         "iss": _LOCAL_ISSUER,
@@ -62,7 +63,7 @@ async def get_auth_modes() -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content=AuthModesResponse(
-            oidc=True,
+            oidc=settings.keycloak_configured,
             local_login=settings.admin_local_enabled,
             dev_mode=settings.dev_mode,
             dev_mode_label=settings.dev_mode_label,

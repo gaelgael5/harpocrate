@@ -8,8 +8,8 @@
  * 4. POST /v1/me/bootstrap with encrypted blobs
  * 5. Store crypto state in RAM, redirect to /
  */
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Center,
   Stack,
@@ -19,61 +19,63 @@ import {
   Alert,
   PasswordInput,
   Box,
-} from '@mantine/core'
-import { notifications } from '@mantine/notifications'
-import { useTranslation } from 'react-i18next'
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useTranslation } from "react-i18next";
 
-import { api, ApiError } from '@/lib/api-client'
-import { getUserManager } from '@/lib/oidc'
-import { deriveKey, DEFAULT_KDF_PARAMS } from '@/crypto/argon2'
-import { aesGcmEncrypt } from '@/crypto/aes-gcm'
-import { generateRsaKeypair } from '@/crypto/rsa-oaep'
-import { encodeBip39 } from '@/crypto/bip39'
-import { toBase64, randomBytes } from '@/crypto/helpers'
-import { useCryptoStore } from '@/stores/crypto'
-import { useSessionStore } from '@/stores/session'
-import { BootstrapResponseSchema, MeResponseSchema } from '@/schemas/auth'
-import { RecoveryPhraseDisplay } from '@/components/RecoveryPhraseDisplay'
+import { api, ApiError } from "@/lib/api-client";
+import { getUserManager } from "@/lib/oidc";
+import { deriveKey, DEFAULT_KDF_PARAMS } from "@/crypto/argon2";
+import { aesGcmEncrypt } from "@/crypto/aes-gcm";
+import { generateRsaKeypair } from "@/crypto/rsa-oaep";
+import { encodeBip39 } from "@/crypto/bip39";
+import { toBase64, randomBytes } from "@/crypto/helpers";
+import { useCryptoStore } from "@/stores/crypto";
+import { useSessionStore } from "@/stores/session";
+import { BootstrapResponseSchema, MeResponseSchema } from "@/schemas/auth";
+import { RecoveryPhraseDisplay } from "@/components/RecoveryPhraseDisplay";
 
 export function FirstLoginPage() {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const setUnlocked = useCryptoStore((s) => s.setUnlocked)
-  const setUser = useSessionStore((s) => s.setUser)
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const setUnlocked = useCryptoStore((s) => s.setUnlocked);
+  const setUser = useSessionStore((s) => s.setUser);
 
   // Guard : si pas de session (ni OIDC ni local-admin), retour /login.
   // Sinon le bootstrap call serait fait sans Authorization header → 401 cryptique.
   useEffect(() => {
     void (async () => {
-      const hasLocalToken = !!useSessionStore.getState().localAdminToken
-      const hasUser = !!useSessionStore.getState().user
-      let hasOidcSession = false
+      const hasLocalToken = !!useSessionStore.getState().localAdminToken;
+      const hasUser = !!useSessionStore.getState().user;
+      let hasOidcSession = false;
       try {
-        const oidcUser = await getUserManager().getUser()
-        hasOidcSession = !!oidcUser?.access_token && !oidcUser.expired
-      } catch { /* OIDC pas initialisé */ }
+        const oidcUser = await getUserManager().getUser();
+        hasOidcSession = !!oidcUser?.access_token && !oidcUser.expired;
+      } catch {
+        /* OIDC pas initialisé */
+      }
       if (!hasLocalToken && !hasUser && !hasOidcSession) {
         notifications.show({
-          color: 'orange',
-          title: t('firstLogin.error'),
-          message: t('firstLogin.no_session'),
-        })
-        navigate('/login', { replace: true })
+          color: "orange",
+          title: t("firstLogin.error"),
+          message: t("firstLogin.no_session"),
+        });
+        navigate("/login", { replace: true });
       }
-    })()
-  }, [navigate, t])
+    })();
+  }, [navigate, t]);
 
-  const [step, setStep] = useState(0)
-  const [passphrase, setPassphrase] = useState('')
-  const [passphraseConfirm, setPassphraseConfirm] = useState('')
-  const [passphraseError, setPassphraseError] = useState<string | null>(null)
+  const [step, setStep] = useState(0);
+  const [passphrase, setPassphrase] = useState("");
+  const [passphraseConfirm, setPassphraseConfirm] = useState("");
+  const [passphraseError, setPassphraseError] = useState<string | null>(null);
 
   // Recovery phrase state
-  const [recoveryWords, setRecoveryWords] = useState<string[]>([])
-  const [recoveryConfirmed, setRecoveryConfirmed] = useState(false)
+  const [recoveryWords, setRecoveryWords] = useState<string[]>([]);
+  const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
 
-  const [isWorking, setIsWorking] = useState(false)
-  const [statusMsg, setStatusMsg] = useState('')
+  const [isWorking, setIsWorking] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
 
   // Persisted crypto material between steps (NOT stored to any storage)
   const cryptoRef = {
@@ -82,7 +84,7 @@ export function FirstLoginPage() {
     symKey: null as Uint8Array | null,
     saltPassphrase: null as Uint8Array | null,
     saltRecovery: null as Uint8Array | null,
-  }
+  };
 
   // Use a closure ref to persist across re-renders without React state
   const [cryptoMaterial] = useState(() => ({
@@ -92,59 +94,59 @@ export function FirstLoginPage() {
     saltPassphrase: null as Uint8Array | null,
     saltRecovery: null as Uint8Array | null,
     recoverySeed: null as Uint8Array | null,
-  }))
-  void cryptoRef
+  }));
+  void cryptoRef;
 
   function validatePassphrase(): boolean {
     if (passphrase.length < 12) {
-      setPassphraseError(t('auth.passphraseTooShort'))
-      return false
+      setPassphraseError(t("auth.passphraseTooShort"));
+      return false;
     }
     if (passphrase !== passphraseConfirm) {
-      setPassphraseError(t('auth.passphrasesMustMatch'))
-      return false
+      setPassphraseError(t("auth.passphrasesMustMatch"));
+      return false;
     }
-    setPassphraseError(null)
-    return true
+    setPassphraseError(null);
+    return true;
   }
 
   async function generateCryptoMaterial() {
-    if (!validatePassphrase()) return
+    if (!validatePassphrase()) return;
 
-    setIsWorking(true)
-    setStatusMsg(t('firstLogin.generating'))
+    setIsWorking(true);
+    setStatusMsg(t("firstLogin.generating"));
     try {
       // 1. Generate RSA keypair
-      const { publicKey, privateKey } = await generateRsaKeypair(2048)
-      cryptoMaterial.rsaPub = publicKey
-      cryptoMaterial.rsaPriv = privateKey
+      const { publicKey, privateKey } = await generateRsaKeypair(2048);
+      cryptoMaterial.rsaPub = publicKey;
+      cryptoMaterial.rsaPriv = privateKey;
 
       // 2. Generate sym_key (32 random bytes)
-      cryptoMaterial.symKey = randomBytes(32)
+      cryptoMaterial.symKey = randomBytes(32);
 
       // 3. Generate salts
-      cryptoMaterial.saltPassphrase = randomBytes(16)
-      cryptoMaterial.saltRecovery = randomBytes(16)
+      cryptoMaterial.saltPassphrase = randomBytes(16);
+      cryptoMaterial.saltRecovery = randomBytes(16);
 
       // 4. Generate recovery seed (32 bytes) and encode as BIP-39
-      cryptoMaterial.recoverySeed = randomBytes(32)
-      const words = await encodeBip39(cryptoMaterial.recoverySeed)
-      setRecoveryWords(words)
+      cryptoMaterial.recoverySeed = randomBytes(32);
+      const words = await encodeBip39(cryptoMaterial.recoverySeed);
+      setRecoveryWords(words);
 
-      setStep(1)
+      setStep(1);
     } catch (err) {
       notifications.show({
-        color: 'red',
-        title: t('firstLogin.error'),
+        color: "red",
+        title: t("firstLogin.error"),
         message: String(err),
-      })
+      });
     } finally {
-      setIsWorking(false)
+      setIsWorking(false);
     }
   }
 
   async function submitBootstrap() {
-    if (!recoveryConfirmed) return
+    if (!recoveryConfirmed) return;
     if (
       !cryptoMaterial.rsaPriv ||
       !cryptoMaterial.rsaPub ||
@@ -153,47 +155,41 @@ export function FirstLoginPage() {
       !cryptoMaterial.saltRecovery ||
       !cryptoMaterial.recoverySeed
     ) {
-      return
+      return;
     }
 
-    setIsWorking(true)
-    setStatusMsg(t('firstLogin.bootstrapping'))
+    setIsWorking(true);
+    setStatusMsg(t("firstLogin.bootstrapping"));
 
     try {
-      const kdfParams = DEFAULT_KDF_PARAMS
+      const kdfParams = DEFAULT_KDF_PARAMS;
 
       // Derive pass_key
       const passKey = await deriveKey(
         passphrase,
         cryptoMaterial.saltPassphrase,
         kdfParams,
-      )
+      );
 
       // Derive recovery_key from seed bytes
-      const { deriveKeyFromSeed } = await import('@/crypto/argon2')
+      const { deriveKeyFromSeed } = await import("@/crypto/argon2");
       const recoveryKey = await deriveKeyFromSeed(
         cryptoMaterial.recoverySeed,
         cryptoMaterial.saltRecovery,
         kdfParams,
-      )
+      );
 
       // Encrypt rsa_priv with pass_key
-      const encRsaPriv = await aesGcmEncrypt(
-        cryptoMaterial.rsaPriv,
-        passKey,
-      )
+      const encRsaPriv = await aesGcmEncrypt(cryptoMaterial.rsaPriv, passKey);
 
       // Encrypt sym_key with pass_key
-      const encSymByPass = await aesGcmEncrypt(
-        cryptoMaterial.symKey,
-        passKey,
-      )
+      const encSymByPass = await aesGcmEncrypt(cryptoMaterial.symKey, passKey);
 
       // Encrypt sym_key with recovery_key
       const encSymByRecovery = await aesGcmEncrypt(
         cryptoMaterial.symKey,
         recoveryKey,
-      )
+      );
 
       // LOT_57 fix : Encrypt rsa_priv with recovery_key — indispensable
       // pour rendre le flow recovery zero-knowledge fonctionnel. Sans cette
@@ -202,7 +198,7 @@ export function FirstLoginPage() {
       const encRsaPrivByRecovery = await aesGcmEncrypt(
         cryptoMaterial.rsaPriv,
         recoveryKey,
-      )
+      );
 
       // POST bootstrap
       const body = {
@@ -217,14 +213,14 @@ export function FirstLoginPage() {
         kdf_iterations: kdfParams.iterations,
         kdf_parallelism: kdfParams.parallelism,
         rsa_key_size: 2048,
-      }
+      };
 
-      const resp = await api.post<unknown>('/me/bootstrap', body)
-      BootstrapResponseSchema.parse(resp)
+      const resp = await api.post<unknown>("/me/bootstrap", body);
+      BootstrapResponseSchema.parse(resp);
 
       // Fetch user info
-      const me = await api.get<unknown>('/me')
-      const meData = MeResponseSchema.parse(me)
+      const me = await api.get<unknown>("/me");
+      const meData = MeResponseSchema.parse(me);
       setUser({
         id: meData.id,
         keycloak_sub: meData.keycloak_sub,
@@ -233,44 +229,55 @@ export function FirstLoginPage() {
         has_bootstrap: true,
         rsa_key_size: meData.rsa_key_size,
         kdf_params: meData.kdf_params,
-      })
+      });
 
       // Store in RAM
       setUnlocked(
         cryptoMaterial.rsaPriv,
         cryptoMaterial.symKey,
         cryptoMaterial.rsaPub,
-      )
+      );
 
       notifications.show({
-        color: 'green',
-        message: t('firstLogin.success'),
-      })
+        color: "green",
+        message: t("firstLogin.success"),
+      });
 
-      navigate('/', { replace: true })
+      navigate("/", { replace: true });
     } catch (err) {
-      let msg = String(err)
-      if (err instanceof ApiError) msg = err.message
+      let msg = String(err);
+      if (err instanceof ApiError) msg = err.message;
       notifications.show({
-        color: 'red',
-        title: t('firstLogin.error'),
+        color: "red",
+        title: t("firstLogin.error"),
         message: msg,
-      })
+      });
     } finally {
-      setIsWorking(false)
+      setIsWorking(false);
     }
   }
 
   return (
-    <Center mih="100vh" py="xl" style={{ background: 'var(--mantine-color-body)' }}>
+    <Center
+      mih="100vh"
+      py="xl"
+      style={{ background: "var(--mantine-color-body)" }}
+    >
       <Stack w={600} gap="xl">
         <Stack align="center" gap="xs">
           <Box
             style={{
-              width: 40, height: 40, background: '#1e40af', borderRadius: 8,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem',
-              color: '#fff', letterSpacing: '-0.04em',
+              width: 40,
+              height: 40,
+              background: "#1e40af",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: "0.75rem",
+              color: "#fff",
+              letterSpacing: "-0.04em",
             }}
           >
             Hp
@@ -278,27 +285,31 @@ export function FirstLoginPage() {
           <Text
             style={{
               fontFamily: "'Cormorant Garamond', Georgia, serif",
-              fontSize: '1.6rem', fontWeight: 400, color: '#0a0a0a',
+              fontSize: "1.6rem",
+              fontWeight: 400,
+              color: "#0a0a0a",
             }}
           >
-            {t('firstLogin.title')}
+            {t("firstLogin.title")}
           </Text>
-          <Text c="dimmed" size="sm">{t('firstLogin.subtitle')}</Text>
+          <Text c="dimmed" size="sm">
+            {t("firstLogin.subtitle")}
+          </Text>
         </Stack>
 
         <Stepper active={step} allowNextStepsSelect={false}>
-          <Stepper.Step label={t('firstLogin.step1')}>
+          <Stepper.Step label={t("firstLogin.step1")}>
             <Stack mt="md" gap="md">
               <PasswordInput
-                label={t('firstLogin.passphraseLabel')}
-                description={t('auth.passphraseHint')}
+                label={t("firstLogin.passphraseLabel")}
+                description={t("auth.passphraseHint")}
                 value={passphrase}
                 onChange={(e) => setPassphrase(e.currentTarget.value)}
                 autoComplete="new-password"
                 required
               />
               <PasswordInput
-                label={t('firstLogin.passphraseConfirmLabel')}
+                label={t("firstLogin.passphraseConfirmLabel")}
                 value={passphraseConfirm}
                 onChange={(e) => setPassphraseConfirm(e.currentTarget.value)}
                 autoComplete="new-password"
@@ -311,12 +322,12 @@ export function FirstLoginPage() {
                 // loading
                 disabled={!passphrase || !passphraseConfirm}
               >
-                {t('common.confirm')}
+                {t("common.confirm")}
               </Button>
             </Stack>
           </Stepper.Step>
 
-          <Stepper.Step label={t('firstLogin.step2')}>
+          <Stepper.Step label={t("firstLogin.step2")}>
             <Stack mt="md" gap="md">
               {recoveryWords.length > 0 && (
                 <RecoveryPhraseDisplay
@@ -332,16 +343,18 @@ export function FirstLoginPage() {
                 // loading
                 disabled={!recoveryConfirmed}
               >
-                {t('common.confirm')}
+                {t("common.confirm")}
               </Button>
             </Stack>
           </Stepper.Step>
         </Stepper>
 
         {isWorking && statusMsg && (
-          <Alert color="brand" variant="light">{statusMsg}</Alert>
+          <Alert color="brand" variant="light">
+            {statusMsg}
+          </Alert>
         )}
       </Stack>
     </Center>
-  )
+  );
 }

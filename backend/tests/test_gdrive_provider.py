@@ -149,3 +149,70 @@ async def test_test_connection_http_error_raises(_mock_gdrive_client) -> None:
     )
     with pytest.raises(RemoteBackupProviderError, match="drive_api_error"):
         await p.test_connection("/ignored")
+
+
+# ── upload_stream ────────────────────────────────────────────────────────────
+
+
+async def _async_chunks(*chunks: bytes):
+    for c in chunks:
+        yield c
+
+
+@pytest.mark.asyncio
+async def test_upload_stream_writes_chunks_and_returns_size(_mock_gdrive_client) -> None:
+    drive = _mock_gdrive_client.build_drive_service.return_value
+    drive.files.return_value.create.return_value.execute.return_value = {"id": "uploaded-file-id"}
+
+    p = GoogleDriveProvider(
+        config={"client_id": "id", "folder_name": "Backups", "folder_id": "F"},
+        credentials={"client_secret": "s", "refresh_token": "r"},
+    )
+    total = await p.upload_stream(
+        "/ignored",
+        "snapshot-2026-05-16.tar.age",
+        _async_chunks(b"hello ", b"world"),
+    )
+    assert total == 11  # b"hello world"
+    drive.files.return_value.create.assert_called_once()
+    kwargs = drive.files.return_value.create.call_args.kwargs
+    assert kwargs["body"]["name"] == "snapshot-2026-05-16.tar.age"
+    assert kwargs["body"]["parents"] == ["F"]
+
+
+@pytest.mark.asyncio
+async def test_upload_stream_quota_exceeded(_mock_gdrive_client) -> None:
+    from googleapiclient.errors import HttpError
+
+    drive = _mock_gdrive_client.build_drive_service.return_value
+    fake_resp = MagicMock(status=403, reason="Forbidden")
+    drive.files.return_value.create.return_value.execute.side_effect = HttpError(
+        resp=fake_resp, content=b'{"error":{"errors":[{"reason":"storageQuotaExceeded"}]}}'
+    )
+
+    p = GoogleDriveProvider(
+        config={"client_id": "id", "folder_name": "Backups", "folder_id": "F"},
+        credentials={"client_secret": "s", "refresh_token": "r"},
+    )
+    with pytest.raises(RemoteBackupProviderError, match="drive_storage_full|drive_api_error"):
+        await p.upload_stream("/", "x.bin", _async_chunks(b"x"))
+
+
+@pytest.mark.asyncio
+async def test_upload_stream_rejects_path_separators() -> None:
+    p = GoogleDriveProvider(
+        config={"client_id": "id", "folder_name": "Backups", "folder_id": "F"},
+        credentials={"client_secret": "s", "refresh_token": "r"},
+    )
+    with pytest.raises(ValueError, match="path separators"):
+        await p.upload_stream("/", "a/b.bin", _async_chunks(b"x"))
+
+
+@pytest.mark.asyncio
+async def test_upload_stream_requires_folder_id(_mock_gdrive_client) -> None:
+    p = GoogleDriveProvider(
+        config={"client_id": "id", "folder_name": "Backups"},  # pas de folder_id
+        credentials={"client_secret": "s", "refresh_token": "r"},
+    )
+    with pytest.raises(RemoteBackupProviderError, match="folder_id_missing"):
+        await p.upload_stream("/", "x.bin", _async_chunks(b"x"))

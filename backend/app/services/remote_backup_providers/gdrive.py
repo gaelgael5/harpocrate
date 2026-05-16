@@ -25,8 +25,11 @@ credentials = {
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import tempfile
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from app.services.remote_backup_providers import gdrive_client
@@ -137,4 +140,73 @@ class GoogleDriveProvider:
     async def upload_stream(
         self, path: str, remote_filename: str, source: AsyncIterator[bytes]
     ) -> int:
-        raise NotImplementedError  # implémenté en incrément 3
+        if "/" in remote_filename or "\\" in remote_filename:
+            raise ValueError("remote_filename must not contain path separators")
+        if not self._folder_id:
+            raise RemoteBackupProviderError(
+                "folder_id_missing: run test_connection first to discover/create the target folder"
+            )
+
+        # Buffer le AsyncIterator vers un fichier temp local (resumable upload sync
+        # requiert un objet seekable). Le tmp est nettoyé en finally.
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".gdrive-upload")
+        tmp_path = Path(tmp.name)
+        bytes_written = 0
+        try:
+            try:
+                async for chunk in source:
+                    tmp.write(chunk)
+                    bytes_written += len(chunk)
+            finally:
+                tmp.close()
+            await asyncio.to_thread(self._upload_sync, tmp_path, remote_filename)
+        finally:
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
+        return bytes_written
+
+    def _upload_sync(self, tmp_path: Path, remote_filename: str) -> str:
+        from googleapiclient.errors import HttpError
+        from googleapiclient.http import MediaFileUpload
+
+        creds = gdrive_client.build_credentials(
+            client_id=self._client_id,
+            client_secret=self._client_secret,
+            refresh_token=self._refresh_token,
+            token_uri=self._token_uri,
+            scope=self._scope,
+        )
+        try:
+            gdrive_client.refresh(creds)
+        except Exception as exc:
+            if exc.__class__.__name__ == "RefreshError":
+                raise RemoteBackupProviderError(f"credentials_revoked: {exc}") from exc
+            raise
+
+        drive = gdrive_client.build_drive_service(creds)
+        media = MediaFileUpload(
+            str(tmp_path),
+            chunksize=_CHUNK_SIZE,
+            resumable=True,
+            mimetype="application/octet-stream",
+        )
+        try:
+            created = (
+                drive.files()
+                .create(
+                    body={"name": remote_filename, "parents": [self._folder_id]},
+                    media_body=media,
+                    fields="id",
+                )
+                .execute()
+            )
+        except HttpError as exc:
+            content = (exc.content or b"").decode("utf-8", errors="replace")
+            if "storageQuotaExceeded" in content:
+                raise RemoteBackupProviderError(f"drive_storage_full: {content}") from exc
+            if "userRateLimitExceeded" in content:
+                raise RemoteBackupProviderError(f"drive_quota_exceeded: {content}") from exc
+            raise RemoteBackupProviderError(f"drive_api_error: {exc}") from exc
+        except Exception as exc:
+            raise RemoteBackupProviderError(f"drive_api_error: {exc}") from exc
+        return str(created["id"])

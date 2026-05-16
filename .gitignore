@@ -154,6 +154,8 @@ activemq-data/
 
 # Environments
 .env
+.env.test
+.env.local
 .envrc
 
 # Données runtime (volumes Docker bind-mountés)

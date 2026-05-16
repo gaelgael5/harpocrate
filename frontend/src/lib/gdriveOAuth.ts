@@ -7,6 +7,7 @@
 import {
   startGDriveOAuth,
   fetchGDriveOAuthSession,
+  reauthorizeGDriveConnection,
   type StartGDriveOAuthPayload,
 } from "./adminApi";
 
@@ -63,23 +64,48 @@ const POPUP_POLL_MS = 400;
 export async function runGDriveOAuthFlow(
   params: StartGDriveOAuthPayload,
 ): Promise<{ state: string; user_email: string }> {
-  const { auth_url, state } = await startGDriveOAuth(params);
+  const start = await startGDriveOAuth(params);
+  return _runFlowFromStart(start);
+}
 
-  const popup = window.open(auth_url, "gdrive_oauth", POPUP_FEATURES);
+/**
+ * Re-autorise une connexion Google Drive existante.
+ * Lance un nouveau flux OAuth popup pour la connexion identifiée par `connectionId`.
+ *
+ * @throws {PopupBlockedError} Si la popup est bloquée par le navigateur
+ * @throws {OAuthAbortedError} Si l'utilisateur ferme la popup sans autoriser
+ * @throws {OAuthError} Si l'autorisation échoue (accès refusé, erreur serveur…)
+ */
+export async function runGDriveReauthorize(
+  connectionId: string,
+): Promise<{ state: string; user_email: string }> {
+  const start = await reauthorizeGDriveConnection(connectionId);
+  return _runFlowFromStart(start);
+}
+
+// ── Interne — flux commun ──────────────────────────────────────────────────────
+
+/**
+ * Exécute la partie commune aux deux flux OAuth :
+ * ouvre la popup, attend le postMessage, vérifie la session.
+ */
+async function _runFlowFromStart(start: {
+  auth_url: string;
+  state: string;
+}): Promise<{ state: string; user_email: string }> {
+  const popup = window.open(start.auth_url, "gdrive_oauth", POPUP_FEATURES);
   if (!popup) throw new PopupBlockedError();
 
-  const message = await waitForOAuthMessage(state, popup);
+  const message = await waitForOAuthMessage(start.state, popup);
   if (!message.ok) throw new OAuthError(message.error ?? "oauth_failed");
 
-  const session = await fetchGDriveOAuthSession(state);
+  const session = await fetchGDriveOAuthSession(start.state);
   if (session.status !== "authorized" || !session.result?.user_email) {
     throw new OAuthError(session.result?.error ?? "session_not_authorized");
   }
 
-  return { state, user_email: session.result.user_email };
+  return { state: start.state, user_email: session.result.user_email };
 }
-
-// ── Interne ───────────────────────────────────────────────────────────────────
 
 /**
  * Attend le postMessage du callback OAuth ou le fermeture de la popup.

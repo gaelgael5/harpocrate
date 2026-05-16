@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as adminApi from "./adminApi";
 import {
   runGDriveOAuthFlow,
+  runGDriveReauthorize,
   PopupBlockedError,
   OAuthAbortedError,
   OAuthError,
@@ -170,5 +171,47 @@ describe("runGDriveOAuthFlow", () => {
 
     await vi.advanceTimersByTimeAsync(2000);
     await assertion;
+  });
+});
+
+describe("runGDriveReauthorize", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("appelle reauthorizeGDriveConnection puis le flow popup", async () => {
+    const popup = fakePopup();
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    vi.spyOn(adminApi, "reauthorizeGDriveConnection").mockResolvedValue({
+      auth_url: "https://accounts.google.com/...",
+      state: "REAUTH-X",
+    });
+    vi.spyOn(adminApi, "fetchGDriveOAuthSession").mockResolvedValue({
+      status: "authorized",
+      result: { user_email: "r@x.y" },
+    });
+
+    const flow = runGDriveReauthorize("conn-id-1");
+
+    setTimeout(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "gdrive_oauth_done", state: "REAUTH-X", ok: true },
+          origin: window.location.origin,
+        }),
+      );
+    }, 10);
+
+    await vi.advanceTimersByTimeAsync(20);
+    const result = await flow;
+    expect(result.user_email).toBe("r@x.y");
+    expect(adminApi.reauthorizeGDriveConnection).toHaveBeenCalledWith(
+      "conn-id-1",
+    );
   });
 });

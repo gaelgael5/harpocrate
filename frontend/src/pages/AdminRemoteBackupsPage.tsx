@@ -51,6 +51,13 @@ import {
 } from "@/lib/adminApi";
 import { ApiError } from "@/lib/api-client";
 import type { RemoteBackupConnection } from "@/schemas/admin";
+import { GDriveFields, type GDriveWizardState } from "@/components/GDriveFields";
+import {
+  runGDriveReauthorize,
+  PopupBlockedError,
+  OAuthAbortedError,
+  OAuthError,
+} from "@/lib/gdriveOAuth";
 
 // ─── Form values pour le modal create/edit ────────────────────────────────────
 
@@ -86,6 +93,10 @@ interface FormValues {
   s3_path_style: boolean;
   s3_access_key_id: string;
   s3_secret_access_key: string;
+  // GDrive only
+  oauth_state?: string;
+  gdrive_user_email?: string;
+  gdrive_folder_name?: string;
 }
 
 const DEFAULT_FORM: FormValues = {
@@ -270,6 +281,15 @@ function buildS3Config(values: FormValues): Record<string, unknown> {
 
 function buildPayload(values: FormValues, isEditing: boolean): FormPayload {
   const name = values.name.trim();
+  if (values.kind === "gdrive") {
+    return {
+      name,
+      kind: "gdrive",
+      config: {},
+      credentials: {},
+      oauth_state: values.oauth_state,
+    };
+  }
   if (values.kind === "sftp") {
     const config = buildSftpFtpsConfig(values);
     const secretField =
@@ -524,16 +544,68 @@ export function AdminRemoteBackupsPage() {
                     <Badge variant="light">{c.kind}</Badge>
                   </Table.Td>
                   <Table.Td>
-                    <Text size="sm" ff="monospace">
-                      {String(c.config.host ?? "")}:
-                      {String(c.config.port ?? "")}
-                    </Text>
+                    {c.kind === "gdrive" ? (
+                      <Text size="sm">
+                        {String(c.config.user_email ?? "—")}
+                      </Text>
+                    ) : (
+                      <Text size="sm" ff="monospace">
+                        {String(c.config.host ?? "")}:
+                        {String(c.config.port ?? "")}
+                      </Text>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <PathsCell connection={c} />
                   </Table.Td>
                   <Table.Td>
                     <Group gap="xs" justify="flex-end">
+                      {c.kind === "gdrive" && (
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          color="blue"
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                await runGDriveReauthorize(c.id);
+                                notifications.show({
+                                  color: "green",
+                                  message: t("common.success"),
+                                });
+                                void qc.invalidateQueries({
+                                  queryKey: ["admin-remote-backups"],
+                                });
+                              } catch (err) {
+                                let message: string;
+                                if (err instanceof PopupBlockedError) {
+                                  message = t(
+                                    "admin.remoteBackups.gdrive.popupBlocked",
+                                  );
+                                } else if (err instanceof OAuthAbortedError) {
+                                  message = t(
+                                    "admin.remoteBackups.gdrive.aborted",
+                                  );
+                                } else if (err instanceof OAuthError) {
+                                  message = err.reason;
+                                } else {
+                                  message =
+                                    err instanceof Error
+                                      ? err.message
+                                      : String(err);
+                                }
+                                notifications.show({
+                                  color: "red",
+                                  title: t("common.error"),
+                                  message,
+                                });
+                              }
+                            })();
+                          }}
+                        >
+                          {t("admin.remoteBackups.gdrive.btnReauthorize")}
+                        </Button>
+                      )}
                       <Button
                         size="xs"
                         variant="subtle"
@@ -588,6 +660,21 @@ export function AdminRemoteBackupsPage() {
 function PathsCell({ connection }: { connection: RemoteBackupConnection }) {
   const { t } = useTranslation();
   const cfg = connection.config;
+
+  if (connection.kind === "gdrive") {
+    const folderName = String(cfg.folder_name ?? "—");
+    return (
+      <Text size="xs">
+        <Text component="span" c="dimmed">
+          folder:{" "}
+        </Text>
+        <Text component="span" ff="monospace">
+          {folderName}
+        </Text>
+      </Text>
+    );
+  }
+
   const isS3 = connection.kind === "s3";
   const snapshots = String(
     (isS3 ? cfg.prefix_snapshots : cfg.remote_path_snapshots) ?? "",
@@ -643,6 +730,9 @@ function ConnectionFormModal({
   submitting: boolean;
 }) {
   const { t } = useTranslation();
+  const [gdriveWizard, setGdriveWizard] = useState<GDriveWizardState>({
+    phase: "idle",
+  });
 
   const form = useForm<FormValues>({
     initialValues: editTarget
@@ -755,6 +845,10 @@ function ConnectionFormModal({
                 label: "S3-compatible (AWS / R2 / B2 / Scaleway / OVH)",
               },
               { value: "ftps", label: "FTPS" },
+              {
+                value: "gdrive",
+                label: t("admin.remoteBackups.kind.gdrive"),
+              },
             ]}
             {...form.getInputProps("kind")}
             allowDeselect={false}
@@ -798,12 +892,32 @@ function ConnectionFormModal({
               editTarget={editTarget}
             />
           )}
+          {form.values.kind === "gdrive" && (
+            <GDriveFields
+              name={form.values.name}
+              wizard={gdriveWizard}
+              onWizardChange={setGdriveWizard}
+              onAuthorized={(oauth_state, user_email, folder_name) => {
+                form.setFieldValue("oauth_state", oauth_state);
+                form.setFieldValue("gdrive_user_email", user_email);
+                form.setFieldValue("gdrive_folder_name", folder_name);
+              }}
+            />
+          )}
 
           <Group justify="flex-end" mt="md">
             <Button variant="subtle" onClick={onClose}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" loading={submitting}>
+            <Button
+              type="submit"
+              loading={submitting}
+              disabled={
+                form.values.kind === "gdrive"
+                  ? !form.values.oauth_state
+                  : false
+              }
+            >
               {editTarget ? t("common.save") : t("common.create")}
             </Button>
           </Group>

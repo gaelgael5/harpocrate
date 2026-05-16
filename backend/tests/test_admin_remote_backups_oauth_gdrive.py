@@ -6,7 +6,7 @@ import base64
 import datetime
 from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt as pyjwt
 import pytest
@@ -308,8 +308,6 @@ async def test_session_lookup_hides_secrets(admin_jwt_headers: dict[str, str]) -
 @pytest.mark.asyncio
 async def test_session_unknown_returns_unknown(admin_jwt_headers: dict[str, str]) -> None:
     """GET /session/{state} pour un state inexistant → {status: unknown}."""
-    from unittest.mock import AsyncMock, patch
-
     conn = MagicMock()
     with patch(
         "app.api.v1.admin_remote_backups_oauth_gdrive.repo.get_by_state",
@@ -323,3 +321,94 @@ async def test_session_unknown_returns_unknown(admin_jwt_headers: dict[str, str]
 
     assert r.status_code == 200
     assert r.json()["status"] == "unknown"
+
+
+# ── /{id}/reauthorize ────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_reauthorize_creates_pending_with_target(
+    admin_jwt_headers: dict[str, str],
+) -> None:
+    """Pour une connexion gdrive existante, crée une pending_session avec target_connection_id."""
+    from uuid import uuid4
+
+    conn_id = uuid4()
+    fake_conn = MagicMock(
+        id=conn_id,
+        name="DriveX",
+        kind="gdrive",
+        config={
+            "client_id": "cid",
+            "folder_name": "F",
+            "redirect_uri": "https://harpo.example.com/v1/admin/backup-remotes/oauth/gdrive/callback",
+            "user_email": "old@x.y",
+        },
+    )
+    fake_creds = {
+        "client_secret": "csec-stored",
+        "refresh_token": "rt-old",
+        "scope": "https://www.googleapis.com/auth/drive.file",
+        "token_uri": "https://oauth2.googleapis.com/token",
+    }
+    with (
+        patch(
+            "app.api.v1.admin_remote_backups.svc.get_connection",
+            AsyncMock(return_value=fake_conn),
+        ),
+        patch(
+            "app.api.v1.admin_remote_backups.svc.get_decrypted_credentials",
+            AsyncMock(return_value=fake_creds),
+        ),
+        patch(
+            "app.api.v1.admin_remote_backups.gdrive_svc.create_pending_session",
+            AsyncMock(
+                return_value={"auth_url": "https://accounts.google/...", "state": "REAUTH-STATE"}
+            ),
+        ),
+    ):
+        async with _client(_make_pool(MagicMock())) as c:
+            r = await c.post(
+                f"/v1/admin/backup-remotes/{conn_id}/reauthorize",
+                headers=admin_jwt_headers,
+            )
+    assert r.status_code == 200
+    assert r.json()["state"] == "REAUTH-STATE"
+
+
+@pytest.mark.asyncio
+async def test_reauthorize_404_when_connection_missing(
+    admin_jwt_headers: dict[str, str],
+) -> None:
+    from uuid import uuid4
+
+    with patch(
+        "app.api.v1.admin_remote_backups.svc.get_connection",
+        AsyncMock(return_value=None),
+    ):
+        async with _client(_make_pool(MagicMock())) as c:
+            r = await c.post(
+                f"/v1/admin/backup-remotes/{uuid4()}/reauthorize",
+                headers=admin_jwt_headers,
+            )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_reauthorize_400_when_not_gdrive(
+    admin_jwt_headers: dict[str, str],
+) -> None:
+    from uuid import uuid4
+
+    conn_id = uuid4()
+    fake_conn = MagicMock(id=conn_id, name="SftpX", kind="sftp", config={})
+    with patch(
+        "app.api.v1.admin_remote_backups.svc.get_connection",
+        AsyncMock(return_value=fake_conn),
+    ):
+        async with _client(_make_pool(MagicMock())) as c:
+            r = await c.post(
+                f"/v1/admin/backup-remotes/{conn_id}/reauthorize",
+                headers=admin_jwt_headers,
+            )
+    assert r.status_code == 400

@@ -24,9 +24,13 @@ credentials = {
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
+
+from app.services.remote_backup_providers import gdrive_client
+from app.services.remote_backup_providers.base import RemoteBackupProviderError
 
 _log = logging.getLogger(__name__)
 _FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -55,7 +59,80 @@ class GoogleDriveProvider:
         self._scope = credentials.get("scope") or "https://www.googleapis.com/auth/drive.file"
 
     async def test_connection(self, path: str) -> dict[str, Any] | None:
-        raise NotImplementedError  # implémenté en incrément 2
+        if path and path.strip() not in ("", "/", "."):
+            _log.debug("gdrive provider ignores path argument", extra={"path": path})
+        return await asyncio.to_thread(self._test_connection_sync)
+
+    def _test_connection_sync(self) -> dict[str, Any] | None:
+        creds = gdrive_client.build_credentials(
+            client_id=self._client_id,
+            client_secret=self._client_secret,
+            refresh_token=self._refresh_token,
+            token_uri=self._token_uri,
+            scope=self._scope,
+        )
+        try:
+            gdrive_client.refresh(creds)
+        except Exception as exc:
+            if exc.__class__.__name__ == "RefreshError":
+                raise RemoteBackupProviderError(f"credentials_revoked: {exc}") from exc
+            raise
+
+        drive = gdrive_client.build_drive_service(creds)
+        folder_id = self._folder_id
+        patch_out: dict[str, Any] | None = None
+        if not folder_id:
+            folder_id = self._lookup_or_create_folder(drive)
+            patch_out = {"folder_id": folder_id}
+
+        # Liste le contenu pour valider l'accès.
+        try:
+            drive.files().list(
+                q=f"'{folder_id}' in parents and trashed = false",
+                pageSize=1,
+                fields="files(id)",
+            ).execute()
+        except Exception as exc:
+            raise RemoteBackupProviderError(f"drive_api_error: {exc}") from exc
+        return patch_out
+
+    def _lookup_or_create_folder(self, drive: Any) -> str:
+        """Cherche un dossier nommé self._folder_name en racine. Le crée si absent."""
+        escaped = self._folder_name.replace("'", "\\'")
+        try:
+            result = (
+                drive.files()
+                .list(
+                    q=f"name = '{escaped}' and mimeType = '{_FOLDER_MIME}' "
+                    f"and 'root' in parents and trashed = false",
+                    pageSize=1,
+                    fields="files(id)",
+                )
+                .execute()
+            )
+        except Exception as exc:
+            raise RemoteBackupProviderError(f"drive_api_error: {exc}") from exc
+
+        items = result.get("files", [])
+        if items:
+            return str(items[0]["id"])
+
+        try:
+            created = (
+                drive.files()
+                .create(
+                    body={
+                        "name": self._folder_name,
+                        "mimeType": _FOLDER_MIME,
+                        "parents": ["root"],
+                    },
+                    fields="id",
+                )
+                .execute()
+            )
+        except Exception as exc:
+            raise RemoteBackupProviderError(f"drive_api_error: {exc}") from exc
+        return str(created["id"])
 
     async def upload_stream(
         self, path: str, remote_filename: str, source: AsyncIterator[bytes]

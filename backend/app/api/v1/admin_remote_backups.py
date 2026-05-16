@@ -18,6 +18,7 @@ from app.db.pool import get_pool
 from app.db.repositories import oauth_pending_session as oauth_repo
 from app.services import gdrive_oauth_session as gdrive_svc
 from app.services import remote_backup_connections as svc
+from app.services.audit import audit_log_insert
 from app.services.remote_backup_providers import (
     SUPPORTED_KINDS as _ALLOWED_KINDS,
 )
@@ -278,6 +279,15 @@ async def reauthorize_remote_backup(connection_id: UUID, admin: AdminJwt) -> JSO
             redirect_uri=cfg["redirect_uri"],
             target_connection_id=connection_id,
             created_by_user_id=None,
+        )
+        await audit_log_insert(
+            conn,
+            "remote_backup.gdrive.reauthorized",
+            actor_user_id=None,
+            metadata={
+                "connection_id": str(connection_id),
+                "connection_name": item.name,
+            },
         )
     return JSONResponse(out)
 

@@ -366,6 +366,10 @@ async def test_reauthorize_creates_pending_with_target(
                 return_value={"auth_url": "https://accounts.google/...", "state": "REAUTH-STATE"}
             ),
         ),
+        patch(
+            "app.api.v1.admin_remote_backups.audit_log_insert",
+            AsyncMock(),
+        ),
     ):
         async with _client(_make_pool(MagicMock())) as c:
             r = await c.post(

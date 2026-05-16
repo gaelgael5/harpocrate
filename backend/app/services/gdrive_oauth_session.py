@@ -17,6 +17,7 @@ from uuid import UUID
 import asyncpg
 
 from app.db.repositories import oauth_pending_session as repo
+from app.services.audit import audit_log_insert
 from app.services.remote_backup_providers import gdrive_client
 
 _log = logging.getLogger(__name__)
@@ -68,6 +69,16 @@ async def create_pending_session(
         created_by_user_id=created_by_user_id,
         ttl_seconds=_TTL_SECONDS,
     )
+    await audit_log_insert(
+        conn,
+        "remote_backup.gdrive.oauth_started",
+        actor_user_id=created_by_user_id,
+        metadata={
+            "connection_name": name,
+            "folder_name": folder_name,
+            "target_connection_id": str(target_connection_id) if target_connection_id else None,
+        },
+    )
     return {"auth_url": auth_url, "state": state}
 
 
@@ -113,6 +124,15 @@ async def finalize_session(
             "token_uri": "https://oauth2.googleapis.com/token",
         },
     )
+    await audit_log_insert(
+        conn,
+        "remote_backup.gdrive.oauth_completed",
+        actor_user_id=None,
+        metadata={
+            "state": state,
+            "user_email": user_email,
+        },
+    )
 
 
 async def mark_session_failed(
@@ -122,6 +142,13 @@ async def mark_session_failed(
     error: str,
 ) -> None:
     await repo.mark_failed(conn, state=state, error=error)
+    await audit_log_insert(
+        conn,
+        "remote_backup.gdrive.oauth_failed",
+        actor_user_id=None,
+        metadata={"state": state, "error": error},
+        success=False,
+    )
 
 
 def public_session_view(row: asyncpg.Record | dict[str, Any] | None) -> dict[str, Any]:

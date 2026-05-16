@@ -54,7 +54,7 @@ import type { RemoteBackupConnection } from "@/schemas/admin";
 
 // ─── Form values pour le modal create/edit ────────────────────────────────────
 
-type Kind = "sftp" | "s3" | "ftps";
+type Kind = "sftp" | "s3" | "ftps" | "gdrive";
 
 type S3Provider = "aws" | "r2" | "b2" | "scaleway" | "ovh" | "custom";
 

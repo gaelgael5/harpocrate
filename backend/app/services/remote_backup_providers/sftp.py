@@ -104,7 +104,7 @@ class SftpProvider:
                 )
         return conn
 
-    async def test_connection(self, path: str) -> None:
+    async def test_connection(self, path: str) -> dict[str, Any] | None:
         """Ouvre une connexion SFTP, garantit l'existence de `path`, le liste, ferme.
 
         Si `path` n'existe pas, on tente de le créer (récursivement). Si la
@@ -126,6 +126,7 @@ class SftpProvider:
         finally:
             conn.close()
             await conn.wait_closed()
+        return None
 
     @staticmethod
     def _normalize_path(path: str) -> str:
@@ -157,7 +158,7 @@ class SftpProvider:
             try:
                 cwd_raw = await sftp.realpath(".")
                 cwd = cwd_raw.decode() if isinstance(cwd_raw, bytes) else str(cwd_raw)
-            except Exception:  # noqa: BLE001 — best-effort enrichment
+            except Exception:  # best-effort enrichment
                 pass
             raise RemoteBackupProviderError(
                 f"SFTP cannot prepare path={path!r}: {exc}. "

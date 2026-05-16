@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.admin_auth import AdminJwt
 from app.db.pool import get_pool
+from app.db.repositories import oauth_pending_session as oauth_repo
+from app.services import gdrive_oauth_session as gdrive_svc
 from app.services import remote_backup_connections as svc
+from app.services.audit import audit_log_insert
 from app.services.remote_backup_providers import (
     SUPPORTED_KINDS as _ALLOWED_KINDS,
 )
@@ -34,6 +37,7 @@ class RemoteBackupCreate(BaseModel):
     kind: str
     config: dict[str, Any]
     credentials: dict[str, Any]
+    oauth_state: str | None = None  # requis quand kind='gdrive'
 
     @field_validator("kind")
     @classmethod
@@ -91,8 +95,78 @@ async def list_remote_backups(admin: AdminJwt) -> JSONResponse:
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_class=JSONResponse)
 async def create_remote_backup(body: RemoteBackupCreate, admin: AdminJwt) -> JSONResponse:
-    """Crée une nouvelle connexion. Les credentials sont chiffrés avant insertion."""
+    """Crée une nouvelle connexion. Les credentials sont chiffrés avant insertion.
+
+    Pour kind='gdrive', consomme une oauth_pending_session autorisée : body.oauth_state
+    est obligatoire, et config/credentials sont hydratés depuis la session (le body
+    config/credentials fourni est ignoré).
+    """
     pool = await get_pool()
+
+    # ── Branche gdrive : consomme une oauth_pending_session authorized ──────────
+    if body.kind == "gdrive":
+        if not body.oauth_state:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"error": "oauth_state_required_for_gdrive"},
+            )
+        async with pool.acquire() as conn:
+            pending = await oauth_repo.get_by_state(conn, body.oauth_state)
+            if pending is None or pending["status"] != "authorized":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={"error": "oauth_session_not_authorized"},
+                )
+            payload = dict(pending["payload"])
+            result = dict(pending["result"] or {})
+
+            target_id = pending["target_connection_id"]
+            cfg = {
+                "client_id": payload["client_id"],
+                "redirect_uri": payload["redirect_uri"],
+                "folder_name": payload["folder_name"],
+                "user_email": result.get("user_email", ""),
+            }
+            creds = {
+                "client_secret": payload["client_secret"],
+                "refresh_token": result["refresh_token"],
+                "scope": "https://www.googleapis.com/auth/drive.file",
+                "token_uri": result.get("token_uri", "https://oauth2.googleapis.com/token"),
+            }
+            try:
+                if target_id is None:
+                    new_id = await svc.create_connection(
+                        conn,
+                        name=body.name,
+                        kind="gdrive",
+                        config=cfg,
+                        credentials=creds,
+                        created_by_user_id=None,
+                    )
+                else:
+                    await svc.update_connection(
+                        conn,
+                        connection_id=target_id,
+                        name=None,
+                        config=cfg,
+                        credentials=creds,
+                    )
+                    new_id = target_id
+                await oauth_repo.delete_by_state(conn, body.oauth_state)
+            except Exception as exc:
+                msg = str(exc)
+                if "unique" in msg.lower() or "23505" in msg:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={"error": "name_already_exists"},
+                    ) from exc
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"error": "internal_error", "message": msg},
+                ) from exc
+        return JSONResponse({"id": str(new_id)}, status_code=status.HTTP_201_CREATED)
+
+    # ── Branche existante (sftp / s3 / ftps) — inchangée ────────────────────────
     async with pool.acquire() as conn:
         try:
             new_id = await svc.create_connection(
@@ -168,8 +242,63 @@ async def delete_remote_backup(connection_id: UUID, admin: AdminJwt) -> Response
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _test_response(ok: bool, error: str | None = None, message: str | None = None) -> JSONResponse:
-    """Helper — wrap les retours du test en 200 (jamais 5xx, voir commentaire ci-dessous).
+@router.post("/{connection_id}/reauthorize", response_class=JSONResponse)
+async def reauthorize_remote_backup(connection_id: UUID, admin: AdminJwt) -> JSONResponse:
+    """Relance un flow OAuth pour une connexion gdrive existante (token révoqué).
+
+    Récupère client_id / client_secret / redirect_uri / folder_name de la connexion
+    existante et crée une nouvelle oauth_pending_session avec target_connection_id=id.
+    Retourne {auth_url, state}.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        item = await svc.get_connection(conn, connection_id)
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "connection_not_found"},
+            )
+        if item.kind != "gdrive":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "reauthorize_unsupported_kind", "kind": item.kind},
+            )
+        cfg = item.config
+        existing_creds = await svc.get_decrypted_credentials(conn, connection_id)
+        if existing_creds is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "no_existing_credentials"},
+            )
+        out = await gdrive_svc.create_pending_session(
+            conn,
+            name=item.name,
+            client_id=cfg["client_id"],
+            client_secret=existing_creds["client_secret"],
+            folder_name=cfg["folder_name"],
+            redirect_uri=cfg["redirect_uri"],
+            target_connection_id=connection_id,
+            created_by_user_id=None,
+        )
+        await audit_log_insert(
+            conn,
+            "remote_backup.gdrive.reauthorized",
+            actor_user_id=None,
+            metadata={
+                "connection_id": str(connection_id),
+                "connection_name": item.name,
+            },
+        )
+    return JSONResponse(out)
+
+
+def _test_response(
+    ok: bool,
+    error: str | None = None,
+    message: str | None = None,
+    config_patch: dict[str, Any] | None = None,
+) -> JSONResponse:
+    """Helper — wrap les retours du test en 200 (jamais 5xx).
 
     Pourquoi 200 systématique :
       - sémantiquement la requête HTTP a abouti, le résultat (positif ou
@@ -177,12 +306,13 @@ def _test_response(ok: bool, error: str | None = None, message: str | None = Non
       - Cloudflare avale les 5xx et affiche sa page générique, masquant le
         message d'erreur du provider que l'admin a besoin de voir
     """
-    if ok:
-        return JSONResponse({"ok": True}, status_code=status.HTTP_200_OK)
-    return JSONResponse(
-        {"ok": False, "error": error or "test_failed", "message": message or ""},
-        status_code=status.HTTP_200_OK,
-    )
+    body: dict[str, Any] = {"ok": ok}
+    if not ok:
+        body["error"] = error or "test_failed"
+        body["message"] = message or ""
+    if config_patch:
+        body["config_patch"] = config_patch
+    return JSONResponse(body, status_code=status.HTTP_200_OK)
 
 
 @router.post("/test", response_class=JSONResponse)
@@ -200,10 +330,10 @@ async def test_remote_backup_with_provided_creds(
         return _test_response(False, error="invalid_config", message=str(exc))
 
     try:
-        await provider.test_connection(body.path)
+        patch_out = await provider.test_connection(body.path)
     except RemoteBackupProviderError as exc:
         return _test_response(False, error="test_failed", message=str(exc))
-    return _test_response(True)
+    return _test_response(True, config_patch=patch_out)
 
 
 @router.post("/{connection_id}/test", response_class=JSONResponse)
@@ -238,7 +368,19 @@ async def test_remote_backup_with_stored_creds(
         return _test_response(False, error="invalid_config", message=str(exc))
 
     try:
-        await provider.test_connection(body.path)
+        patch_out = await provider.test_connection(body.path)
     except RemoteBackupProviderError as exc:
         return _test_response(False, error="test_failed", message=str(exc))
-    return _test_response(True)
+
+    # Persiste le patch en DB si non-vide (cas Drive : folder_id découvert).
+    if patch_out:
+        async with pool.acquire() as conn:
+            merged = {**item.config, **patch_out}
+            await svc.update_connection(
+                conn,
+                connection_id=connection_id,
+                name=None,
+                config=merged,
+                credentials=None,
+            )
+    return _test_response(True, config_patch=patch_out)

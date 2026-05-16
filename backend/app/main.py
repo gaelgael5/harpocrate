@@ -17,6 +17,7 @@ from app.api.v1 import (
     admin_maintenance,
     admin_pairing_exec,
     admin_remote_backups,
+    admin_remote_backups_oauth_gdrive,
     admin_replication,
     admin_replication_pairing,
     admin_replication_sync,
@@ -284,6 +285,7 @@ app.include_router(admin_install_mode.router, prefix="/v1")
 app.include_router(admin_maintenance.router, prefix="/v1")
 app.include_router(admin_backups.router, prefix="/v1")
 app.include_router(admin_remote_backups.router, prefix="/v1")
+app.include_router(admin_remote_backups_oauth_gdrive.router, prefix="/v1")
 app.include_router(admin_scheduled_backups.router, prefix="/v1")
 app.include_router(admin_replication.router, prefix="/v1")
 app.include_router(admin_replication_pairing.router, prefix="/v1")

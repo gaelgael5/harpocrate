@@ -9,9 +9,11 @@ Push remote :
   - Best-effort : un échec sur un remote n'arrête pas les autres. Chaque
     échec génère une `system_anomaly_event` (visible dans la page Anomalies).
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +24,7 @@ import asyncpg
 from app.core.config import settings
 from app.core.logging import logger
 from app.db.repositories import backups as backups_repo
+from app.db.repositories import oauth_pending_session as oauth_repo
 from app.db.repositories import system_metadata as meta_repo
 from app.services import backup as backup_svc
 from app.services import remote_backup_connections as remote_svc
@@ -40,6 +43,7 @@ async def get_policy(conn: asyncpg.Connection) -> GFSPolicy:
         return GFSPolicy()
     if isinstance(raw, str):
         import json
+
         raw = json.loads(raw)
     return GFSPolicy.from_dict(raw)
 
@@ -88,10 +92,14 @@ class SnapshotScheduler:
         await self.stop()
         await self.start()
 
-    async def trigger(self, force: bool = False, skip_remote: bool = False, description: str | None = None) -> backups_repo.BackupRecord:
+    async def trigger(
+        self, force: bool = False, skip_remote: bool = False, description: str | None = None
+    ) -> backups_repo.BackupRecord:
         async with (await self._get_pool()).acquire() as conn:
             policy = await get_policy(conn)
-            return await self._tick(conn, policy, force=force, skip_remote=skip_remote, description=description)
+            return await self._tick(
+                conn, policy, force=force, skip_remote=skip_remote, description=description
+            )
 
     async def _run_loop(self, policy: GFSPolicy) -> None:
         while not self._stop.is_set():
@@ -128,6 +136,11 @@ class SnapshotScheduler:
     ) -> backups_repo.BackupRecord:
         t0 = time.monotonic()
 
+        # ─── Purge des sessions OAuth expirées ───────────────────────────────
+        purged = await oauth_repo.purge_expired(conn)
+        if purged:
+            logger.info("oauth_sessions_purged", count=purged)
+
         # ─── Détection de changement ─────────────────────────────────────────
         last_change = await conn.fetchval("""
             SELECT GREATEST(
@@ -141,7 +154,12 @@ class SnapshotScheduler:
             "SELECT MAX(created_at) FROM backups_local WHERE filename LIKE 'harpocrate-snapshot-%'"
         )
 
-        if not force and policy.skip_if_no_change and last_snapshot and last_change <= last_snapshot:
+        if (
+            not force
+            and policy.skip_if_no_change
+            and last_snapshot
+            and last_change <= last_snapshot
+        ):
             logger.info(
                 "snapshot_skipped_no_change",
                 last_change=last_change.isoformat() if last_change else None,
@@ -169,9 +187,7 @@ class SnapshotScheduler:
         # de bloquer un autre pg_dump éventuellement en attente.
         remote_pushes: list[dict] = []
         if not skip_remote and policy.push_remote_after_snapshot:
-            remote_pushes = await self._push_snapshot_to_remotes(
-                conn, backup=backup, policy=policy
-            )
+            remote_pushes = await self._push_snapshot_to_remotes(conn, backup=backup, policy=policy)
 
         # ─── Rotation ─────────────────────────────────────────────────────────
         rotation_actions = await self._apply_rotation(conn, policy)
@@ -315,9 +331,7 @@ class SnapshotScheduler:
                 anomaly_type="snapshot_remote_push_failed",
                 source="snapshot_remote_push",
                 source_ref_id=remote_id,
-                message=(
-                    f"Snapshot push to remote {remote.name!r} failed: {exc}"
-                ),
+                message=(f"Snapshot push to remote {remote.name!r} failed: {exc}"),
                 metadata={
                     "backup_id": str(backup.id),
                     "remote_name": remote.name,
@@ -358,6 +372,22 @@ class _NoChangeError(Exception):
     pass
 
 
+async def run_scheduler_cycle_once(
+    conn: asyncpg.Connection,
+    policy: GFSPolicy | None = None,
+) -> None:
+    """Exécute un cycle scheduler complet (purge OAuth + snapshot + rotation).
+
+    Fonction libre testable sans instancier le scheduler. Si `policy` est None,
+    charge la policy depuis la DB (conn requis).
+    """
+    if policy is None:
+        policy = await get_policy(conn)
+    scheduler = SnapshotScheduler()
+    with contextlib.suppress(_NoChangeError):
+        await scheduler._tick(conn, policy)
+
+
 async def _create_snapshot_record(
     conn: asyncpg.Connection,
     *,
@@ -385,8 +415,12 @@ async def _create_snapshot_record(
         tmp = Path(tmpdir)
 
         proc = await asyncio.create_subprocess_exec(
-            "pg_dump", settings.effective_db_dsn,
-            "--format=plain", "--serializable-deferrable", "--no-owner", "--no-acl",
+            "pg_dump",
+            settings.effective_db_dsn,
+            "--format=plain",
+            "--serializable-deferrable",
+            "--no-owner",
+            "--no-acl",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -431,8 +465,11 @@ async def _create_snapshot_record(
 
         tar_age_path = tmp / "backup.tar.age"
         proc2 = await asyncio.create_subprocess_exec(
-            "age", "-r", settings.age_public_key,
-            "-o", str(tar_age_path),
+            "age",
+            "-r",
+            settings.age_public_key,
+            "-o",
+            str(tar_age_path),
             str(tar_path),
             stderr=asyncio.subprocess.PIPE,
         )

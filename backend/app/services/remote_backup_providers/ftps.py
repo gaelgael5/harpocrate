@@ -40,9 +40,7 @@ class FtpsProvider:
         try:
             self._port = int(port_raw)
         except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"FTPS config: 'port' must be an integer (got {port_raw!r})"
-            ) from exc
+            raise ValueError(f"FTPS config: 'port' must be an integer (got {port_raw!r})") from exc
 
         self._use_tls = bool(config.get("use_tls", True))
 
@@ -66,7 +64,7 @@ class FtpsProvider:
         # MVP). Si use_tls=True, on utilise TLS au transport.
         return {"ssl": self._use_tls} if self._use_tls else {}
 
-    async def test_connection(self, path: str) -> None:
+    async def test_connection(self, path: str) -> dict[str, Any] | None:
         normalized = self._normalize_path(path)
         try:
             async with aioftp.Client.context(
@@ -83,6 +81,7 @@ class FtpsProvider:
             raise RemoteBackupProviderError(
                 f"FTPS test on path={normalized!r} failed: {exc}"
             ) from exc
+        return None
 
     async def upload_stream(
         self,

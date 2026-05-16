@@ -9,6 +9,7 @@ Implémentations actuelles :
   - `s3_compatible.S3CompatibleProvider`  (boto3 — AWS S3, Cloudflare R2,
                                            Backblaze B2, Scaleway, OVH)
   - `ftps.FtpsProvider`            (aioftp)
+  - `gdrive.GoogleDriveProvider`   (googleapiclient — OAuth user-delegated)
 """
 
 from __future__ import annotations
@@ -20,11 +21,12 @@ from app.services.remote_backup_providers.base import (
     RemoteBackupProviderError,
 )
 from app.services.remote_backup_providers.ftps import FtpsProvider
+from app.services.remote_backup_providers.gdrive import GoogleDriveProvider
 from app.services.remote_backup_providers.s3_compatible import S3CompatibleProvider
 from app.services.remote_backup_providers.sftp import SftpProvider
 
 # Kinds reconnus côté API (admin_remote_backups.RemoteBackupCreate.kind).
-SUPPORTED_KINDS: frozenset[str] = frozenset({"sftp", "s3", "ftps"})
+SUPPORTED_KINDS: frozenset[str] = frozenset({"sftp", "s3", "ftps", "gdrive"})
 
 
 def get_provider(
@@ -37,12 +39,15 @@ def get_provider(
         return S3CompatibleProvider(config=config, credentials=credentials)
     if kind == "ftps":
         return FtpsProvider(config=config, credentials=credentials)
+    if kind == "gdrive":
+        return GoogleDriveProvider(config=config, credentials=credentials)
     raise ValueError(f"Unsupported remote backup kind: {kind!r}")
 
 
 __all__ = [
     "SUPPORTED_KINDS",
     "FtpsProvider",
+    "GoogleDriveProvider",
     "RemoteBackupProvider",
     "RemoteBackupProviderError",
     "S3CompatibleProvider",

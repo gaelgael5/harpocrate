@@ -75,9 +75,9 @@ class VaultHttpClient:
             "Content-Type": "application/json",
         }
 
-    def _url(self, path: str) -> str:
-        """Construit l'URL complète."""
-        return f"{self._base_url}{path}"
+    def _url(self, url: str) -> str:
+        """Construit l'URL absolue à partir d'un chemin relatif au serveur (ex: '/v1/health')."""
+        return f"{self._base_url}{url}"
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
         """Convertit les codes HTTP en exceptions SDK."""
@@ -117,42 +117,48 @@ class VaultHttpClient:
 
         raise VaultHttpError(resp.status_code, detail)
 
-    def get(self, path: str, **params: Any) -> Any:
-        """GET synchrone avec retry."""
-        return self._request("GET", path, params=params or None)
+    def get(self, url: str, **params: Any) -> Any:
+        """GET synchrone avec retry.
 
-    def post(self, path: str, json: Any = None) -> Any:
+        `url` est le chemin relatif au serveur (ex: '/v1/wallets/<id>/secrets').
+        Les `**params` deviennent les query string (httpx `params=`). Le nom
+        `url` (et non `path`) évite toute collision avec un kwarg `path=...`
+        qu'un caller pourrait vouloir passer comme filtre de query string.
+        """
+        return self._request("GET", url, params=params or None)
+
+    def post(self, url: str, json: Any = None) -> Any:
         """POST synchrone avec retry."""
-        return self._request("POST", path, json=json)
+        return self._request("POST", url, json=json)
 
-    def put(self, path: str, json: Any = None) -> Any:
+    def put(self, url: str, json: Any = None) -> Any:
         """PUT synchrone avec retry."""
-        return self._request("PUT", path, json=json)
+        return self._request("PUT", url, json=json)
 
-    def patch(self, path: str, json: Any = None) -> Any:
+    def patch(self, url: str, json: Any = None) -> Any:
         """PATCH synchrone avec retry."""
-        return self._request("PATCH", path, json=json)
+        return self._request("PATCH", url, json=json)
 
-    def delete(self, path: str) -> None:
+    def delete(self, url: str) -> None:
         """DELETE synchrone avec retry."""
-        self._request("DELETE", path)
+        self._request("DELETE", url)
 
     def _request(
         self,
         method: str,
-        path: str,
+        url: str,
         params: dict[str, Any] | None = None,
         json: Any = None,
     ) -> Any:
         """Requête HTTP avec retry sur erreurs réseau."""
-        url = self._url(path)
+        full_url = self._url(url)
         last_exc: Exception = RuntimeError("No attempts made")
 
         for attempt in range(_MAX_RETRIES):
             try:
                 resp = httpx.request(
                     method,
-                    url,
+                    full_url,
                     headers=self._headers(),
                     params=params,
                     json=json,

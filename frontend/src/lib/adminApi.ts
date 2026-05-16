@@ -231,9 +231,11 @@ export async function fetchRemoteBackupConnections(): Promise<RemoteBackupConnec
 
 export interface RemoteBackupCreatePayload {
   name: string;
-  kind: "sftp" | "s3" | "ftps";
+  kind: "sftp" | "s3" | "ftps" | "gdrive";
   config: Record<string, unknown>;
   credentials: Record<string, unknown>;
+  /** Requis quand kind='gdrive' : state de la session OAuth terminée. */
+  oauth_state?: string;
 }
 
 export async function createRemoteBackupConnection(
@@ -277,7 +279,7 @@ export async function pushBackupToRemote(
 // l'erreur du provider. Le catch reste utile pour les vraies erreurs réseau.
 
 export interface TestRemoteBackupNewPayload {
-  kind: "sftp" | "s3" | "ftps";
+  kind: "sftp" | "s3" | "ftps" | "gdrive";
   config: Record<string, unknown>;
   credentials: Record<string, unknown>;
   path: string;
@@ -679,4 +681,52 @@ export async function promoteToMaster(
   body: PromoteRequest,
 ): Promise<PromoteResponse> {
   return api.post<PromoteResponse>("/admin/replication/promote", body);
+}
+
+// ── Google Drive OAuth ────────────────────────────────────────────────────────
+
+export interface StartGDriveOAuthPayload {
+  name: string;
+  client_id: string;
+  client_secret: string;
+  folder_name: string;
+}
+
+export interface GDriveOAuthSession {
+  status: "pending" | "authorized" | "failed" | "unknown";
+  result?: { user_email?: string; error?: string } | null;
+}
+
+export async function fetchGDriveRedirectUri(): Promise<{
+  redirect_uri: string;
+}> {
+  return api.get<{ redirect_uri: string }>(
+    "/admin/backup-remotes/oauth/gdrive/redirect-uri",
+  );
+}
+
+export async function startGDriveOAuth(
+  body: StartGDriveOAuthPayload,
+): Promise<{ auth_url: string; state: string }> {
+  return api.post<{ auth_url: string; state: string }>(
+    "/admin/backup-remotes/oauth/gdrive/start",
+    body,
+  );
+}
+
+export async function fetchGDriveOAuthSession(
+  state: string,
+): Promise<GDriveOAuthSession> {
+  return api.get<GDriveOAuthSession>(
+    `/admin/backup-remotes/oauth/gdrive/session/${encodeURIComponent(state)}`,
+  );
+}
+
+export async function reauthorizeGDriveConnection(
+  id: string,
+): Promise<{ auth_url: string; state: string }> {
+  return api.post<{ auth_url: string; state: string }>(
+    `/admin/backup-remotes/${encodeURIComponent(id)}/reauthorize`,
+    {},
+  );
 }

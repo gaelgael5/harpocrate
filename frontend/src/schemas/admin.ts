@@ -185,7 +185,7 @@ export type ValidateSchemaResponse = z.infer<
 export const RemoteBackupConnectionSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
-  kind: z.enum(["sftp", "s3", "ftps"]),
+  kind: z.enum(["sftp", "s3", "ftps", "gdrive"]),
   config: z.record(z.unknown()),
   created_at: z.string(),
   updated_at: z.string(),
@@ -199,6 +199,18 @@ export const RemoteBackupConnectionSchema = z.object({
 export type RemoteBackupConnection = z.infer<
   typeof RemoteBackupConnectionSchema
 >;
+
+/**
+ * Configuration pour une connexion de backup distant Google Drive.
+ * Utilisée pour typer le champ `config` quand `kind === 'gdrive'`.
+ */
+export interface GDriveConfig {
+  client_id: string;
+  redirect_uri: string;
+  folder_name: string;
+  folder_id?: string;
+  user_email?: string;
+}
 
 export const RemoteBackupConnectionListResponseSchema = z.object({
   connections: z.array(RemoteBackupConnectionSchema),

@@ -168,8 +168,13 @@ async def delete_remote_backup(connection_id: UUID, admin: AdminJwt) -> Response
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _test_response(ok: bool, error: str | None = None, message: str | None = None) -> JSONResponse:
-    """Helper — wrap les retours du test en 200 (jamais 5xx, voir commentaire ci-dessous).
+def _test_response(
+    ok: bool,
+    error: str | None = None,
+    message: str | None = None,
+    config_patch: dict[str, Any] | None = None,
+) -> JSONResponse:
+    """Helper — wrap les retours du test en 200 (jamais 5xx).
 
     Pourquoi 200 systématique :
       - sémantiquement la requête HTTP a abouti, le résultat (positif ou
@@ -177,12 +182,13 @@ def _test_response(ok: bool, error: str | None = None, message: str | None = Non
       - Cloudflare avale les 5xx et affiche sa page générique, masquant le
         message d'erreur du provider que l'admin a besoin de voir
     """
-    if ok:
-        return JSONResponse({"ok": True}, status_code=status.HTTP_200_OK)
-    return JSONResponse(
-        {"ok": False, "error": error or "test_failed", "message": message or ""},
-        status_code=status.HTTP_200_OK,
-    )
+    body: dict[str, Any] = {"ok": ok}
+    if not ok:
+        body["error"] = error or "test_failed"
+        body["message"] = message or ""
+    if config_patch:
+        body["config_patch"] = config_patch
+    return JSONResponse(body, status_code=status.HTTP_200_OK)
 
 
 @router.post("/test", response_class=JSONResponse)
@@ -200,10 +206,10 @@ async def test_remote_backup_with_provided_creds(
         return _test_response(False, error="invalid_config", message=str(exc))
 
     try:
-        await provider.test_connection(body.path)
+        patch_out = await provider.test_connection(body.path)
     except RemoteBackupProviderError as exc:
         return _test_response(False, error="test_failed", message=str(exc))
-    return _test_response(True)
+    return _test_response(True, config_patch=patch_out)
 
 
 @router.post("/{connection_id}/test", response_class=JSONResponse)
@@ -238,7 +244,19 @@ async def test_remote_backup_with_stored_creds(
         return _test_response(False, error="invalid_config", message=str(exc))
 
     try:
-        await provider.test_connection(body.path)
+        patch_out = await provider.test_connection(body.path)
     except RemoteBackupProviderError as exc:
         return _test_response(False, error="test_failed", message=str(exc))
-    return _test_response(True)
+
+    # Persiste le patch en DB si non-vide (cas Drive : folder_id découvert).
+    if patch_out:
+        async with pool.acquire() as conn:
+            merged = {**item.config, **patch_out}
+            await svc.update_connection(
+                conn,
+                connection_id=connection_id,
+                name=None,
+                config=merged,
+                credentials=None,
+            )
+    return _test_response(True, config_patch=patch_out)

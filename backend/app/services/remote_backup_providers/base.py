@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class RemoteBackupProviderError(Exception):
@@ -23,11 +23,16 @@ class RemoteBackupProvider(Protocol):
     snapshots, un pour les fulls) sans avoir à instancier deux providers.
     """
 
-    async def test_connection(self, path: str) -> None:
+    async def test_connection(self, path: str) -> dict[str, Any] | None:
         """Vérifie l'auth + l'accessibilité de `path` sur le serveur distant.
 
         Lève RemoteBackupProviderError en cas d'échec (auth, host inaccessible,
         path inexistant et non créable, droits insuffisants, etc.).
+
+        Retourne un patch optionnel à fusionner dans le `config` de la
+        connexion appelante. Utilisé par GoogleDriveProvider pour persister le
+        `folder_id` découvert au premier appel. Les autres providers retournent
+        toujours None.
         """
         ...
 

@@ -104,7 +104,7 @@ class S3CompatibleProvider:
         normalized = self._normalize_prefix(prefix)
         return f"{normalized}{filename}" if normalized else filename
 
-    async def test_connection(self, path: str) -> None:
+    async def test_connection(self, path: str) -> dict[str, Any] | None:
         """head_bucket → vérifie auth + accès au bucket. Le `path` (prefix) est
         validé par construction : les prefixes S3 n'ont pas besoin d'exister
         avant écriture (ils sont implicites). On valide juste le bucket.
@@ -122,6 +122,7 @@ class S3CompatibleProvider:
                 ) from exc
 
         await asyncio.to_thread(_check)
+        return None
 
     async def upload_stream(
         self,

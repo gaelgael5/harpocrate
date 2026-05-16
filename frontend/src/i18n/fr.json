@@ -669,7 +669,32 @@
       "fieldS3PathStyle": "Path-style addressing",
       "fieldS3PathStyleHint": "Activer pour la plupart des services S3-compatibles non-AWS (MinIO…)",
       "fieldS3AccessKeyId": "Access Key ID",
-      "fieldS3SecretAccessKey": "Secret Access Key"
+      "fieldS3SecretAccessKey": "Secret Access Key",
+      "kind": {
+        "gdrive": "Google Drive"
+      },
+      "gdrive": {
+        "step1Title": "Application OAuth Google",
+        "step1Desc": "Pour créer cette connexion, créez d'abord une application OAuth dans Google Cloud Console.",
+        "fieldClientId": "Client ID",
+        "fieldClientSecret": "Client Secret",
+        "fieldRedirectUri": "Redirect URI",
+        "fieldRedirectUriHint": "À copier-coller dans les Authorized redirect URIs de votre app Google Cloud.",
+        "fieldFolderName": "Nom du dossier sur Drive",
+        "fieldFolderNamePlaceholder": "Harpocrate Backups",
+        "btnAuthorize": "Autoriser avec Google",
+        "popupBlocked": "La popup a été bloquée par le navigateur.",
+        "openInTab": "Ouvrir dans un onglet",
+        "waitingAuth": "Fenêtre Google ouverte — autorisez puis revenez ici.",
+        "authorizedAs": "Autorisé en tant que {{email}}",
+        "aborted": "Autorisation annulée.",
+        "btnRestart": "Recommencer",
+        "btnReauthorize": "Ré-autoriser",
+        "credentialsRevoked": "Ré-autorisation requise — le token a été révoqué côté Google.",
+        "guideLink": "Voir le guide",
+        "copyHint": "Copier",
+        "copied": "Copié !"
+      }
     },
     "replication": {
       "promote": {

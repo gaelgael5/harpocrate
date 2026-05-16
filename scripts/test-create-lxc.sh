@@ -148,10 +148,16 @@ fatal() {
     echo "[$(date +%H:%M:%S)] ERREUR FATALE : $*"
     echo ""
     if [ -n "${CREATED_CTID}" ]; then
-        log "Nettoyage d'urgence du container ${CREATED_CTID}..."
-        pct stop "${CREATED_CTID}" 2>/dev/null || true
-        sleep 2
-        pct destroy "${CREATED_CTID}" --purge 2>/dev/null || true
+        if [ "${KEEP_ON_FAILURE:-0}" = "1" ]; then
+            log "KEEP_ON_FAILURE=1 -> container ${CREATED_CTID} conservé pour debug"
+            log "  Inspecter : ssh pve \"pct exec ${CREATED_CTID} -- docker compose -f /opt/harpocrate/docker-compose-dev.yml logs backend --tail=200\""
+            log "  Supprimer : ssh pve \"pct stop ${CREATED_CTID} && pct destroy ${CREATED_CTID} --purge\""
+        else
+            log "Nettoyage d'urgence du container ${CREATED_CTID}..."
+            pct stop "${CREATED_CTID}" 2>/dev/null || true
+            sleep 2
+            pct destroy "${CREATED_CTID}" --purge 2>/dev/null || true
+        fi
     fi
     exit 1
 }

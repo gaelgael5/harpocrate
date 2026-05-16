@@ -29,6 +29,7 @@ LOCAL_CONFIG="${SCRIPT_DIR}/${CONFIG_NAME}"
 SSH_HOST="${SSH_HOST:-pve}"
 REMOTE_DIR="/opt/scripts"
 CLEANUP="${CLEANUP:-0}"
+KEEP_ON_FAILURE="${KEEP_ON_FAILURE:-0}"
 
 # ─── Vérifications locales ──────────────────────────────────────────────────
 if [ ! -f "${TEST_SCRIPT}" ]; then
@@ -81,4 +82,4 @@ echo "────────────────────────�
 # `bash -lc` pour que le PATH inclue /usr/sbin (pour `pct`) sur certaines
 # images Proxmox.
 ssh -t "${SSH_HOST}" \
-    "cd ${REMOTE_DIR} && CLEANUP=${CLEANUP} bash -lc './test-create-lxc.sh ${CONFIG_NAME}'"
+    "cd ${REMOTE_DIR} && CLEANUP=${CLEANUP} KEEP_ON_FAILURE=${KEEP_ON_FAILURE} bash -lc './test-create-lxc.sh ${CONFIG_NAME}'"

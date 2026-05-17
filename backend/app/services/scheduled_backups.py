@@ -124,6 +124,11 @@ def validate_cron(cron_expression: str, *, base: datetime | None = None) -> Cron
     """Valide une expression cron 5-field et retourne les 3 prochaines occurrences.
 
     Format attendu : `min hour day-of-month month day-of-week`
+
+    Les datetimes retournées sont systématiquement TZ-aware (UTC). croniter peut
+    renvoyer un naive datetime selon la version/input → on force l'offset UTC
+    avant `.isoformat()` pour que le frontend (dayjs/Date) interprète bien la
+    valeur en UTC, pas en local (sinon décalage d'affichage selon fuseau user).
     """
     expr = (cron_expression or "").strip()
     if not expr:
@@ -131,7 +136,12 @@ def validate_cron(cron_expression: str, *, base: datetime | None = None) -> Cron
     try:
         base_dt = base or datetime.now(timezone.utc)
         it = croniter(expr, base_dt)
-        next_3 = [it.get_next(datetime).isoformat() for _ in range(3)]
+        next_3: list[str] = []
+        for _ in range(3):
+            next_dt = it.get_next(datetime)
+            if next_dt.tzinfo is None:
+                next_dt = next_dt.replace(tzinfo=timezone.utc)
+            next_3.append(next_dt.isoformat())
     except (CroniterBadCronError, ValueError, KeyError) as exc:
         return CronValidation(valid=False, error=f"invalid cron expression: {exc}")
     return CronValidation(valid=True, next_3_occurrences=next_3)

@@ -936,6 +936,7 @@
       "minutes_one": "{{count}} minute",
       "minutes_other": "{{count}} minutes",
       "preset": {
+        "dailyMidnight": "Quotidien minuit",
         "daily02": "Quotidien 2h",
         "weekly": "Hebdo dimanche 3h",
         "monthly": "Mensuel 1er 4h",

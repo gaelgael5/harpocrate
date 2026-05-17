@@ -874,6 +874,7 @@ async def test_wallet_counters_reflect_placeholder_and_valued() -> None:
             "my_permissions": _PERM_ALL,
             "valued_secrets_count": 3,
             "placeholder_secrets_count": 2,
+            "deleted_at": None,
         }
     )
 

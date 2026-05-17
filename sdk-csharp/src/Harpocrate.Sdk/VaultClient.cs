@@ -59,7 +59,7 @@ public sealed class VaultClient : IDisposable
 
     public async Task<string> GetSecretAsync(string name, CancellationToken ct = default)
     {
-        var url = SecretUrl(name);
+        var url = await PathForOpAsync(name, ct);
         var resp = await GetJsonAsync<SecretResp>(url, ct);
         var wk = await GetWalletKeyAsync(ct);
         var enc = Convert.FromBase64String(resp.EncryptedValue);
@@ -82,14 +82,15 @@ public sealed class VaultClient : IDisposable
         var wk = await GetWalletKeyAsync(ct);
         var enc = AesGcmCrypto.Encrypt(System.Text.Encoding.UTF8.GetBytes(value), wk);
         var body = new { encrypted_value = Convert.ToBase64String(enc) };
-        var url = SecretUrl(name);
+        var url = await PathForOpAsync(name, ct);
         var resp = await PutJsonAsync<PutSecretResp>(url, body, ct);
         return resp.GenerationVersion;
     }
 
     public async Task DeleteSecretAsync(string name, CancellationToken ct = default)
     {
-        var r = await _http.DeleteAsync(_baseUrl + SecretUrl(name), ct);
+        var url = await PathForOpAsync(name, ct);
+        var r = await _http.DeleteAsync(_baseUrl + url, ct);
         await EnsureSuccessOrThrow(r, name);
     }
 
@@ -114,11 +115,45 @@ public sealed class VaultClient : IDisposable
         }
     }
 
-    private string SecretUrl(string name)
+    private string SecretUrlByName(string name)
     {
         var normalized = name.Contains('/') && !name.StartsWith('/') ? "/" + name : name;
         var encoded = Uri.EscapeDataString(normalized);
         return $"/v1/wallets/{WalletId}/secrets/{encoded}";
+    }
+
+    private string SecretUrlById(Guid sid) => $"/v1/wallets/{WalletId}/secrets/by-id/{sid}";
+
+    /// <summary>
+    /// Si <paramref name="name"/> contient '/', résout l'UUID via
+    /// GET /v1/wallets/{wid}/secrets?path={parent}, puis filtre par nom.
+    /// Retourne null pour les noms plats (le caller utilisera la route name-based).
+    /// </summary>
+    /// <remarks>
+    /// Évite la dépendance fragile au comportement des reverse proxies vis-à-vis
+    /// des '/' URL-encodés (%2F) — pattern aligné sur SDK Python 0.6.0.
+    /// </remarks>
+    private async Task<Guid?> ResolveIdIfPathstyleAsync(string name, CancellationToken ct)
+    {
+        if (!name.Contains('/')) return null;
+        var normalized = name.StartsWith('/') ? name : "/" + name;
+        var lastSlash = normalized.LastIndexOf('/');
+        var parentPath = lastSlash == 0 ? "/" : normalized.Substring(0, lastSlash) + "/";
+        var listUrl = $"/v1/wallets/{WalletId}/secrets?path={Uri.EscapeDataString(parentPath)}";
+        var listing = await GetJsonAsync<SecretListResponse>(listUrl, ct);
+        var match = listing.Secrets.FirstOrDefault(s => s.Name == normalized);
+        if (match is null) throw new SecretNotFoundException(name);
+        return match.Id;
+    }
+
+    /// <summary>
+    /// Retourne le chemin d'opération unitaire : /by-id/{sid} pour les noms
+    /// path-style, /{encoded-name} pour les noms plats.
+    /// </summary>
+    private async Task<string> PathForOpAsync(string name, CancellationToken ct)
+    {
+        var sid = await ResolveIdIfPathstyleAsync(name, ct);
+        return sid.HasValue ? SecretUrlById(sid.Value) : SecretUrlByName(name);
     }
 
     // ─── HTTP helpers ────────────────────────────────────────────────────────

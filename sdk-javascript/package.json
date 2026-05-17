@@ -1,0 +1,39 @@
+{
+  "name": "@harpocrate/sdk-js",
+  "version": "0.1.0",
+  "description": "Harpocrate SDK — client JavaScript zero-knowledge pour Vault",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "vault",
+    "secrets",
+    "harpocrate",
+    "encryption",
+    "zero-knowledge"
+  ],
+  "author": "Gael Beard",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gaelgael5/harpocrate.git",
+    "directory": "sdk-javascript"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0"
+  }
+}

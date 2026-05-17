@@ -89,7 +89,7 @@ impl VaultClient {
         Ok(k)
     }
 
-    fn secret_url(&self, name: &str) -> String {
+    fn secret_url_by_name(&self, name: &str) -> String {
         let normalized = if name.contains('/') && !name.starts_with('/') {
             format!("/{name}")
         } else {
@@ -102,13 +102,70 @@ impl VaultClient {
         )
     }
 
+    fn secret_url_by_id(&self, sid: &Uuid) -> String {
+        format!(
+            "{}/v1/wallets/{}/secrets/by-id/{}",
+            self.base_url, self.wallet_id, sid
+        )
+    }
+
+    /// Si `name` contient `/` (path-style), résout l'UUID via
+    /// `GET /v1/wallets/{wid}/secrets?path=<parent>` puis filtre par nom.
+    /// Retourne `Ok(None)` pour les noms plats (le caller utilisera la
+    /// route name-based).
+    ///
+    /// Cette stratégie évite la dépendance fragile au comportement des
+    /// reverse proxies vis-à-vis des `/` URL-encodés (`%2F`), qui sont
+    /// refusés par défaut par nginx/Caddy avec certaines configurations.
+    /// Pattern aligné sur celui du SDK Python depuis la 0.6.0.
+    async fn resolve_id_if_pathstyle(
+        &self,
+        name: &str,
+    ) -> Result<Option<Uuid>, HarpocrateError> {
+        if !name.contains('/') {
+            return Ok(None);
+        }
+        let normalized = if name.starts_with('/') {
+            name.to_string()
+        } else {
+            format!("/{name}")
+        };
+        let parent_path = match normalized.rsplit_once('/') {
+            Some((parent, _)) if parent.is_empty() => "/".to_string(),
+            Some((parent, _)) => format!("{parent}/"),
+            None => "/".to_string(),
+        };
+        let url = format!(
+            "{}/v1/wallets/{}/secrets?path={}",
+            self.base_url,
+            self.wallet_id,
+            url_encode(&parent_path),
+        );
+        let listing: SecretListResponse = get_json(&self.http, &url).await?;
+        listing
+            .secrets
+            .iter()
+            .find(|s| s.name == normalized)
+            .map(|s| Some(s.id))
+            .ok_or_else(|| HarpocrateError::SecretNotFound(name.to_string()))
+    }
+
+    /// Retourne l'URL d'opération unitaire (GET/PUT/DELETE) pour un secret :
+    /// `/by-id/{sid}` si nom path-style (`name` contient `/`), `/{name}` sinon.
+    async fn path_for_op(&self, name: &str) -> Result<String, HarpocrateError> {
+        match self.resolve_id_if_pathstyle(name).await? {
+            Some(sid) => Ok(self.secret_url_by_id(&sid)),
+            None => Ok(self.secret_url_by_name(name)),
+        }
+    }
+
     pub async fn list_secrets(&self) -> Result<SecretListResponse, HarpocrateError> {
         let url = format!("{}/v1/wallets/{}/secrets", self.base_url, self.wallet_id);
         get_json(&self.http, &url).await
     }
 
     pub async fn get_secret(&self, name: &str) -> Result<String, HarpocrateError> {
-        let url = self.secret_url(name);
+        let url = self.path_for_op(name).await?;
         let resp: SecretResp = get_json(&self.http, &url).await?;
         let wk = self.wallet_key().await?;
         let enc = STANDARD
@@ -144,13 +201,13 @@ impl VaultClient {
         let wk = self.wallet_key().await?;
         let enc = aes_gcm_encrypt(value.as_bytes(), &wk)?;
         let body = json!({"encrypted_value": STANDARD.encode(&enc)});
-        let url = self.secret_url(name);
+        let url = self.path_for_op(name).await?;
         let resp: PutSecretResp = put_json(&self.http, &url, &body).await?;
         Ok(resp.generation_version)
     }
 
     pub async fn delete_secret(&self, name: &str) -> Result<(), HarpocrateError> {
-        let url = self.secret_url(name);
+        let url = self.path_for_op(name).await?;
         let r = self.http.delete(&url).send().await?;
         if !r.status().is_success() {
             return Err(HarpocrateError::Http {

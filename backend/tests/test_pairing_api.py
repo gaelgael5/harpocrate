@@ -60,6 +60,7 @@ def test_confirm_does_not_require_auth() -> None:
             "replication_password": "pwd_x",
             "application_name": "app_x",
             "node_id": "11111111-1111-1111-1111-111111111111",
+            "master_postgres_password": "master_pwd_x",
         }
 
     with (

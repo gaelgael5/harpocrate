@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import base64
-import importlib
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,19 +9,18 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(autouse=True)
 def env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HARPOCRATE_DB_DSN", "postgresql://x:y@h:5432/d")
-    monkeypatch.setenv("HARPOCRATE_KEYCLOAK_URL", "https://keycloak.yoops.org")
-    monkeypatch.setenv("HARPOCRATE_KEYCLOAK_REALM", "yoops")
-    monkeypatch.setenv("HARPOCRATE_KEYCLOAK_CLIENT_ID", "harpocrate-vault")
-    monkeypatch.setenv("HARPOCRATE_HMAC_KEY", base64.b64encode(b"x" * 32).decode())
-    monkeypatch.setenv("HARPOCRATE_PUBLIC_URL", "https://t")
-
-    # Reload config modules to pick up the new env values
-    import app.api.v1.config_keycloak as ck_mod
+    # Pas de reload de app.core.config — ça créerait un nouvel objet settings
+    # dont les autres modules ne voient pas (ils ont fait `from app.core.config
+    # import settings` au moment de leur import → référence stale).
+    # À la place, on modifie l'instance partagée avec setattr (cleanup auto
+    # via monkeypatch en fin de test).
     import app.core.config
 
-    importlib.reload(app.core.config)
-    importlib.reload(ck_mod)
+    settings = app.core.config.settings
+    monkeypatch.setattr(settings, "keycloak_url", "https://keycloak.yoops.org")
+    monkeypatch.setattr(settings, "keycloak_realm", "yoops")
+    monkeypatch.setattr(settings, "keycloak_client_id", "harpocrate-vault")
+    monkeypatch.setattr(settings, "public_url", "https://t")
 
 
 def test_config_keycloak_exposes_realm_and_urls() -> None:

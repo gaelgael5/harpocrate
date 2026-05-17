@@ -42,6 +42,7 @@ import { AdminRemoteBackupsPage } from "@/pages/AdminRemoteBackupsPage";
 import { AdminReplicationPage } from "@/pages/AdminReplicationPage";
 import { AdminReplicationNodeDetailPage } from "@/pages/AdminReplicationNodeDetailPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
+import { AdminUserDetailPage } from "@/pages/AdminUserDetailPage";
 import { AdminSystemPage } from "@/pages/AdminSystemPage";
 import { AdminSnapshotsPage } from "@/pages/AdminSnapshotsPage";
 import { AdminSecretTypesPage } from "@/pages/AdminSecretTypesPage";
@@ -257,6 +258,10 @@ export default function App() {
                   element={<AdminSecretTypeDetailPage />}
                 />
                 <Route path="/admin/users" element={<AdminUsersPage />} />
+                <Route
+                  path="/admin/users/:userId"
+                  element={<AdminUserDetailPage />}
+                />
                 <Route path="/admin/system" element={<AdminSystemPage />} />
                 <Route
                   path="/admin/anomalies"

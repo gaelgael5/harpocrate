@@ -15,6 +15,8 @@ import {
 import { useTranslation } from "react-i18next";
 import dayjs from "dayjs";
 
+import { Link as RouterLink } from "react-router-dom";
+
 import { fetchAdminUsers } from "@/lib/adminApi";
 import type { AdminUser } from "@/schemas/admin";
 
@@ -26,7 +28,15 @@ function UserRow({ user }: { user: AdminUser }) {
   return (
     <Table.Tr>
       <Table.Td>
-        <Text size="sm">{user.email}</Text>
+        <Text
+          component={RouterLink}
+          to={`/admin/users/${user.id}`}
+          size="sm"
+          c="blue"
+          style={{ textDecoration: "none" }}
+        >
+          {user.email}
+        </Text>
       </Table.Td>
       <Table.Td>
         <Text size="sm" c="dimmed">

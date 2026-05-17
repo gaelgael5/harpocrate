@@ -1,8 +1,9 @@
-"""Endpoints admin pour la gestion des utilisateurs — Lot 4A.
+"""Endpoints admin pour la gestion des utilisateurs — Lot 4A + A-1.
 
 Couvre les opérations admin sur les comptes utilisateurs identifiées dans
-l'audit (features A-2 → A-5) :
+l'audit :
 
+- GET    /v1/admin/users/{user_id}                   — A-1 : detail aggrege
 - POST   /v1/admin/users/{user_id}/disable           — A-2 : disable un compte
 - POST   /v1/admin/users/{user_id}/enable            — A-2 : reactive un compte
 - POST   /v1/admin/users/{user_id}/quarantine/clear  — A-3 : leve la quarantaine
@@ -15,7 +16,8 @@ emettent une ligne audit_log avec `actor_user_id = admin.user_id` et
 
 Effet de bord cote enforcement :
 - `disabled_at IS NOT NULL` : le user ne peut plus s'authentifier (check
-  ajoute dans `app/core/security.py::require_jwt_user_with_enforcement`).
+  ajoute dans `app/db/repositories/users.py::get_by_keycloak_sub` qui leve
+  `UserDisabledError`, transformee en 403 par `app/main.py`).
 - `quarantine_until` au futur : self-service via `/me/quarantine/exit`,
   ou clear admin via cet endpoint.
 - `force_reverify_next_login = TRUE` : le prochain login force la
@@ -55,6 +57,209 @@ async def _ensure_user_exists(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "user_not_found", "message": "User not found"},
         )
+
+
+# ─── A-1 : GET /v1/admin/users/{user_id} (detail aggrege) ────────────────────
+
+
+def _iso_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+@router.get("/users/{user_id}", status_code=status.HTTP_200_OK)
+async def get_user_detail(
+    user_id: UUID,
+    admin: AdminJwt,
+) -> JSONResponse:
+    """Detail aggrege d'un utilisateur (A-1).
+
+    Retourne en une seule requete :
+    - les colonnes principales du row `users`
+    - la liste des identites externes (`user_external_identities`)
+    - un compteur des wallets owned + shared, plus les 10 plus recents owned
+    - les 10 dernieres anomalies + un compteur des non-acknowledgees
+    - les 20 derniers evenements audit_log ou ce user est actor OU target
+
+    Utilise par la page admin `/admin/users/:userId`.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user_row = await conn.fetchrow(
+            """
+            SELECT id, email, display_name, created_at, last_unlock_at,
+                   disabled_at, disabled_reason,
+                   quarantine_until, quarantine_reason,
+                   force_reverify_next_login,
+                   (rsa_public_key IS NOT NULL) AS has_bootstrap
+              FROM users
+             WHERE id = $1 AND is_system = FALSE
+            """,
+            user_id,
+        )
+        if user_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "user_not_found", "message": "User not found"},
+            )
+
+        identities = await conn.fetch(
+            """
+            SELECT id, provider, external_subject, is_primary,
+                   linked_at, last_login_at, linked_email, linked_display_name
+              FROM user_external_identities
+             WHERE user_id = $1
+             ORDER BY is_primary DESC, linked_at ASC
+            """,
+            user_id,
+        )
+
+        owned_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM wallets WHERE owner_user_id = $1 AND deleted_at IS NULL",
+            user_id,
+        )
+        shared_count = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM wallet_grants
+             WHERE grantee_user_id = $1
+            """,
+            user_id,
+        )
+        recent_wallets = await conn.fetch(
+            """
+            SELECT id, name, created_at
+              FROM wallets
+             WHERE owner_user_id = $1 AND deleted_at IS NULL
+             ORDER BY created_at DESC
+             LIMIT 10
+            """,
+            user_id,
+        )
+
+        anomaly_total = await conn.fetchval(
+            "SELECT COUNT(*) FROM identity_anomaly_events WHERE user_id = $1",
+            user_id,
+        )
+        anomaly_unack = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM identity_anomaly_events
+             WHERE user_id = $1 AND acknowledged_at IS NULL
+            """,
+            user_id,
+        )
+        recent_anomalies = await conn.fetch(
+            """
+            SELECT id, detected_at, severity, anomaly_type, metadata,
+                   acknowledged_at
+              FROM identity_anomaly_events
+             WHERE user_id = $1
+             ORDER BY detected_at DESC
+             LIMIT 10
+            """,
+            user_id,
+        )
+
+        recent_audit = await conn.fetch(
+            """
+            SELECT id, occurred_at, action, success, error_code,
+                   actor_user_id, actor_api_key_id, actor_ip,
+                   target_wallet_id, target_secret_id, target_api_key_id
+              FROM audit_log
+             WHERE actor_user_id = $1 OR target_user_id = $1
+             ORDER BY occurred_at DESC, id DESC
+             LIMIT 20
+            """,
+            user_id,
+        )
+
+    return JSONResponse(
+        {
+            "user": {
+                "id": str(user_row["id"]),
+                "email": user_row["email"],
+                "display_name": user_row["display_name"],
+                "created_at": _iso_or_none(user_row["created_at"]),
+                "last_unlock_at": _iso_or_none(user_row["last_unlock_at"]),
+                "has_bootstrap": bool(user_row["has_bootstrap"]),
+                "disabled_at": _iso_or_none(user_row["disabled_at"]),
+                "disabled_reason": user_row["disabled_reason"],
+                "quarantine_until": _iso_or_none(user_row["quarantine_until"]),
+                "quarantine_reason": user_row["quarantine_reason"],
+                "force_reverify_next_login": bool(
+                    user_row["force_reverify_next_login"]
+                ),
+            },
+            "identities": [
+                {
+                    "id": str(r["id"]),
+                    "provider": r["provider"],
+                    "external_subject": r["external_subject"],
+                    "is_primary": bool(r["is_primary"]),
+                    "linked_at": _iso_or_none(r["linked_at"]),
+                    "last_login_at": _iso_or_none(r["last_login_at"]),
+                    "linked_email": r["linked_email"],
+                    "linked_display_name": r["linked_display_name"],
+                }
+                for r in identities
+            ],
+            "wallets": {
+                "owned_count": int(owned_count or 0),
+                "shared_count": int(shared_count or 0),
+                "recent_owned": [
+                    {
+                        "id": str(r["id"]),
+                        "name": r["name"],
+                        "created_at": _iso_or_none(r["created_at"]),
+                    }
+                    for r in recent_wallets
+                ],
+            },
+            "anomalies": {
+                "total_count": int(anomaly_total or 0),
+                "unacknowledged_count": int(anomaly_unack or 0),
+                "recent": [
+                    {
+                        "id": int(r["id"]),
+                        "detected_at": _iso_or_none(r["detected_at"]),
+                        "severity": r["severity"],
+                        "anomaly_type": r["anomaly_type"],
+                        "metadata": r["metadata"],
+                        "acknowledged_at": _iso_or_none(r["acknowledged_at"]),
+                    }
+                    for r in recent_anomalies
+                ],
+            },
+            "recent_audit": [
+                {
+                    "id": int(r["id"]),
+                    "occurred_at": _iso_or_none(r["occurred_at"]),
+                    "action": r["action"],
+                    "success": bool(r["success"]),
+                    "error_code": r["error_code"],
+                    "actor_user_id": (
+                        str(r["actor_user_id"]) if r["actor_user_id"] else None
+                    ),
+                    "actor_api_key_id": (
+                        str(r["actor_api_key_id"]) if r["actor_api_key_id"] else None
+                    ),
+                    "actor_ip": r["actor_ip"],
+                    "target_wallet_id": (
+                        str(r["target_wallet_id"]) if r["target_wallet_id"] else None
+                    ),
+                    "target_secret_id": (
+                        str(r["target_secret_id"]) if r["target_secret_id"] else None
+                    ),
+                    "target_api_key_id": (
+                        str(r["target_api_key_id"]) if r["target_api_key_id"] else None
+                    ),
+                }
+                for r in recent_audit
+            ],
+        }
+    )
 
 
 # ─── A-2 : POST /v1/admin/users/{user_id}/disable ────────────────────────────

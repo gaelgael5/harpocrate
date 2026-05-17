@@ -189,6 +189,112 @@ export async function fetchAdminUsers(params?: {
   return AdminUsersResponseSchema.parse(raw);
 }
 
+// A-1 — Detail aggrege d'un utilisateur admin.
+// Le shape correspond a `GET /v1/admin/users/{user_id}`.
+export interface AdminUserIdentity {
+  id: string;
+  provider: string;
+  external_subject: string;
+  is_primary: boolean;
+  linked_at: string;
+  last_login_at: string | null;
+  linked_email: string | null;
+  linked_display_name: string | null;
+}
+
+export interface AdminUserWalletSummary {
+  owned_count: number;
+  shared_count: number;
+  recent_owned: { id: string; name: string; created_at: string }[];
+}
+
+export interface AdminUserAnomaly {
+  id: number;
+  detected_at: string;
+  severity: "info" | "warning" | "critical" | string;
+  anomaly_type: string;
+  metadata: Record<string, unknown> | null;
+  acknowledged_at: string | null;
+}
+
+export interface AdminUserAuditEvent {
+  id: number;
+  occurred_at: string;
+  action: string;
+  success: boolean;
+  error_code: string | null;
+  actor_user_id: string | null;
+  actor_api_key_id: string | null;
+  actor_ip: string | null;
+  target_wallet_id: string | null;
+  target_secret_id: string | null;
+  target_api_key_id: string | null;
+}
+
+export interface AdminUserDetail {
+  user: {
+    id: string;
+    email: string;
+    display_name: string | null;
+    created_at: string;
+    last_unlock_at: string | null;
+    has_bootstrap: boolean;
+    disabled_at: string | null;
+    disabled_reason: string | null;
+    quarantine_until: string | null;
+    quarantine_reason: string | null;
+    force_reverify_next_login: boolean;
+  };
+  identities: AdminUserIdentity[];
+  wallets: AdminUserWalletSummary;
+  anomalies: {
+    total_count: number;
+    unacknowledged_count: number;
+    recent: AdminUserAnomaly[];
+  };
+  recent_audit: AdminUserAuditEvent[];
+}
+
+export async function fetchAdminUserDetail(
+  userId: string,
+): Promise<AdminUserDetail> {
+  return await api.get<AdminUserDetail>(`/admin/users/${userId}`);
+}
+
+// Actions admin (A-2..A-5) cablees pour la page detail.
+
+export async function disableAdminUser(
+  userId: string,
+  reason: string,
+): Promise<void> {
+  await api.post<unknown>(`/admin/users/${userId}/disable`, { reason });
+}
+
+export async function enableAdminUser(userId: string): Promise<void> {
+  await api.post<unknown>(`/admin/users/${userId}/enable`, {});
+}
+
+export async function clearAdminUserQuarantine(userId: string): Promise<void> {
+  await api.post<unknown>(`/admin/users/${userId}/quarantine/clear`, {});
+}
+
+export async function setAdminUserForceReverify(
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  await api.patch<unknown>(
+    `/admin/users/${userId}/force-reverify-next-login`,
+    { enabled },
+  );
+}
+
+export async function unlinkAdminUserIdentity(
+  userId: string,
+  identityId: string,
+): Promise<void> {
+  await api.delete<void>(`/admin/users/${userId}/identities/${identityId}`);
+}
+
 export async function fetchEnvConfig(): Promise<EnvConfig> {
   const raw = await api.get<unknown>("/admin/system/env");
   return EnvConfigSchema.parse(raw);

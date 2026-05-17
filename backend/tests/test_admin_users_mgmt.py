@@ -334,3 +334,106 @@ async def test_get_by_keycloak_sub_returns_none_when_user_not_found() -> None:
     conn.fetchrow = AsyncMock(return_value=None)
     result = await get_by_keycloak_sub(conn, "no-such-sub")
     assert result is None
+
+
+# ─── A-1 detail aggregation ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_user_detail_requires_admin() -> None:
+    async with _make_client(_make_pool(_make_conn())) as client:
+        r = await client.get(
+            f"/v1/admin/users/{_USER_ID}",
+            headers=_user_header(),
+        )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_user_detail_404_when_not_found() -> None:
+    conn = _make_conn()
+    conn.fetchrow = AsyncMock(return_value=None)
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.get(
+            f"/v1/admin/users/{_USER_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_user_detail_returns_aggregated_payload() -> None:
+    conn = _make_conn()
+    now = datetime.datetime(2026, 5, 17, 12, 0, 0, tzinfo=datetime.UTC)
+    user_row = {
+        "id": _USER_ID,
+        "email": "alice@example.com",
+        "display_name": "Alice",
+        "created_at": now,
+        "last_unlock_at": now,
+        "disabled_at": None,
+        "disabled_reason": None,
+        "quarantine_until": None,
+        "quarantine_reason": None,
+        "force_reverify_next_login": False,
+        "has_bootstrap": True,
+    }
+    conn.fetchrow = AsyncMock(return_value=user_row)
+    conn.fetchval = AsyncMock(side_effect=[3, 2, 5, 1])  # owned, shared, anomaly_total, anomaly_unack
+    conn.fetch = AsyncMock(side_effect=[
+        # identities
+        [
+            {
+                "id": _IDENTITY_ID,
+                "provider": "keycloak_internal",
+                "external_subject": "kc-sub-1",
+                "is_primary": True,
+                "linked_at": now,
+                "last_login_at": now,
+                "linked_email": "alice@example.com",
+                "linked_display_name": "Alice",
+            }
+        ],
+        # recent wallets
+        [
+            {"id": uuid.UUID("11111111-1111-1111-1111-111111111111"), "name": "prod", "created_at": now},
+        ],
+        # recent anomalies
+        [],
+        # recent audit
+        [
+            {
+                "id": 100,
+                "occurred_at": now,
+                "action": "auth.local_login",
+                "success": True,
+                "error_code": None,
+                "actor_user_id": _USER_ID,
+                "actor_api_key_id": None,
+                "actor_ip": "10.0.0.1",
+                "target_wallet_id": None,
+                "target_secret_id": None,
+                "target_api_key_id": None,
+            }
+        ],
+    ])
+
+    async with _make_client(_make_pool(conn)) as client:
+        r = await client.get(
+            f"/v1/admin/users/{_USER_ID}",
+            headers=_admin_header(),
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["user"]["email"] == "alice@example.com"
+    assert body["user"]["has_bootstrap"] is True
+    assert body["user"]["force_reverify_next_login"] is False
+    assert len(body["identities"]) == 1
+    assert body["identities"][0]["provider"] == "keycloak_internal"
+    assert body["wallets"]["owned_count"] == 3
+    assert body["wallets"]["shared_count"] == 2
+    assert len(body["wallets"]["recent_owned"]) == 1
+    assert body["anomalies"]["total_count"] == 5
+    assert body["anomalies"]["unacknowledged_count"] == 1
+    assert len(body["recent_audit"]) == 1
+    assert body["recent_audit"][0]["action"] == "auth.local_login"

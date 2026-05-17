@@ -200,8 +200,21 @@ Trois mécanismes complémentaires, accessibles via **Administration → Sauvega
 
 ## Documentation
 
-Documentation détaillée (architecture, modèle de menace, intégration SDK) :  
-👉 [Wiki Harpocrate](https://github.com/gaelgael5/harpocrate/wiki)
+Documentation complète, bilingue, alignée sur le code :
+
+- 🇫🇷 [Table des matières (Français)](https://github.com/gaelgael5/harpocrate/wiki/docs/fr/TOC) — point d'entrée FR
+- 🇬🇧 [Table of contents (English)](https://github.com/gaelgael5/harpocrate/wiki/docs/en/TOC) — EN entry point
+- 🏠 [Wiki Home](https://github.com/gaelgael5/harpocrate/wiki) — vue d'ensemble bilingue
+
+Sections clés :
+
+| Sujet | FR | EN |
+|---|---|---|
+| Philosophie produit (E2E, threat model) | [philosophy_README](https://github.com/gaelgael5/harpocrate/wiki/docs/fr/philosophy_README) | [philosophy_README](https://github.com/gaelgael5/harpocrate/wiki/docs/en/philosophy_README) |
+| Premiers pas utilisateur | [user_getting-started](https://github.com/gaelgael5/harpocrate/wiki/docs/fr/user_getting-started) | [user_getting-started](https://github.com/gaelgael5/harpocrate/wiki/docs/en/user_getting-started) |
+| Installation et déploiement | [ops_installation_README](https://github.com/gaelgael5/harpocrate/wiki/docs/fr/ops_installation_README) | [ops_installation_README](https://github.com/gaelgael5/harpocrate/wiki/docs/en/ops_installation_README) |
+| Variables d'environnement | [ops_configuration_env-vars](https://github.com/gaelgael5/harpocrate/wiki/docs/fr/ops_configuration_env-vars) | [ops_configuration_env-vars](https://github.com/gaelgael5/harpocrate/wiki/docs/en/ops_configuration_env-vars) |
+| Intégrer en 5 minutes (SDK) | [dev_quickstart](https://github.com/gaelgael5/harpocrate/wiki/docs/fr/dev_quickstart) | [dev_quickstart](https://github.com/gaelgael5/harpocrate/wiki/docs/en/dev_quickstart) |
 
 SDK clients officiels (Python, …) téléchargeables depuis l'écran **Intégration** de l'application.
 

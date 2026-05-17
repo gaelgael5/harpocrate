@@ -4,7 +4,10 @@
  * autonome (utilisé par `/integration/api-docs` pour les visiteurs publics
  * depuis l'IntegrationPage).
  *
- * L'iframe pointe vers `/v1/docs` qui sert le Swagger UI built-in de FastAPI.
+ * L'iframe pointe vers `/v1/api-docs` (Swagger UI standalone servi par
+ * api_key_openapi.router, qui charge `/v1/openapi-api-key.json` — schema
+ * filtré aux endpoints API-key uniquement). Le `/docs` natif FastAPI
+ * n'est PAS exposé sous /v1.
  */
 import { Box } from "@mantine/core";
 
@@ -19,7 +22,7 @@ export function ApiDocsEmbeddedPage() {
       }}
     >
       <iframe
-        src="/v1/docs"
+        src="/v1/api-docs"
         title="API Reference"
         style={{
           border: "none",

@@ -195,6 +195,8 @@ _KNOWN_AUDIT_ACTIONS: list[str] = [
     "admin.user_force_reverify_set",
     "admin.user_force_reverify_cleared",
     "admin.user_identity_unlinked",
+    # admin observability (Lot 4B — A-6)
+    "admin.audit_log_exported",
 ]
 
 

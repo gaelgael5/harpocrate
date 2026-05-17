@@ -95,6 +95,51 @@ export async function restoreBackup(
   return RestoreResultSchema.parse(raw);
 }
 
+// A-7 : verification d'integrite d'un backup local.
+// Le serveur dechiffre le `.tar.age` avec la cle privee fournie, ouvre le
+// manifest, et verifie les checksums internes. La cle privee n'est jamais
+// persistee — c'est l'admin qui la fournit a chaque verification.
+export interface BackupVerifyResult {
+  valid: boolean;
+  manifest: Record<string, unknown> | null;
+  checksums_match: boolean;
+  dump_sql_lines: number | null;
+}
+
+export async function verifyBackup(
+  id: string,
+  age_private_key: string,
+): Promise<BackupVerifyResult> {
+  return await api.post<BackupVerifyResult>(`/admin/backups/${id}/verify`, {
+    age_private_key,
+  });
+}
+
+// A-6 : URL de telechargement de l'export CSV de l'audit log.
+// Le navigateur ouvre cette URL ; le backend stream le CSV en attachement.
+export function auditLogExportUrl(filters: {
+  action?: string;
+  action_prefix?: string;
+  since?: string;
+  until?: string;
+  actor_user_id?: string;
+  actor_api_key_id?: string;
+  success?: boolean;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.action) params.set("action", filters.action);
+  if (filters.action_prefix) params.set("action_prefix", filters.action_prefix);
+  if (filters.since) params.set("since", filters.since);
+  if (filters.until) params.set("until", filters.until);
+  if (filters.actor_user_id) params.set("actor_user_id", filters.actor_user_id);
+  if (filters.actor_api_key_id)
+    params.set("actor_api_key_id", filters.actor_api_key_id);
+  if (filters.success !== undefined)
+    params.set("success", filters.success ? "true" : "false");
+  const qs = params.toString();
+  return `/v1/admin/audit-log/export${qs ? "?" + qs : ""}`;
+}
+
 export async function fetchSystemInfo(): Promise<SystemInfo> {
   const raw = await api.get<unknown>("/admin/system/info");
   return SystemInfoSchema.parse(raw);

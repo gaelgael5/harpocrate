@@ -364,7 +364,8 @@
     "noEvents": "No events.",
     "wallet": "Vault",
     "since": "Since",
-    "until": "Until"
+    "until": "Until",
+    "exportCsv": "Export as CSV"
   },
   "account": {
     "title": "My account",
@@ -578,6 +579,16 @@
       "restoring": "Restoring...",
       "restoreSuccess": "Restore successful — session epoch: {{epoch}}",
       "restoreError": "Restore error",
+      "verify": "Verify",
+      "verifyTitle": "Verify integrity of {{filename}}",
+      "verifyHelp": "The server decrypts the archive with your AGE private key and checks internal checksums. The key is never persisted.",
+      "verifying": "Verifying...",
+      "verifySuccess": "Backup verified — checksums OK",
+      "verifyInvalid": "Backup invalid or corrupted",
+      "verifyValid": "Backup valid",
+      "verifyError": "Verification error (wrong key or corrupted file)",
+      "checksumsMatch": "Checksums",
+      "dumpSqlLines": "Dump SQL lines",
       "descriptionLabel": "Description (optional)",
       "createSuccess": "Backup created",
       "deleteSuccess": "Backup deleted",

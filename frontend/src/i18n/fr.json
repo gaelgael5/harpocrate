@@ -365,7 +365,8 @@
     "noEvents": "Aucun événement.",
     "wallet": "Coffre",
     "since": "Depuis",
-    "until": "Jusqu'à"
+    "until": "Jusqu'à",
+    "exportCsv": "Exporter en CSV"
   },
   "account": {
     "title": "Mon compte",
@@ -579,6 +580,16 @@
       "restoring": "Restauration en cours...",
       "restoreSuccess": "Restauration réussie — époque session : {{epoch}}",
       "restoreError": "Erreur lors de la restauration",
+      "verify": "Vérifier",
+      "verifyTitle": "Vérifier l'intégrité de {{filename}}",
+      "verifyHelp": "Le serveur déchiffre l'archive avec votre clé privée AGE et vérifie les checksums internes. La clé n'est jamais persistée.",
+      "verifying": "Vérification...",
+      "verifySuccess": "Backup vérifié — checksums OK",
+      "verifyInvalid": "Backup invalide ou corrompu",
+      "verifyValid": "Backup valide",
+      "verifyError": "Erreur lors de la vérification (clé incorrecte ou fichier corrompu)",
+      "checksumsMatch": "Checksums",
+      "dumpSqlLines": "Lignes SQL du dump",
       "descriptionLabel": "Description (optionnel)",
       "createSuccess": "Sauvegarde créée",
       "deleteSuccess": "Sauvegarde supprimée",

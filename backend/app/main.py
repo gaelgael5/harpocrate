@@ -58,6 +58,7 @@ from app.services import replication as replication_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
+from app.services import sync_log_partition_scheduler as sync_log_partition_svc
 from app.services import sync_replication_service as sync_svc
 from app.services import wallets as wallets_svc
 from app.services.secret_paths import InvalidSecretPath
@@ -117,6 +118,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await scheduled_backups_scheduler.start()
     except Exception as exc:
         logger.warning("scheduled_backups_scheduler_start_failed", error=str(exc))
+
+    # R-1/R-2 — partitionnement journalier de sync_log + purge horaire.
+    # Crée today + tomorrow au boot, drop les partitions plus vieilles que
+    # HARPOCRATE_SYNC_LOG_RETENTION_DAYS. La partition `sync_log_default`
+    # reste en place comme filet de sécurité (jamais touchée).
+    sync_log_partition_scheduler = sync_log_partition_svc.init_scheduler()
+    try:
+        await sync_log_partition_scheduler.start()
+    except Exception as exc:
+        logger.warning(
+            "sync_log_partition_scheduler_start_failed", error=str(exc)
+        )
 
     # Closures background : on n'utilise PAS la variable `pool` du lifespan
     # (qui pointe vers l'ancien pool après refresh_pool post-pairing). Chaque
@@ -202,6 +215,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await replication_purge_task
         await scheduler.stop()
         await scheduled_backups_scheduler.stop()
+        await sync_log_partition_scheduler.stop()
         await sync_svc.stop_sync_replication()
         sync = get_cluster_sync()
         if sync is not None:

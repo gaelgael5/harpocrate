@@ -15,7 +15,8 @@ config = {
     "region":       "fr-par",                        # requis
     "bucket":       "harpocrate-backups",            # requis
     "path_style":   true,                             # true pour R2/B2/MinIO
-    "object_lock":  true,                             # info uniquement
+    "object_lock_days": 30,                           # S-6 : ≥1 active Object Lock
+                                                      # GOVERNANCE mode, 0/absent = off
     # Les prefixes cible (prefix_snapshots, prefix_full) sont stockés dans
     # le config côté API mais ne sont PAS lus par le provider.
 }
@@ -24,6 +25,19 @@ credentials = {
     "access_key_id":     "AKIA...",
     "secret_access_key": "...",
 }
+
+Object Lock (S-6 du rapport d'audit) :
+- `object_lock_days ≥ 1` ajoute `ObjectLockMode=GOVERNANCE` +
+  `ObjectLockRetainUntilDate = now + object_lock_days` à chaque upload, via
+  `ExtraArgs` de `upload_fileobj` (boto3). Empêche la suppression accidentelle
+  ou malveillante du backup pendant la période de rétention.
+- **Prérequis côté bucket** : Object Lock doit être ENABLED au moment de la
+  création du bucket (paramètre AWS S3 / R2 / B2 immuable). Si désactivé
+  côté bucket, l'upload échoue avec `InvalidRequest`.
+- Mode GOVERNANCE (vs COMPLIANCE) : peut être bypassé par un utilisateur IAM
+  avec la permission `s3:BypassGovernanceRetention`. Choix volontaire pour
+  permettre une suppression d'urgence par un admin S3 (vs COMPLIANCE qui
+  bloque même AWS root account).
 
 Limites connues :
 - L'upload utilise un fichier temporaire local (boto3 multipart auto) pour
@@ -38,6 +52,7 @@ import asyncio
 import contextlib
 import tempfile
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +75,19 @@ class S3CompatibleProvider:
 
         self._endpoint_url = config.get("endpoint_url") or None
         self._path_style = bool(config.get("path_style", False))
+
+        # S-6 : Object Lock applicatif (GOVERNANCE). 0 ou absent = désactivé.
+        # Le boolean legacy `object_lock: bool` est traité comme `30` jours
+        # pour la rétrocompatibilité (anciennes configs qui exposaient juste
+        # cette case à cocher documentaire).
+        lock_raw = config.get("object_lock_days")
+        if lock_raw is None:
+            legacy = config.get("object_lock")
+            lock_raw = 30 if legacy else 0
+        try:
+            self._object_lock_days = max(0, int(lock_raw))
+        except (TypeError, ValueError):
+            self._object_lock_days = 0
 
         access = str(credentials.get("access_key_id", "")).strip()
         secret = credentials.get("secret_access_key") or ""
@@ -104,6 +132,21 @@ class S3CompatibleProvider:
         normalized = self._normalize_prefix(prefix)
         return f"{normalized}{filename}" if normalized else filename
 
+    def _build_extra_args(self) -> dict[str, Any]:
+        """Construit le dict `ExtraArgs` pour `upload_fileobj`.
+
+        S-6 — si `object_lock_days >= 1`, ajoute la rétention GOVERNANCE.
+        Sinon, retourne un dict vide (pas d'override).
+        """
+        extra: dict[str, Any] = {}
+        if self._object_lock_days >= 1:
+            extra["ObjectLockMode"] = "GOVERNANCE"
+            # boto3 sérialise un datetime UTC en ISO8601 pour l'API S3.
+            extra["ObjectLockRetainUntilDate"] = datetime.now(UTC) + timedelta(
+                days=self._object_lock_days
+            )
+        return extra
+
     async def test_connection(self, path: str) -> dict[str, Any] | None:
         """head_bucket → vérifie auth + accès au bucket. Le `path` (prefix) est
         validé par construction : les prefixes S3 n'ont pas besoin d'exister
@@ -146,12 +189,18 @@ class S3CompatibleProvider:
                 tmp.flush()
 
                 key = self._key_for(path, remote_filename)
+                extra_args = self._build_extra_args()
 
                 def _upload() -> None:
                     try:
                         client = self._make_client()
                         with tmp_path.open("rb") as f:
-                            client.upload_fileobj(f, self._bucket, key)
+                            if extra_args:
+                                client.upload_fileobj(
+                                    f, self._bucket, key, ExtraArgs=extra_args
+                                )
+                            else:
+                                client.upload_fileobj(f, self._bucket, key)
                     except Exception as exc:
                         raise RemoteBackupProviderError(
                             f"S3 upload to s3://{self._bucket}/{key} failed: {exc}"

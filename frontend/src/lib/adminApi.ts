@@ -539,6 +539,47 @@ export async function fetchReplicationStatus(): Promise<ReplicationStatusRespons
   return ReplicationStatusResponseSchema.parse(raw);
 }
 
+// A-9 — Operations Patroni (switchover, reinit, pause, resume).
+
+export interface PatroniSwitchoverResult {
+  ok: boolean;
+  leader_url?: string;
+  leader_name?: string | null;
+  candidate?: string | null;
+}
+
+export async function patroniSwitchover(
+  body: { candidate_name?: string; scheduled_at?: string },
+): Promise<PatroniSwitchoverResult> {
+  return api.post<PatroniSwitchoverResult>(
+    "/admin/replication/patroni/switchover",
+    { ...body, confirmation: "SWITCHOVER" },
+  );
+}
+
+export async function patroniReinit(
+  memberUrl: string,
+): Promise<{ ok: boolean; member_url: string }> {
+  return api.post<{ ok: boolean; member_url: string }>(
+    "/admin/replication/patroni/reinit",
+    { member_url: memberUrl, confirmation: "REINIT" },
+  );
+}
+
+export async function patroniPause(): Promise<{ ok: boolean; paused: true }> {
+  return api.post<{ ok: boolean; paused: true }>(
+    "/admin/replication/patroni/pause",
+    {},
+  );
+}
+
+export async function patroniResume(): Promise<{ ok: boolean; paused: false }> {
+  return api.post<{ ok: boolean; paused: false }>(
+    "/admin/replication/patroni/resume",
+    {},
+  );
+}
+
 export async function activateReplicationStrategy(
   strategyId: string,
 ): Promise<{ activated: boolean; strategy_id: string }> {

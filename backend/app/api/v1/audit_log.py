@@ -197,6 +197,13 @@ _KNOWN_AUDIT_ACTIONS: list[str] = [
     "admin.user_identity_unlinked",
     # admin observability (Lot 4B — A-6)
     "admin.audit_log_exported",
+    # admin patroni (A-9)
+    "admin.patroni_switchover",
+    "admin.patroni_switchover_failed",
+    "admin.patroni_reinit",
+    "admin.patroni_reinit_failed",
+    "admin.patroni_paused",
+    "admin.patroni_resumed",
 ]
 
 

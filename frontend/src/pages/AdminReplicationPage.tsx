@@ -24,6 +24,9 @@ import {
   Table,
   Switch,
   Button,
+  Modal,
+  TextInput,
+  Divider,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { Link } from "react-router-dom";
@@ -34,6 +37,10 @@ import {
   fetchReplicationStatus,
   activateReplicationStrategy,
   deactivateReplicationStrategy,
+  patroniSwitchover,
+  patroniReinit,
+  patroniPause,
+  patroniResume,
 } from "@/lib/adminApi";
 import { ApiError } from "@/lib/api-client";
 import { StreamingNodesPanel } from "@/components/StreamingNodesPanel";
@@ -48,6 +55,227 @@ function StatusBadge({ status }: { status: string }) {
     status === "ok" ? "green" : status === "degraded" ? "orange" : "red";
   return <Badge color={color}>{status}</Badge>;
 }
+
+// A-9 — Operations Patroni admin (switchover/reinit/pause/resume).
+// Visible uniquement quand la strategie active est Patroni.
+function PatroniOpsPanel({
+  nodes,
+}: {
+  nodes: Array<Record<string, unknown>>;
+}) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const [switchoverOpen, setSwitchoverOpen] = useState(false);
+  const [reinitOpen, setReinitOpen] = useState(false);
+  const [switchoverCandidate, setSwitchoverCandidate] = useState("");
+  const [reinitMemberUrl, setReinitMemberUrl] = useState("");
+  const [switchoverConfirm, setSwitchoverConfirm] = useState("");
+  const [reinitConfirm, setReinitConfirm] = useState("");
+
+  // Detecte si le cluster est en pause via les nodes : un node "paused"
+  // s'expose generalement via state, mais Patroni n'expose pas le flag
+  // pause au niveau /patroni — il faudrait /cluster. Pour rester simple,
+  // on affiche les 2 boutons (pause / resume) et on laisse l'admin
+  // choisir. Le backend rejette l'inversion impossible (no_leader).
+  const onSuccess = (key: string) => {
+    notifications.show({
+      color: "green",
+      message: t(`admin.replication.patroni.${key}Success`),
+    });
+    void qc.invalidateQueries({ queryKey: ["replication-status"] });
+  };
+  const onError = (err: unknown) => {
+    const msg = err instanceof ApiError ? err.message : t("common.error");
+    notifications.show({ color: "red", message: msg });
+  };
+
+  const switchoverMut = useMutation({
+    mutationFn: () =>
+      patroniSwitchover({
+        candidate_name: switchoverCandidate.trim() || undefined,
+      }),
+    onSuccess: () => {
+      onSuccess("switchover");
+      setSwitchoverOpen(false);
+      setSwitchoverCandidate("");
+      setSwitchoverConfirm("");
+    },
+    onError,
+  });
+
+  const reinitMut = useMutation({
+    mutationFn: () => patroniReinit(reinitMemberUrl.trim()),
+    onSuccess: () => {
+      onSuccess("reinit");
+      setReinitOpen(false);
+      setReinitMemberUrl("");
+      setReinitConfirm("");
+    },
+    onError,
+  });
+
+  const pauseMut = useMutation({
+    mutationFn: () => patroniPause(),
+    onSuccess: () => onSuccess("pause"),
+    onError,
+  });
+
+  const resumeMut = useMutation({
+    mutationFn: () => patroniResume(),
+    onSuccess: () => onSuccess("resume"),
+    onError,
+  });
+
+  const replicaUrls = nodes
+    .filter((n) => n.role === "replica")
+    .map((n) => String(n.url ?? ""));
+
+  return (
+    <>
+      <Divider my="md" />
+      <Stack gap="xs">
+        <Title order={5}>{t("admin.replication.patroni.title")}</Title>
+        <Text size="sm" c="dimmed">
+          {t("admin.replication.patroni.help")}
+        </Text>
+        <Group>
+          <Button
+            color="orange"
+            variant="outline"
+            onClick={() => setSwitchoverOpen(true)}
+          >
+            {t("admin.replication.patroni.switchover")}
+          </Button>
+          <Button
+            color="red"
+            variant="outline"
+            disabled={replicaUrls.length === 0}
+            onClick={() => setReinitOpen(true)}
+          >
+            {t("admin.replication.patroni.reinit")}
+          </Button>
+          <Button
+            variant="outline"
+            loading={pauseMut.isPending}
+            onClick={() => pauseMut.mutate()}
+          >
+            {t("admin.replication.patroni.pause")}
+          </Button>
+          <Button
+            variant="outline"
+            loading={resumeMut.isPending}
+            onClick={() => resumeMut.mutate()}
+          >
+            {t("admin.replication.patroni.resume")}
+          </Button>
+        </Group>
+      </Stack>
+
+      <Modal
+        opened={switchoverOpen}
+        onClose={() => setSwitchoverOpen(false)}
+        title={t("admin.replication.patroni.switchoverTitle")}
+      >
+        <Stack>
+          <Alert color="orange">
+            {t("admin.replication.patroni.switchoverWarning")}
+          </Alert>
+          <TextInput
+            label={t("admin.replication.patroni.candidateLabel")}
+            placeholder={t("admin.replication.patroni.candidatePlaceholder")}
+            value={switchoverCandidate}
+            onChange={(e) => setSwitchoverCandidate(e.currentTarget.value)}
+          />
+          <TextInput
+            label={t("admin.replication.patroni.confirmLabel", {
+              expected: "SWITCHOVER",
+            })}
+            placeholder="SWITCHOVER"
+            value={switchoverConfirm}
+            onChange={(e) => setSwitchoverConfirm(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              onClick={() => setSwitchoverOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              color="orange"
+              disabled={switchoverConfirm !== "SWITCHOVER"}
+              loading={switchoverMut.isPending}
+              onClick={() => switchoverMut.mutate()}
+            >
+              {t("admin.replication.patroni.switchover")}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={reinitOpen}
+        onClose={() => setReinitOpen(false)}
+        title={t("admin.replication.patroni.reinitTitle")}
+      >
+        <Stack>
+          <Alert color="red">
+            {t("admin.replication.patroni.reinitWarning")}
+          </Alert>
+          <TextInput
+            label={t("admin.replication.patroni.memberUrlLabel")}
+            placeholder="https://pg2:8008"
+            value={reinitMemberUrl}
+            onChange={(e) => setReinitMemberUrl(e.currentTarget.value)}
+          />
+          {replicaUrls.length > 0 && (
+            <Stack gap={0}>
+              <Text size="xs" c="dimmed">
+                {t("admin.replication.patroni.availableReplicas")}:
+              </Text>
+              {replicaUrls.map((u) => (
+                <Text
+                  key={u}
+                  size="xs"
+                  ff="monospace"
+                  onClick={() => setReinitMemberUrl(u)}
+                  style={{ cursor: "pointer" }}
+                  c="blue"
+                >
+                  {u}
+                </Text>
+              ))}
+            </Stack>
+          )}
+          <TextInput
+            label={t("admin.replication.patroni.confirmLabel", {
+              expected: "REINIT",
+            })}
+            placeholder="REINIT"
+            value={reinitConfirm}
+            onChange={(e) => setReinitConfirm(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => setReinitOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              color="red"
+              disabled={
+                reinitConfirm !== "REINIT" || !reinitMemberUrl.trim()
+              }
+              loading={reinitMut.isPending}
+              onClick={() => reinitMut.mutate()}
+            >
+              {t("admin.replication.patroni.reinit")}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
 
 function NodesTable({ nodes }: { nodes: Array<Record<string, unknown>> }) {
   const { t } = useTranslation();
@@ -212,6 +440,15 @@ export function AdminReplicationPage() {
                 )}
                 {statusQuery.data.live?.nodes && (
                   <NodesTable nodes={statusQuery.data.live.nodes} />
+                )}
+                {statusQuery.data.strategy.type === "patroni" && (
+                  <PatroniOpsPanel
+                    nodes={
+                      (statusQuery.data.live?.nodes as
+                        | Array<Record<string, unknown>>
+                        | undefined) ?? []
+                    }
+                  />
                 )}
               </>
             ) : (

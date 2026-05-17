@@ -108,6 +108,7 @@ class PatroniStrategy(ReplicationStrategy):
             data = r.json() if r.status_code == 200 else {}
             return {
                 "url": url,
+                "name": data.get("patroni", {}).get("scope") or data.get("name"),
                 "role": data.get("role"),
                 "state": data.get("state"),
                 "timeline": data.get("timeline"),
@@ -116,6 +117,151 @@ class PatroniStrategy(ReplicationStrategy):
             }
         except Exception as exc:
             return {"url": url, "healthy": False, "error": str(exc)}
+
+    # ─── A-9 : actions admin sur le cluster Patroni ──────────────────────────
+
+    async def _find_leader_url(self, client: httpx.AsyncClient) -> str | None:
+        """Trouve l'URL du leader actuel parmi `_urls`. Retourne None si aucun
+        nœud n'est joignable ou n'est leader."""
+        for url in self._urls:
+            try:
+                r = await client.get(f"{url.rstrip('/')}/patroni")
+                if r.status_code == 200 and r.json().get("role") == "master":
+                    return url
+            except Exception:
+                continue
+        return None
+
+    async def switchover(
+        self,
+        *,
+        candidate_name: str | None = None,
+        scheduled_at: str | None = None,
+    ) -> dict[str, Any]:
+        """Switchover gracieux Patroni.
+
+        Si `candidate_name` est None, Patroni choisit le meilleur replica.
+        Si `scheduled_at` est None, le switchover est immediat.
+
+        Cible le leader actuel pour POST /switchover.
+        """
+        async with httpx.AsyncClient(timeout=self._timeout * 5) as client:
+            leader_url = await self._find_leader_url(client)
+            if leader_url is None:
+                raise PatroniOperationError(
+                    "no_leader_found",
+                    "Could not locate the current leader among configured patroni_api_urls",
+                )
+            # Recupere le nom du leader pour le passer dans le body
+            r = await client.get(f"{leader_url.rstrip('/')}/patroni")
+            data = r.json() if r.status_code == 200 else {}
+            leader_name = (data.get("patroni") or {}).get("scope_name") or data.get(
+                "name"
+            )
+
+            body: dict[str, Any] = {}
+            if leader_name:
+                body["leader"] = leader_name
+            if candidate_name:
+                body["candidate"] = candidate_name
+            if scheduled_at:
+                body["scheduled_at"] = scheduled_at
+
+            resp = await client.post(
+                f"{leader_url.rstrip('/')}/switchover", json=body
+            )
+            if resp.status_code not in (200, 202):
+                raise PatroniOperationError(
+                    "switchover_failed",
+                    f"Patroni rejected switchover: HTTP {resp.status_code} {resp.text}",
+                )
+            return {
+                "ok": True,
+                "leader_url": leader_url,
+                "leader_name": leader_name,
+                "candidate": candidate_name,
+                "patroni_response": resp.text,
+            }
+
+    async def reinitialize_member(self, member_url: str) -> dict[str, Any]:
+        """Reinitialize un membre du cluster (drop data dir + clone depuis leader).
+
+        L'URL fournie doit etre celle de l'API Patroni du membre cible. Le
+        membre lui-meme execute la commande — c'est destructif et long
+        (depend de la taille de la DB).
+
+        Refuse de cibler le leader (operation invalide cote Patroni).
+        """
+        if member_url not in self._urls:
+            raise PatroniOperationError(
+                "unknown_member",
+                f"Member URL {member_url!r} is not in configured patroni_api_urls",
+            )
+        async with httpx.AsyncClient(timeout=self._timeout * 10) as client:
+            # Verifie que le membre n'est pas le leader actuel
+            try:
+                r = await client.get(f"{member_url.rstrip('/')}/patroni")
+                if r.status_code == 200 and r.json().get("role") == "master":
+                    raise PatroniOperationError(
+                        "cannot_reinit_leader",
+                        "Refusing to reinitialize the current leader — switchover first",
+                    )
+            except PatroniOperationError:
+                raise
+            except Exception:
+                # Si le membre est down, on tente quand meme le reinit
+                pass
+
+            resp = await client.post(
+                f"{member_url.rstrip('/')}/reinitialize", json={"force": False}
+            )
+            if resp.status_code not in (200, 202):
+                raise PatroniOperationError(
+                    "reinit_failed",
+                    f"Patroni rejected reinitialize: HTTP {resp.status_code} {resp.text}",
+                )
+            return {
+                "ok": True,
+                "member_url": member_url,
+                "patroni_response": resp.text,
+            }
+
+    async def _set_pause(self, pause: bool) -> dict[str, Any]:
+        """Active/desactive l'auto-failover via PATCH /config sur le leader."""
+        async with httpx.AsyncClient(timeout=self._timeout * 3) as client:
+            leader_url = await self._find_leader_url(client)
+            if leader_url is None:
+                raise PatroniOperationError(
+                    "no_leader_found",
+                    "Could not locate the current leader for pause/resume",
+                )
+            resp = await client.patch(
+                f"{leader_url.rstrip('/')}/config",
+                json={"pause": pause},
+            )
+            if resp.status_code not in (200, 202):
+                raise PatroniOperationError(
+                    "pause_failed",
+                    f"Patroni rejected pause={pause}: HTTP {resp.status_code} {resp.text}",
+                )
+            return {"ok": True, "paused": pause, "leader_url": leader_url}
+
+    async def pause(self) -> dict[str, Any]:
+        """Suspend l'auto-failover Patroni (utile pour maintenance)."""
+        return await self._set_pause(True)
+
+    async def resume(self) -> dict[str, Any]:
+        """Reactive l'auto-failover Patroni."""
+        return await self._set_pause(False)
+
+
+class PatroniOperationError(Exception):
+    """Levee quand une operation Patroni (switchover/reinit/pause) echoue."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 def build_strategy(

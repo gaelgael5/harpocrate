@@ -769,6 +769,27 @@
       }
     },
     "replication": {
+      "patroni": {
+        "title": "Patroni operations",
+        "help": "Graceful switchover, replica reinit, pause/resume auto-failover. See wiki ops_replication_patroni for caveats.",
+        "switchover": "Switchover",
+        "switchoverTitle": "Graceful switchover",
+        "switchoverWarning": "The current leader becomes a replica and one replica (the one you choose or Patroni picks) becomes the new leader. Active connections to the current leader are interrupted for a few seconds during the swap.",
+        "switchoverSuccess": "Switchover triggered",
+        "candidateLabel": "Candidate name (optional — Patroni picks if empty)",
+        "candidatePlaceholder": "e.g. pg2",
+        "confirmLabel": "Confirmation (type: {{expected}})",
+        "reinit": "Reinitialize a replica",
+        "reinitTitle": "Reinitialize a replica",
+        "reinitWarning": "DESTRUCTIVE: the target member's data dir is wiped and re-cloned from the leader (duration = DB size). Do NOT target the leader. Use when a replica is out of sync or corrupted.",
+        "reinitSuccess": "Reinit triggered",
+        "memberUrlLabel": "Target member Patroni API URL",
+        "availableReplicas": "Available replicas (click to copy)",
+        "pause": "Pause auto-failover",
+        "pauseSuccess": "Auto-failover paused",
+        "resume": "Resume auto-failover",
+        "resumeSuccess": "Auto-failover resumed"
+      },
       "promote": {
         "buttonLabel": "Promote to master",
         "modalTitle": "Promote this instance to master",

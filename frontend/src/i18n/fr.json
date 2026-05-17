@@ -770,6 +770,27 @@
       }
     },
     "replication": {
+      "patroni": {
+        "title": "Opérations Patroni",
+        "help": "Switchover gracieux, réinitialisation de replica, pause/reprise du failover automatique. Voir wiki ops_replication_patroni pour les pièges.",
+        "switchover": "Switchover",
+        "switchoverTitle": "Switchover gracieux",
+        "switchoverWarning": "Le leader actuel passe en replica et un replica (celui que tu choisis ou que Patroni sélectionne) devient leader. Les connexions actives au leader sont interrompues quelques secondes le temps du basculement.",
+        "switchoverSuccess": "Switchover déclenché",
+        "candidateLabel": "Nom du candidat (optionnel — Patroni choisit si vide)",
+        "candidatePlaceholder": "ex: pg2",
+        "confirmLabel": "Confirmation (tapez : {{expected}})",
+        "reinit": "Réinitialiser un replica",
+        "reinitTitle": "Réinitialiser un replica",
+        "reinitWarning": "DESTRUCTIF : le data dir du membre cible est effacé puis re-cloné depuis le leader (durée = taille de la DB). Ne pas cibler le leader. Utiliser quand un replica est désynchronisé ou corrompu.",
+        "reinitSuccess": "Réinitialisation déclenchée",
+        "memberUrlLabel": "URL API Patroni du membre cible",
+        "availableReplicas": "Replicas disponibles (cliquer pour copier)",
+        "pause": "Suspendre auto-failover",
+        "pauseSuccess": "Auto-failover suspendu",
+        "resume": "Reprendre auto-failover",
+        "resumeSuccess": "Auto-failover réactivé"
+      },
       "promote": {
         "buttonLabel": "Promouvoir en master",
         "modalTitle": "Promouvoir cette instance en master",

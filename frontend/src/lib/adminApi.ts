@@ -100,6 +100,39 @@ export async function fetchSystemInfo(): Promise<SystemInfo> {
   return SystemInfoSchema.parse(raw);
 }
 
+export interface AdminWalletItem {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  owner: {
+    id: string | null;
+    email: string | null;
+    display_name: string | null;
+  };
+  secrets_count: number;
+}
+
+export interface AdminWalletsResponse {
+  wallets: AdminWalletItem[];
+  total: number;
+}
+
+export async function fetchAdminWallets(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<AdminWalletsResponse> {
+  const q = new URLSearchParams();
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  const query = q.toString();
+  return api.get<AdminWalletsResponse>(
+    `/admin/wallets${query ? `?${query}` : ""}`,
+  );
+}
+
 export async function fetchAdminUsers(params?: {
   limit?: number;
   offset?: number;

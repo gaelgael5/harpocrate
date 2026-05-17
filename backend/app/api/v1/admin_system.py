@@ -134,6 +134,64 @@ async def age_keygen(admin: AdminJwt) -> JSONResponse:
     )
 
 
+# ─── GET /v1/admin/wallets ────────────────────────────────────────────────────
+
+
+@router.get("/wallets")
+async def list_all_wallets(
+    admin: AdminJwt,
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> JSONResponse:
+    """Liste tous les coffres avec leur propriétaire et compteur de secrets.
+
+    Endpoint admin-only — pour la page Info Système qui affiche "X coffres"
+    et veut savoir à qui ils appartiennent. Inclut les soft-deletes pour
+    visibilité (avec `deleted_at` non-null).
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                w.id, w.name, w.description, w.created_at, w.updated_at,
+                w.deleted_at, w.owner_user_id,
+                u.email AS owner_email,
+                u.display_name AS owner_display_name,
+                (
+                    SELECT COUNT(*) FROM secrets s
+                    WHERE s.wallet_id = w.id
+                ) AS secrets_count
+            FROM wallets w
+            LEFT JOIN users u ON u.id = w.owner_user_id
+            ORDER BY w.created_at DESC
+            LIMIT $1 OFFSET $2
+            """,
+            limit,
+            offset,
+        )
+        total = await conn.fetchval("SELECT COUNT(*) FROM wallets")
+
+    wallets = [
+        {
+            "id": str(r["id"]),
+            "name": r["name"],
+            "description": r["description"],
+            "created_at": r["created_at"].isoformat(),
+            "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+            "deleted_at": r["deleted_at"].isoformat() if r["deleted_at"] else None,
+            "owner": {
+                "id": str(r["owner_user_id"]) if r["owner_user_id"] else None,
+                "email": r["owner_email"],
+                "display_name": r["owner_display_name"],
+            },
+            "secrets_count": r["secrets_count"],
+        }
+        for r in rows
+    ]
+    return JSONResponse({"wallets": wallets, "total": total})
+
+
 # ─── GET /v1/admin/users ─────────────────────────────────────────────────────
 
 

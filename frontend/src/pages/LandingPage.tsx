@@ -461,6 +461,25 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* Privacy notice — RGPD + CGU */}
+      <section className={styles.privacy} id="privacy">
+        <div className={styles.privacyLabel}>
+          {t("landing.privacy.label")}
+        </div>
+        <h2 className={styles.privacyTitle}>
+          {t("landing.privacy.title")}
+        </h2>
+        <p className={styles.privacyText}>{t("landing.privacy.body")}</p>
+        <div className={styles.privacyLinks}>
+          <Link to="/rgpd" className={styles.privacyLink}>
+            {t("landing.privacy.rgpdLink")}
+          </Link>
+          <Link to="/cgu" className={styles.privacyLink}>
+            {t("landing.privacy.cguLink")}
+          </Link>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className={styles.footer}>
         <span className={styles.footerLogo}>Harpocrate</span>

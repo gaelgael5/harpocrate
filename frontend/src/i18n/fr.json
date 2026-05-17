@@ -1169,8 +1169,88 @@
       "button": "Ouvrir votre coffre",
       "meta": "Open source · Auto-hébergé · Zero knowledge"
     },
+    "privacy": {
+      "label": "Confidentialité & responsabilité",
+      "title": "Données personnelles & limites du service",
+      "body": "Harpocrate ne stocke en clair que votre adresse e-mail et votre nom d'affichage — strictement le minimum nécessaire pour vous identifier dans votre coffre. Tous vos secrets sont chiffrés côté client et restent illisibles pour l'opérateur du serveur. Comme le service est zero-knowledge, l'oubli de votre passphrase ou de votre phrase de récupération entraîne la perte définitive et irréversible de vos secrets : nous ne pouvons pas la récupérer pour vous.",
+      "rgpdLink": "Politique de confidentialité (RGPD) →",
+      "cguLink": "Conditions générales d'utilisation →"
+    },
     "footer": {
       "tagline": "Le dieu du silence garde vos secrets."
     }
+  },
+  "rgpd": {
+    "back": "← Retour à l'accueil",
+    "label": "Politique de confidentialité",
+    "title": "Données personnelles & RGPD",
+    "subtitle": "Mentions conformes aux articles 13 et 14 du Règlement (UE) 2016/679 (RGPD).",
+    "updated": "Dernière mise à jour : 17 mai 2026",
+    "sections": [
+      {
+        "title": "1. Responsable du traitement",
+        "body": "Harpocrate est un logiciel auto-hébergé. Le responsable du traitement est l'administrateur (personne physique ou morale) qui exploite l'instance sur laquelle vous êtes inscrit. Pour exercer vos droits, adressez-vous directement à cet administrateur, dont les coordonnées doivent être affichées à la racine de l'instance ou dans son mentions légales."
+      },
+      {
+        "title": "2. Données personnelles collectées",
+        "body": "Le service collecte un strict minimum de données identifiantes, stockées en clair en base de données :",
+        "bullets": [
+          "Adresse e-mail — sert d'identifiant unique et de canal de notification.",
+          "Nom d'affichage (display_name) — affiché dans l'interface et le journal d'audit.",
+          "Identifiant utilisateur (UUID) généré automatiquement.",
+          "Horodatages techniques : date de création, dernière ouverture du coffre, mise en quarantaine."
+        ]
+      },
+      {
+        "title": "3. Données techniques liées à l'usage",
+        "body": "Pour des raisons de sécurité et de traçabilité, certaines données techniques sont enregistrées dans le journal d'audit :",
+        "bullets": [
+          "Adresse IP de connexion (durée de conservation alignée sur la rétention des logs).",
+          "Identifiants des coffres et secrets consultés, sans leur contenu.",
+          "Type d'action effectuée (lecture, écriture, partage, révocation) et son horodatage."
+        ]
+      },
+      {
+        "title": "4. Ce que le serveur ne voit jamais",
+        "body": "Harpocrate est conçu sur le principe du zero-knowledge. Les éléments suivants ne quittent jamais votre navigateur en clair et ne sont jamais stockés en clair sur le serveur :",
+        "bullets": [
+          "Votre passphrase et votre phrase de récupération.",
+          "Votre clé privée RSA (chiffrée localement avant tout envoi).",
+          "Le contenu des secrets eux-mêmes (valeurs, mots de passe, clés API)."
+        ]
+      },
+      {
+        "title": "5. Finalités du traitement",
+        "body": "Vos données sont traitées exclusivement pour : (a) vous authentifier sur l'instance, (b) vous permettre de déchiffrer vos propres coffres, (c) tracer les accès dans le journal d'audit afin de détecter d'éventuels abus, et (d) vous notifier des événements importants (réinitialisation, partage, quarantaine)."
+      },
+      {
+        "title": "6. Base légale",
+        "body": "Le traitement repose sur l'exécution du contrat de service entre vous et l'administrateur de l'instance (article 6.1.b du RGPD). La journalisation d'audit est fondée sur l'intérêt légitime du responsable à sécuriser le service (article 6.1.f)."
+      },
+      {
+        "title": "7. Durée de conservation",
+        "body": "Les données d'identification sont conservées tant que votre compte est actif. Le journal d'audit est conservé conformément à la politique de rétention de Loki configurée par l'administrateur (par défaut 7 jours). À la suppression de votre compte, vos données identifiantes sont effacées immédiatement ; les entrées d'audit historiques peuvent persister jusqu'à expiration normale de la rétention."
+      },
+      {
+        "title": "8. Destinataires & sous-traitants",
+        "body": "Aucune donnée n'est transmise à un tiers commercial. Harpocrate ne contient aucune télémétrie ni service analytique externe. Les seules dépendances externes possibles sont configurées par l'administrateur : fournisseur d'identité (Keycloak), stockage de backups distant (S3, SFTP, etc.), et collecteur de logs (Loki/Grafana). Chacune de ces dépendances relève d'une politique propre dont l'administrateur est responsable."
+      },
+      {
+        "title": "9. Vos droits",
+        "body": "Conformément aux articles 15 à 22 du RGPD, vous disposez des droits suivants :",
+        "bullets": [
+          "Droit d'accès — obtenir copie de vos données identifiantes.",
+          "Droit de rectification — corriger votre adresse e-mail ou votre nom d'affichage.",
+          "Droit à l'effacement — demander la suppression de votre compte.",
+          "Droit à la portabilité — exporter vos coffres au format chiffré.",
+          "Droit d'opposition — refuser certaines finalités de traitement.",
+          "Droit d'introduire une réclamation auprès de la CNIL (www.cnil.fr)."
+        ]
+      },
+      {
+        "title": "10. Sécurité",
+        "body": "Les communications sont chiffrées en transit (TLS). Les secrets sont chiffrés en AES-256-GCM avec une clé dérivée de votre passphrase via Argon2id, et la clé symétrique de coffre est elle-même chiffrée par votre clé publique RSA-4096. Aucun secret n'est jamais accessible en clair par l'opérateur du serveur."
+      }
+    ]
   }
 }

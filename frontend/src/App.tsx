@@ -54,6 +54,7 @@ import { BecomeStandbyPage } from "@/pages/BecomeStandbyPage";
 import { PairingWizardPage } from "@/pages/PairingWizardPage";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { LandingPage } from "@/pages/LandingPage";
+import { RgpdPage } from "@/pages/RgpdPage";
 import { ApiDocsPage } from "@/pages/ApiDocsPage";
 import { ApiDocsEmbeddedPage } from "@/pages/ApiDocsEmbeddedPage";
 
@@ -134,6 +135,7 @@ export default function App() {
         <ContentWithBannerOffset>
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/rgpd" element={<RgpdPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ContentWithBannerOffset>
@@ -157,6 +159,7 @@ export default function App() {
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<LandingPage />} />
+              <Route path="/rgpd" element={<RgpdPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
               <Route path="/first-login" element={<FirstLoginPage />} />

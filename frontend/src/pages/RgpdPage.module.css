@@ -1,0 +1,101 @@
+/* RgpdPage — page légale RGPD, style sobre cohérent avec la landing. */
+
+.root {
+  background: var(--vault-bg);
+  color: var(--vault-text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  padding: 4rem 5vw 6rem;
+}
+
+.container {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.back {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--vault-text-dim);
+  text-decoration: none;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.back:hover {
+  color: var(--vault-gold);
+  border-bottom-color: var(--vault-gold-dim);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--vault-text-dim);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.8rem;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  line-height: 1.1;
+}
+
+.subtitle {
+  color: var(--vault-text-dim);
+  font-size: 0.95rem;
+  margin: 0 0 3rem;
+  font-family: var(--font-mono);
+}
+
+.section {
+  margin-bottom: 2.5rem;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--vault-text);
+}
+
+.sectionBody {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--vault-text);
+  margin: 0 0 0.75rem;
+}
+
+.list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.4rem;
+  line-height: 1.65;
+}
+
+.list li {
+  margin-bottom: 0.35rem;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: var(--vault-surface);
+  border: 1px solid var(--vault-border);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+
+.updated {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--vault-border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--vault-text-dim);
+}

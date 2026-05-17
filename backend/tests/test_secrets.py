@@ -26,6 +26,10 @@ _CALLER_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
 _WALLET_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
 _SECRET_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
 _SECRET_ID_2 = uuid.UUID("dddddddd-0000-0000-0000-000000000002")
+# UUIDs fake pour le type RAW (commit b36d11c : create_secret auto-attache RAW
+# si type_uuid n'est pas fourni → appelle types_repo.get_raw_type_with_current_version_uuid).
+_RAW_TYPE_UUID = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
+_RAW_VERSION_UUID = uuid.UUID("eeeeeeee-0000-0000-0000-000000000002")
 
 _PERM_ALL = 63
 _PERM_READ_ONLY = 1   # 0x01
@@ -125,6 +129,20 @@ def _fake_wallet_row(
     )
 
 
+def _fake_raw_type_row() -> FakeRecord:
+    """Mock du retour de types_repo.get_raw_type_with_current_version_uuid().
+
+    Appelée par services.secrets.create_secret quand type_uuid n'est pas
+    fourni dans la requête → auto-attache du type RAW (commit b36d11c).
+    """
+    return FakeRecord(
+        {
+            "type_uuid": _RAW_TYPE_UUID,
+            "current_version_uuid": _RAW_VERSION_UUID,
+        }
+    )
+
+
 def _fake_secret_row(
     *,
     secret_id: uuid.UUID = _SECRET_ID,
@@ -208,6 +226,8 @@ async def test_secret_create_happy_path() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -288,6 +308,8 @@ async def test_secret_create_invalid_name_regex() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -306,8 +328,12 @@ async def test_secret_create_invalid_name_regex() -> None:
             headers=_auth_header(),
         )
 
-    # 422 = Unprocessable Entity (validation Pydantic)
-    assert r.status_code == 422
+    # 400 = Bad Request (validation côté service via InvalidSecretPath handler,
+    # commit abbedcc). La règle d'acceptation des noms a déménagé du schéma
+    # Pydantic vers le service depuis le LOT path-style.
+    assert r.status_code == 400
+    body = r.json()
+    assert body["error"] == "invalid_secret_path"
 
 
 # ─── test_secret_create_value_too_large ───────────────────────────────────────
@@ -321,6 +347,8 @@ async def test_secret_create_value_too_large() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -357,6 +385,8 @@ async def test_secret_create_duplicate_name() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -478,6 +508,8 @@ async def test_secret_list_pagination() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -711,6 +743,8 @@ async def test_audit_log_no_value_in_metadata() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -760,6 +794,8 @@ async def test_list_secrets_no_value() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -804,6 +840,8 @@ async def test_filter_by_tag() -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()
@@ -847,6 +885,8 @@ async def test_body_not_logged(capsys: pytest.CaptureFixture[str]) -> None:
 
     async def fetchrow_side(query: str, *args: Any) -> FakeRecord | None:
         nonlocal call_n
+        if "secret_types" in query:
+            return _fake_raw_type_row()
         call_n += 1
         if call_n == 1:
             return _fake_user_row()

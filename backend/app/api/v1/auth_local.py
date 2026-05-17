@@ -11,10 +11,11 @@ import time
 
 import jwt
 import structlog
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.rate_limit import rate_limit_dep
 from app.models.api.auth_local import AuthModesResponse, LocalLoginRequest, LocalLoginResponse
 from app.services.local_admin_bootstrap import LOCAL_ADMIN_KEYCLOAK_SUB
 
@@ -71,7 +72,10 @@ async def get_auth_modes() -> JSONResponse:
     )
 
 
-@router.post("/auth/local-login")
+@router.post(
+    "/auth/local-login",
+    dependencies=[Depends(rate_limit_dep(settings.rate_limit_local_login))],
+)
 async def local_login(req: LocalLoginRequest, request: Request) -> JSONResponse:
     """Authentification admin locale par username/password.
 

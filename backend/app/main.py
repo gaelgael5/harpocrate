@@ -231,6 +231,13 @@ app = FastAPI(
 )
 
 
+# Rate limiting (S-5) : pas d'app.state.limiter ni de middleware ici.
+# La protection est appliquée endpoint par endpoint via la dépendance
+# `Depends(rate_limit_dep(...))` (cf. `app.core.rate_limit`), qui lève
+# directement `HTTPException(429)` — pas besoin d'exception handler
+# slowapi global.
+
+
 @app.exception_handler(InvalidSecretPath)
 async def _invalid_secret_path_handler(_request: Request, exc: InvalidSecretPath) -> JSONResponse:
     return JSONResponse(

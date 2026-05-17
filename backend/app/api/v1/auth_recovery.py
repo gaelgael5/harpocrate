@@ -13,10 +13,12 @@ from __future__ import annotations
 import base64
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.config import settings
+from app.core.rate_limit import rate_limit_dep
 from app.db.pool import get_pool
 from app.services import recovery as svc
 
@@ -60,7 +62,11 @@ class StartBody(BaseModel):
         return v
 
 
-@router.post("/start", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/start",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limit_dep(settings.rate_limit_recovery_start))],
+)
 async def start(body: StartBody, request: Request) -> JSONResponse:
     """Crée une session de recovery + déclenche la notification.
 
@@ -113,7 +119,10 @@ async def get_blobs(session_id: UUID) -> JSONResponse:
 # ─── POST /{id}/attempt-failed ────────────────────────────────────────────────
 
 
-@router.post("/{session_id}/attempt-failed")
+@router.post(
+    "/{session_id}/attempt-failed",
+    dependencies=[Depends(rate_limit_dep(settings.rate_limit_recovery_attempt))],
+)
 async def attempt_failed(session_id: UUID) -> JSONResponse:
     """Le client signale qu'un déchiffrement a échoué (mauvais mots).
 

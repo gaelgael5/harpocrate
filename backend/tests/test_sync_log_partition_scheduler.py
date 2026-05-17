@@ -8,21 +8,6 @@ Tests unitaires + intégration légère :
 
 from __future__ import annotations
 
-import base64
-import os
-
-# Settings env vars (mêmes valeurs que conftest._initialize_settings_singleton)
-# — nécessaires AVANT l'import de `app.services.sync_log_partition_scheduler`,
-# qui importe `app.core.config.settings` à module load. Le fixture autouse
-# session du conftest ne tourne qu'au début des tests, donc trop tard pour
-# l'import à la collection.
-os.environ.setdefault("HARPOCRATE_DB_DSN", "postgresql://x:y@h:5432/d")
-os.environ.setdefault("HARPOCRATE_KEYCLOAK_URL", "https://keycloak.yoops.org")
-os.environ.setdefault("HARPOCRATE_KEYCLOAK_REALM", "yoops")
-os.environ.setdefault("HARPOCRATE_KEYCLOAK_CLIENT_ID", "harpocrate-vault")
-os.environ.setdefault("HARPOCRATE_HMAC_KEY", base64.b64encode(b"k" * 32).decode())
-os.environ.setdefault("HARPOCRATE_PUBLIC_URL", "https://vault.yoops.org")
-
 from datetime import UTC, datetime, timedelta
 
 import asyncpg

@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import base64
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
+from app.core.config import settings
+from app.core.rate_limit import rate_limit_dep
 from app.core.security import JwtUser
 from app.db.pool import get_pool
 from app.db.repositories import users as users_repo
@@ -183,7 +185,10 @@ async def get_crypto_recovery(current_user: JwtUser) -> JSONResponse:
     )
 
 
-@router.put("/passphrase")
+@router.put(
+    "/passphrase",
+    dependencies=[Depends(rate_limit_dep(settings.rate_limit_passphrase_change))],
+)
 async def change_passphrase(
     req: PassphraseChangeRequest,
     current_user: JwtUser,

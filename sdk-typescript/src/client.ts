@@ -111,7 +111,7 @@ export class VaultClient {
   }
 
   async getSecret(name: string): Promise<string> {
-    const url = this.secretUrl(name)
+    const url = await this.pathForOp(name)
     const resp = await getJson<{ encrypted_value: string }>(
       this.fetcher,
       this.authHeader,
@@ -140,17 +140,19 @@ export class VaultClient {
     const wk = await this.getWalletKey()
     const enc = await aesGcmEncrypt(new TextEncoder().encode(value), wk)
     const body = { encrypted_value: bytesToBase64(enc) }
+    const url = await this.pathForOp(name)
     const resp = await putJson<{ generation_version: number }>(
       this.fetcher,
       this.authHeader,
-      this.secretUrl(name),
+      url,
       body,
     )
     return resp.generation_version
   }
 
   async deleteSecret(name: string): Promise<void> {
-    const r = await this.fetcher(this.secretUrl(name), {
+    const url = await this.pathForOp(name)
+    const r = await this.fetcher(url, {
       method: 'DELETE',
       headers: { authorization: this.authHeader },
     })
@@ -187,9 +189,42 @@ export class VaultClient {
     }
   }
 
-  private secretUrl(name: string): string {
+  private secretUrlByName(name: string): string {
     const normalized = name.includes('/') && !name.startsWith('/') ? `/${name}` : name
     return `${this.baseUrl}/v1/wallets/${this.walletId}/secrets/${encodeURIComponent(normalized)}`
+  }
+
+  private secretUrlById(sid: string): string {
+    return `${this.baseUrl}/v1/wallets/${this.walletId}/secrets/by-id/${sid}`
+  }
+
+  /**
+   * Si `name` contient `/` (path-style), résout l'UUID via
+   * GET /v1/wallets/<wid>/secrets?path=<parent>, puis filtre par nom.
+   * Retourne null pour les noms plats (le caller utilisera la route name-based).
+   *
+   * Évite la dépendance fragile au comportement des reverse proxies vis-à-vis
+   * des `/` URL-encodés (`%2F`) — pattern aligné sur SDK Python 0.6.0.
+   */
+  private async resolveIdIfPathstyle(name: string): Promise<string | null> {
+    if (!name.includes('/')) return null
+    const normalized = name.startsWith('/') ? name : `/${name}`
+    const lastSlash = normalized.lastIndexOf('/')
+    const parentPath = lastSlash === 0 ? '/' : `${normalized.slice(0, lastSlash)}/`
+    const listUrl = `${this.baseUrl}/v1/wallets/${this.walletId}/secrets?path=${encodeURIComponent(parentPath)}`
+    const listing = await getJson<SecretListResponse>(this.fetcher, this.authHeader, listUrl)
+    const match = listing.secrets?.find((s) => s.name === normalized)
+    if (!match) throw new SecretNotFoundError(name)
+    return match.id
+  }
+
+  /**
+   * Retourne l'URL d'opération unitaire :
+   * `/by-id/<sid>` pour les noms path-style, `/<encoded-name>` pour les noms plats.
+   */
+  private async pathForOp(name: string): Promise<string> {
+    const sid = await this.resolveIdIfPathstyle(name)
+    return sid !== null ? this.secretUrlById(sid) : this.secretUrlByName(name)
   }
 }
 

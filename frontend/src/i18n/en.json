@@ -935,6 +935,7 @@
       "minutes_one": "{{count}} minute",
       "minutes_other": "{{count}} minutes",
       "preset": {
+        "dailyMidnight": "Daily midnight",
         "daily02": "Daily 2am",
         "weekly": "Weekly Sun 3am",
         "monthly": "Monthly 1st 4am",

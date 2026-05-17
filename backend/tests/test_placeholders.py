@@ -122,6 +122,7 @@ def _fake_wallet_row(*, permissions: int = _PERM_ALL) -> FakeRecord:
             "my_permissions": permissions,
             "valued_secrets_count": 0,
             "placeholder_secrets_count": 0,
+            "deleted_at": None,
         }
     )
 

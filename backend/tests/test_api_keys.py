@@ -615,6 +615,7 @@ def _fake_wallet_row(
             "placeholder_secrets_count": 0,
             "created_at": datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
             "updated_at": datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+            "deleted_at": None,
         }
     )
 

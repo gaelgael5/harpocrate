@@ -119,6 +119,7 @@ def _fake_wallet_row(
             "my_permissions": permissions,
             "valued_secrets_count": 0,
             "placeholder_secrets_count": 0,
+            "deleted_at": None,
         }
     )
 

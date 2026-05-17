@@ -1251,5 +1251,80 @@
         "body": "Communications are encrypted in transit (TLS). Secrets are encrypted with AES-256-GCM using a key derived from your passphrase via Argon2id, and the vault symmetric key is itself encrypted with your RSA-4096 public key. No secret is ever accessible in plaintext by the server operator."
       }
     ]
+  },
+  "cgu": {
+    "back": "← Back to home",
+    "label": "Terms of service",
+    "title": "Terms of service",
+    "subtitle": "Please read carefully before using the service. Registering for an account constitutes full acceptance of these terms.",
+    "updated": "Last updated: May 17, 2026",
+    "sections": [
+      {
+        "title": "1. Purpose",
+        "body": "These Terms of Service (\"Terms\") govern the use of the Harpocrate service, a zero-knowledge secrets manager, by any person holding an account on the relevant instance. They constitute a contract between you and the administrator of the instance."
+      },
+      {
+        "title": "2. Description of the service",
+        "body": "Harpocrate lets you store, organise and share secrets (passwords, API keys, tokens, certificates) encrypted end-to-end. Encryption and decryption are performed entirely in your browser; the server only receives and stores encrypted blobs. The operator has no technical means of accessing the content of your secrets."
+      },
+      {
+        "title": "3. Account & registration",
+        "body": "To use the service, you must create an account tied to a valid e-mail address and choose a passphrase meeting the minimum requirements shown at first login. You are solely responsible for keeping your credentials confidential. Any action taken from your account is presumed to come from you."
+      },
+      {
+        "title": "4. Loss of passphrase — critical notice",
+        "body": "Harpocrate is built on the zero-knowledge principle. This means that nobody, including the administrator of the instance, can recover your secrets if you lose both your passphrase and your recovery phrase. Without them, your secrets are mathematically and irreversibly inaccessible. Accordingly:",
+        "bullets": [
+          "You acknowledge having understood this characteristic and accept it without reservation.",
+          "You undertake to keep your passphrase and recovery phrase in a safe place.",
+          "The service operator cannot in any way be held liable for the loss of your secrets resulting from forgetting, disclosing or destroying your secret credentials.",
+          "No recourse, financial or otherwise, is available to the user in this situation."
+        ]
+      },
+      {
+        "title": "5. User obligations",
+        "body": "You undertake to use the service in compliance with applicable laws and with these Terms. In particular, you refrain from:",
+        "bullets": [
+          "Storing secrets whose possession would be unlawful.",
+          "Attempting to compromise the security of the service or of other users' data.",
+          "Exploiting a vulnerability of the service for malicious purposes.",
+          "Sharing your account with a third party or impersonating another user."
+        ]
+      },
+      {
+        "title": "6. Service availability",
+        "body": "The service is provided \"as is\", with no guarantee of availability nor service-level agreement (SLA), unless agreed otherwise in writing with the administrator. Interruptions may occur for maintenance, updates or incidents. The operator endeavours to maintain continuous operation but cannot be held liable for any outage."
+      },
+      {
+        "title": "7. Limitation of liability",
+        "body": "To the maximum extent permitted by applicable law, the operator shall not be liable for indirect, intangible or unforeseeable damages resulting from the use of, or inability to use, the service, and in particular:",
+        "bullets": [
+          "Loss of secrets following loss of the passphrase or recovery phrase.",
+          "Loss of secrets resulting from a compromise of your device, browser or session.",
+          "Loss of business opportunity, loss of revenue or reputational harm.",
+          "Any damage resulting from a cyberattack on the infrastructure, absent gross negligence of the operator."
+        ]
+      },
+      {
+        "title": "8. Intellectual property",
+        "body": "Harpocrate is distributed under an open-source licence. The secrets you store remain your exclusive property; no assignment, licence or exploitation by the operator is granted."
+      },
+      {
+        "title": "9. Personal data",
+        "body": "The processing of personal data is governed by our dedicated privacy policy. Refer to the Privacy policy (GDPR) page for details on purposes, retention periods and exercise of your rights."
+      },
+      {
+        "title": "10. Changes to the Terms",
+        "body": "The operator may amend these Terms at any time to reflect changes to the service or to applicable law. Any substantial change will be notified to you by e-mail at the address associated with your account. Continued use of the service after notification constitutes acceptance of the new Terms."
+      },
+      {
+        "title": "11. Termination",
+        "body": "You may at any time request the deletion of your account from the Account page. The operator may suspend or terminate your account in case of serious breach of these Terms, in particular fraudulent use of the service."
+      },
+      {
+        "title": "12. Governing law & jurisdiction",
+        "body": "These Terms are governed by French law, unless mandatory law provides otherwise. Failing amicable resolution, any dispute shall be brought before the competent courts of the place of establishment of the operator of the instance."
+      }
+    ]
   }
 }

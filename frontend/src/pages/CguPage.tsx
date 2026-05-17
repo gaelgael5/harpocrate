@@ -1,10 +1,10 @@
 /**
- * RgpdPage — politique de confidentialité / mention RGPD.
+ * CguPage — conditions générales d'utilisation.
  *
- * Harpocrate stocke un minimum strict de données personnelles côté serveur
- * (email + display_name). Cette page expose, conformément aux articles 13/14
- * du RGPD, les finalités, la base légale, la durée de conservation et les
- * droits de la personne concernée.
+ * Document destiné à clarifier les limites de responsabilité de l'opérateur
+ * du service, en particulier le fait qu'une perte de passphrase ou de phrase
+ * de récupération entraîne mécaniquement la perte définitive des secrets,
+ * sans recours possible côté serveur (architecture zero-knowledge).
  */
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -17,22 +17,22 @@ interface Section {
   bullets?: string[];
 }
 
-export function RgpdPage() {
+export function CguPage() {
   const { t } = useTranslation();
   const { enabled: devMode } = useDevMode();
   const bannerOffset = devMode ? DEV_BANNER_HEIGHT : 0;
 
-  const sections = t("rgpd.sections", { returnObjects: true }) as Section[];
+  const sections = t("cgu.sections", { returnObjects: true }) as Section[];
 
   return (
     <div className={styles.root} style={{ paddingTop: 64 + bannerOffset }}>
       <div className={styles.container}>
         <Link to="/" className={styles.back}>
-          {t("rgpd.back")}
+          {t("cgu.back")}
         </Link>
-        <div className={styles.label}>{t("rgpd.label")}</div>
-        <h1 className={styles.title}>{t("rgpd.title")}</h1>
-        <p className={styles.subtitle}>{t("rgpd.subtitle")}</p>
+        <div className={styles.label}>{t("cgu.label")}</div>
+        <h1 className={styles.title}>{t("cgu.title")}</h1>
+        <p className={styles.subtitle}>{t("cgu.subtitle")}</p>
 
         {sections.map((s) => (
           <section key={s.title} className={styles.section}>
@@ -48,7 +48,7 @@ export function RgpdPage() {
           </section>
         ))}
 
-        <div className={styles.updated}>{t("rgpd.updated")}</div>
+        <div className={styles.updated}>{t("cgu.updated")}</div>
       </div>
     </div>
   );

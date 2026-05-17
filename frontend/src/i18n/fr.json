@@ -1252,5 +1252,80 @@
         "body": "Les communications sont chiffrées en transit (TLS). Les secrets sont chiffrés en AES-256-GCM avec une clé dérivée de votre passphrase via Argon2id, et la clé symétrique de coffre est elle-même chiffrée par votre clé publique RSA-4096. Aucun secret n'est jamais accessible en clair par l'opérateur du serveur."
       }
     ]
+  },
+  "cgu": {
+    "back": "← Retour à l'accueil",
+    "label": "Conditions générales d'utilisation",
+    "title": "Conditions générales d'utilisation",
+    "subtitle": "À lire attentivement avant toute utilisation du service. Votre inscription vaut acceptation pleine et entière de ces conditions.",
+    "updated": "Dernière mise à jour : 17 mai 2026",
+    "sections": [
+      {
+        "title": "1. Objet",
+        "body": "Les présentes conditions générales d'utilisation (« CGU ») régissent l'utilisation du service Harpocrate, gestionnaire de secrets zero-knowledge, par toute personne disposant d'un compte sur l'instance considérée. Elles constituent un contrat entre vous et l'administrateur de l'instance."
+      },
+      {
+        "title": "2. Description du service",
+        "body": "Harpocrate permet de stocker, organiser et partager des secrets (mots de passe, clés API, jetons, certificats) chiffrés de bout en bout. Le chiffrement et le déchiffrement s'effectuent intégralement dans votre navigateur ; le serveur ne reçoit et ne conserve que des blobs chiffrés. L'opérateur du service n'a aucun moyen technique d'accéder au contenu de vos secrets."
+      },
+      {
+        "title": "3. Inscription & compte",
+        "body": "Pour utiliser le service, vous devez créer un compte rattaché à une adresse e-mail valide et choisir une passphrase répondant aux exigences minimales affichées à la première connexion. Vous êtes seul responsable de la confidentialité de vos identifiants. Toute action effectuée depuis votre compte est réputée provenir de vous."
+      },
+      {
+        "title": "4. Perte de la passphrase — point critique",
+        "body": "Harpocrate est conçu sur le principe du zero-knowledge. Cela signifie que personne, y compris l'administrateur de l'instance, ne peut récupérer vos secrets si vous perdez à la fois votre passphrase et votre phrase de récupération. Sans elles, vos secrets sont mathématiquement et définitivement inaccessibles. En conséquence :",
+        "bullets": [
+          "Vous reconnaissez avoir compris cette caractéristique et l'accepter sans réserve.",
+          "Vous vous engagez à conserver votre passphrase et votre phrase de récupération en lieu sûr.",
+          "L'opérateur du service ne peut en aucun cas être tenu pour responsable de la perte de vos secrets résultant de l'oubli, de la divulgation ou de la destruction de vos identifiants secrets.",
+          "Aucun recours, financier ou autre, n'est ouvert à l'utilisateur dans cette situation."
+        ]
+      },
+      {
+        "title": "5. Obligations de l'utilisateur",
+        "body": "Vous vous engagez à utiliser le service conformément aux lois en vigueur et aux présentes CGU. En particulier, vous vous interdisez :",
+        "bullets": [
+          "De stocker des secrets dont la détention serait illégale.",
+          "De tenter de compromettre la sécurité du service ou des données d'autres utilisateurs.",
+          "D'exploiter une vulnérabilité du service à des fins malveillantes.",
+          "De partager votre compte avec un tiers ou d'usurper l'identité d'un autre utilisateur."
+        ]
+      },
+      {
+        "title": "6. Disponibilité du service",
+        "body": "Le service est fourni « en l'état », sans garantie de disponibilité ni engagement de niveau de service (SLA), sauf accord écrit contraire avec l'administrateur de l'instance. Des interruptions peuvent survenir pour maintenance, mises à jour ou en cas d'incident. L'opérateur s'efforce de maintenir un fonctionnement continu mais ne saurait être tenu responsable d'une interruption."
+      },
+      {
+        "title": "7. Limitation de responsabilité",
+        "body": "Dans la limite autorisée par le droit applicable, l'opérateur du service ne pourra être tenu pour responsable des dommages indirects, immatériels ou imprévisibles résultant de l'utilisation ou de l'impossibilité d'utiliser le service, et notamment :",
+        "bullets": [
+          "Perte de secrets consécutive à un oubli de passphrase ou de phrase de récupération.",
+          "Perte de secrets résultant d'une compromission de votre poste, de votre navigateur ou de votre session.",
+          "Perte d'opportunité commerciale, perte de chiffre d'affaires ou préjudice d'image.",
+          "Tout dommage résultant d'une attaque informatique sur l'infrastructure de l'instance, en l'absence de faute lourde de l'opérateur."
+        ]
+      },
+      {
+        "title": "8. Propriété intellectuelle",
+        "body": "Le logiciel Harpocrate est distribué sous licence open source. Les secrets que vous y stockez restent votre propriété exclusive ; aucune cession, licence ou exploitation par l'opérateur n'est concédée."
+      },
+      {
+        "title": "9. Données personnelles",
+        "body": "Le traitement des données à caractère personnel est régi par notre politique de confidentialité dédiée. Reportez-vous à la page Politique de confidentialité (RGPD) pour le détail des finalités, durées de conservation et exercice de vos droits."
+      },
+      {
+        "title": "10. Modification des CGU",
+        "body": "L'opérateur peut modifier les présentes CGU à tout moment pour les adapter à l'évolution du service ou de la législation. Toute modification substantielle vous sera notifiée par e-mail à l'adresse associée à votre compte. La poursuite de l'utilisation du service après notification vaut acceptation des nouvelles conditions."
+      },
+      {
+        "title": "11. Résiliation",
+        "body": "Vous pouvez à tout moment demander la suppression de votre compte depuis la page Compte. L'opérateur peut suspendre ou résilier votre compte en cas de manquement grave aux présentes CGU, notamment en cas d'usage frauduleux du service."
+      },
+      {
+        "title": "12. Loi applicable & juridiction",
+        "body": "Les présentes CGU sont soumises au droit français, sauf disposition impérative contraire. À défaut de résolution amiable, tout litige sera porté devant les juridictions compétentes du ressort du siège de l'administrateur de l'instance."
+      }
+    ]
   }
 }

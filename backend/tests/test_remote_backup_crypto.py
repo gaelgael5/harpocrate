@@ -20,10 +20,14 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HARPOCRATE_HMAC_KEY", base64.b64encode(b"x" * 32).decode())
     monkeypatch.setenv("HARPOCRATE_PUBLIC_URL", "https://t")
 
-    # Recharger settings et le module crypto pour qu'ils relisent l'env
+    # Recharger settings (pattern setattr propre) et le module crypto pour
+    # qu'il relise l'env. Pas de réassignation globale de settings
+    # (cf. test_admin_remote_backups.py:env).
     import app.core.config
 
-    app.core.config.settings = app.core.config.Settings()
+    _new_s = app.core.config.Settings()
+    for _a, _v in _new_s.model_dump().items():
+        monkeypatch.setattr(app.core.config.settings, _a, _v)
     import importlib
 
     importlib.reload(rbc)

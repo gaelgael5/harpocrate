@@ -23,8 +23,12 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_USERNAME", "admin")
     monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_PASSWORD", "x")
     monkeypatch.setenv("HARPOCRATE_INSTANCE_ID", "test-node")
+    # Pas de réassignation de settings (cf. test_admin_remote_backups.py:env).
     import app.core.config
-    app.core.config.settings = app.core.config.Settings()
+
+    _new_s = app.core.config.Settings()
+    for _a, _v in _new_s.model_dump().items():
+        monkeypatch.setattr(app.core.config.settings, _a, _v)
 
 
 def _admin_token() -> str:

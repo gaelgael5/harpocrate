@@ -1,13 +1,18 @@
 """Wrapper httpx synchrone avec retry — LOT_09 SDK.
 
 Gère :
-  - Header Authorization: Bearer <token>
+  - Header Authorization: Bearer <token tronqué> — la `dkey` n'est JAMAIS
+    envoyée sur le canal HTTP (split-token côté SDK depuis 0.7.0).
   - Base URL avec validation HTTPS (sauf HARPOCRATE_ALLOW_INSECURE=1)
   - Retry simple sur les erreurs de connexion (3 tentatives, backoff linéaire)
   - Conversion des erreurs HTTP en exceptions SDK
 
 Sécurité :
   - Refuse http:// sauf si HARPOCRATE_ALLOW_INSECURE=1 (dev local)
+  - Tronque le token (remplace le segment dkey par un placeholder) avant
+    chaque requête : promesse E2E des API keys (le serveur ne voit jamais
+    la `decryption_key` en transit). Le HMAC reste valide (il ne couvre
+    pas la dkey). Voir `harpocrate.token.truncate_token_for_transport`.
   - Ne logue jamais le token ou les headers Authorization
 """
 
@@ -25,6 +30,7 @@ from harpocrate.exceptions import (
     SecretNotFound,
     VaultHttpError,
 )
+from harpocrate.token import truncate_token_for_transport
 
 _DEFAULT_TIMEOUT = 30.0
 _MAX_RETRIES = 3
@@ -57,20 +63,27 @@ class VaultHttpClient:
 
         Paramètres :
             base_url : URL de base du serveur (ex: "https://vault.yoops.org")
-            token    : token hrpv_* (Bearer)
+            token    : token hrpv_* complet (avec dkey). Le client le tronque
+                       avant de l'envoyer : la dkey ne transite jamais sur HTTP.
             timeout  : timeout HTTP en secondes
+
+        Lève `InvalidTokenError` si `token` n'a pas le format `hrpv_*` valide.
         """
         base_url = base_url.rstrip("/")
         _check_base_url(base_url)
         self._base_url = base_url
-        self._token = token
+        # Tronque le token une fois pour toutes : `_auth_token` ne contient
+        # plus la `dkey` réelle, juste un placeholder. La vraie dkey reste
+        # côté VaultClient (parse_token côté client.py) pour le déchiffrement
+        # local de `encrypted_wallet_key`.
+        self._auth_token = truncate_token_for_transport(token)
         self._timeout = timeout
         self._verify_tls = os.environ.get("HARPOCRATE_ALLOW_INSECURE", "0") != "1"
 
     def _headers(self) -> dict[str, str]:
-        """Headers HTTP communs (Authorization non loggé)."""
+        """Headers HTTP communs (Authorization non loggé, token tronqué)."""
         return {
-            "Authorization": f"Bearer {self._token}",
+            "Authorization": f"Bearer {self._auth_token}",
             "Accept": "application/json",
             "Content-Type": "application/json",
         }

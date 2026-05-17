@@ -172,3 +172,42 @@ def parse_token(token: str) -> ParsedToken:
 def has_permission(parsed: ParsedToken, perm_bit: int) -> bool:
     """Vérifie si le token possède un bit de permission donné."""
     return bool(parsed.permissions & perm_bit)
+
+
+# ─── Split-token pour le transport HTTP (SDK ≥0.7) ────────────────────────────
+
+# Placeholder de 43 chars base64url qui remplace le segment `dkey` du token
+# avant l'envoi sur le canal HTTP. Le placeholder est constant (déterministe,
+# pas d'info-leak via du random à chaque requête) et décode en 32 octets nuls.
+# Le HMAC du token ne couvre PAS le segment dkey, la troncature est donc
+# transparente pour la validation serveur.
+_DKEY_PLACEHOLDER: str = "A" * _DKEY_LEN
+
+
+def truncate_token_for_transport(token: str) -> str:
+    """Retourne le token avec le segment `dkey` remplacé par un placeholder.
+
+    Sert à l'envoi HTTP : le SDK doit garder la vraie `decryption_key` en RAM
+    locale et envoyer au serveur un token où la dkey est neutralisée. Le
+    serveur valide le HMAC (qui ne couvre pas la dkey) et ignore le contenu
+    de ce segment.
+
+    Lève `InvalidTokenError` si le token d'entrée n'est pas un `hrpv_*` valide.
+    L'opération est idempotente : tronquer un token déjà tronqué redonne le
+    même résultat (la dkey est juste remise au placeholder).
+    """
+    parsed = parse_token(token)
+    # Reconstruit le token en gardant les segments couverts par le HMAC
+    # (version, id, exp, perms, auth_secret) et le HMAC lui-même.
+    # Le segment dkey est remplacé par le placeholder constant.
+    # On préserve les représentations brutes pour ne pas altérer le HMAC.
+    # exp_b36 et perms_hex doivent être ré-extraits depuis le token original
+    # car ParsedToken ne les expose pas en brut.
+    suffix_len = _AUTH_SECRET_LEN + 1 + _DKEY_LEN + 1 + _HMAC_LEN
+    prefix_part = token[: -(suffix_len + 1)]  # "hrpv_1_id_exp_perms"
+    return (
+        f"{prefix_part}"
+        f"_{parsed.auth_secret_b64}"
+        f"_{_DKEY_PLACEHOLDER}"
+        f"_{parsed.hmac_b64}"
+    )

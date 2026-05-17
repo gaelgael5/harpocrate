@@ -19,7 +19,8 @@ plantait en prod.
 
 from __future__ import annotations
 
-import os
+import base64
+import uuid
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -27,6 +28,12 @@ import httpx
 import pytest
 
 from harpocrate.http import VaultHttpClient
+
+# Token réel hrpv_* (depuis SDK ≥0.7, VaultHttpClient parse le token au boot
+# pour le tronquer — un placeholder court comme "hrpv_test" lève désormais).
+_TEST_ID_B32 = base64.b32encode(uuid.UUID("12345678-1234-5678-1234-567812345678").bytes).decode().lower().rstrip("=")
+_TEST_DKEY_B64 = base64.urlsafe_b64encode(bytes(range(32))).rstrip(b"=").decode()
+_TEST_TOKEN = f"hrpv_1_{_TEST_ID_B32}_0_3f_{'A' * 43}_{_TEST_DKEY_B64}_{'B' * 22}"
 
 
 def _fake_response(status: int = 200, payload: Any = None) -> MagicMock:
@@ -52,7 +59,7 @@ def test_get_accepts_path_kwarg_as_query_param() -> None:
     Après le fix : `path` n'est plus le nom du positionnel — il est libre
     comme kwarg et passe dans **params (query params httpx).
     """
-    client = VaultHttpClient(base_url="http://localhost:8000", token="hrpv_test")
+    client = VaultHttpClient(base_url="http://localhost:8000", token=_TEST_TOKEN)
     fake_resp = _fake_response(200, {"secrets": []})
 
     with patch("httpx.request", return_value=fake_resp) as mock_request:
@@ -71,7 +78,7 @@ def test_get_with_unpacked_params_containing_path() -> None:
 
     Avant le fix : pareil, collision sur `path`. Après : OK.
     """
-    client = VaultHttpClient(base_url="http://localhost:8000", token="hrpv_test")
+    client = VaultHttpClient(base_url="http://localhost:8000", token=_TEST_TOKEN)
     fake_resp = _fake_response(200, {"secrets": []})
     params = {"limit": 50, "path": "/foo/bar/"}
 
@@ -84,7 +91,7 @@ def test_get_with_unpacked_params_containing_path() -> None:
 
 def test_get_without_path_kwarg_still_works() -> None:
     """Non-régression : `.get(url)` sans kwarg fonctionne (URL en seul positionnel)."""
-    client = VaultHttpClient(base_url="http://localhost:8000", token="hrpv_test")
+    client = VaultHttpClient(base_url="http://localhost:8000", token=_TEST_TOKEN)
     fake_resp = _fake_response(200, {"id": "x"})
 
     with patch("httpx.request", return_value=fake_resp) as mock_request:
@@ -98,7 +105,7 @@ def test_get_without_path_kwarg_still_works() -> None:
 
 def test_get_with_multiple_query_params() -> None:
     """Plusieurs query params arbitraires passent comme **params."""
-    client = VaultHttpClient(base_url="http://localhost:8000", token="hrpv_test")
+    client = VaultHttpClient(base_url="http://localhost:8000", token=_TEST_TOKEN)
     fake_resp = _fake_response(200, {"types": []})
 
     with patch("httpx.request", return_value=fake_resp) as mock_request:
@@ -118,7 +125,7 @@ def test_post_put_patch_delete_signatures_dont_clash_with_path() -> None:
     pas, mais on renomme pour cohérence + lisibilité (le nom du positionnel
     décrit mieux ce qu'il représente : une URL, pas un "path" métier).
     """
-    client = VaultHttpClient(base_url="http://localhost:8000", token="hrpv_test")
+    client = VaultHttpClient(base_url="http://localhost:8000", token=_TEST_TOKEN)
     fake_resp = _fake_response(204)
 
     with patch("httpx.request", return_value=fake_resp) as mock_request:

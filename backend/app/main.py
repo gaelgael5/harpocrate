@@ -25,6 +25,7 @@ from app.api.v1 import (
     admin_secret_types,
     admin_snapshots,
     admin_system,
+    admin_users,
     api_key_openapi,
     api_keys,
     api_keys_self,
@@ -246,6 +247,24 @@ async def _invalid_secret_path_handler(_request: Request, exc: InvalidSecretPath
     )
 
 
+# A-2 : transforme `UserDisabledError` (levee par users_repo.get_by_keycloak_sub)
+# en 403 cohérent avec les autres erreurs Harpocrate.
+from app.db.repositories.users import UserDisabledError  # noqa: E402
+
+
+@app.exception_handler(UserDisabledError)
+async def _user_disabled_handler(
+    _request: Request, _exc: UserDisabledError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": "user_disabled",
+            "message": "This account has been disabled by an administrator.",
+        },
+    )
+
+
 # ─── Middlewares ──────────────────────────────────────────────────────────────
 #
 # RÈGLE DE SÉCURITÉ : les chemins /secrets ne doivent JAMAIS avoir leur body
@@ -316,6 +335,7 @@ app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")
 app.include_router(admin_secret_types.public_router, prefix="/v1")
 app.include_router(admin_system.router, prefix="/v1")
+app.include_router(admin_users.router, prefix="/v1")
 app.include_router(admin_anomalies.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")

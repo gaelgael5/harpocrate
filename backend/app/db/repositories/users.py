@@ -10,6 +10,21 @@ import asyncpg
 from app.models.db.user import UserRow
 
 
+class UserDisabledError(Exception):
+    """Levee par `get_by_keycloak_sub` si `users.disabled_at IS NOT NULL`.
+
+    Enforcement de A-2 (admin disable user). Le repo signale l'etat
+    par exception ; le handler `app/main.py::_user_disabled_handler` la
+    transforme en HTTP 403 cote API.
+
+    Pourquoi ici et pas dans `require_jwt_user` :
+    - Eviter un DB round-trip supplementaire par requete JWT (le user
+      sera de toute facon recupere par les endpoints qui en ont besoin).
+    - Centraliser le check au niveau du repo : tout caller qui charge un
+      user via `get_by_keycloak_sub` est protege automatiquement.
+    """
+
+
 def _row_to_user(row: Any) -> UserRow:
     enc_rsa_priv_by_recovery_raw = row.get("encrypted_rsa_private_key_by_recovery", None)
     enc_rsa_priv_by_recovery = (
@@ -61,7 +76,15 @@ async def get_by_keycloak_sub(
         "SELECT * FROM users WHERE keycloak_sub = $1 AND is_system = FALSE",
         sub,
     )
-    return _row_to_user(row) if row else None
+    if row is None:
+        return None
+    # A-2 : refuse l'acces si l'admin a disable le compte. Le handler
+    # `_user_disabled_handler` dans `app/main.py` transforme l'exception en 403.
+    if row.get("disabled_at") is not None:
+        raise UserDisabledError(
+            f"User account {row.get('id')} has been disabled by an administrator"
+        )
+    return _row_to_user(row)
 
 
 async def insert_bootstrap(

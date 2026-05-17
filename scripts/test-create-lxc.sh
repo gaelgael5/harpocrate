@@ -27,6 +27,11 @@
 #   - CTID_MAX       ex: 999
 #   - SCRIPTS_DIR    ex: /opt/scripts
 #
+# Variable optionnelle :
+#   - HEALTH_URL_PATH   path HTTP du healthcheck applicatif (test 7).
+#                       Default: "/health" (convention agflow.docker).
+#                       Pour harpocrate, utiliser "/v1/health".
+#
 # Pré-requis sur l'hôte Proxmox :
 #   - <SCRIPTS_DIR>/.env.git  (TOKEN=ghp_... PAT GitHub avec scope `repo`)
 #   - python3 (pour parser le JSON de create-lxc.sh)
@@ -476,12 +481,16 @@ else
     log_fail "Répertoire .git absent — clone incomplet ?"
 fi
 
-# Test 7 : la stack répond sur /health (smoke applicatif côté agflow.docker)
+# Test 7 : la stack répond sur le path de healthcheck applicatif.
+# HEALTH_URL_PATH est lu depuis le .env.test du projet — chaque projet a sa
+# convention : agflow.docker expose /health, harpocrate expose /v1/health.
+# Default = /health pour la rétro-compat agflow.
+HEALTH_PATH="${HEALTH_URL_PATH:-/health}"
 if [ -n "${CT_IP}" ]; then
-    if curl -sf -m 5 "http://${CT_IP}:8000/health" >/dev/null 2>&1; then
-        log_pass "Backend agflow répond sur http://${CT_IP}:8000/health"
+    if curl -sf -m 5 "http://${CT_IP}:8000${HEALTH_PATH}" >/dev/null 2>&1; then
+        log_pass "Backend répond sur http://${CT_IP}:8000${HEALTH_PATH}"
     else
-        log_fail "Backend agflow ne répond pas sur http://${CT_IP}:8000/health"
+        log_fail "Backend ne répond pas sur http://${CT_IP}:8000${HEALTH_PATH}"
     fi
 fi
 

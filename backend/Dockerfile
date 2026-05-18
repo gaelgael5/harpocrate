@@ -1,7 +1,17 @@
 FROM python:3.12-slim AS base
 
+# UV_PROJECT_ENVIRONMENT : le venv applicatif est posé en /opt/venv (hors WORKDIR)
+#   pour ne pas être écrasé par le bind-mount du stage dev sur /app.
+# UV_LINK_MODE=copy : sans hardlinks, plus compatible avec les drivers de
+#   stockage Docker (overlay2 / vfs).
+# UV_NO_CACHE=1 : pas de cache uv embarqué dans les couches → image plus légère.
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_LINK_MODE=copy \
+    UV_NO_CACHE=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
@@ -30,52 +40,47 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-16 \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir \
-    "fastapi>=0.110,<0.116" \
-    "uvicorn[standard]>=0.27" \
-    "pydantic>=2.6,<3" \
-    "pydantic-settings>=2.2,<3" \
-    "asyncpg>=0.29" \
-    "structlog>=24.1" \
-    "python-json-logger>=2.0" \
-    "httpx>=0.27" \
-    "pyjwt[crypto]>=2.9,<3" \
-    "cryptography>=43,<45" \
-    "argon2-cffi>=23,<25" \
-    "boto3>=1.34" \
-    "jsonschema>=4.26,<5" \
-    "asyncssh>=2.22.0" \
-    "aiomqtt>=2.3.0" \
-    "aioftp>=0.21.4" \
-    "aiodocker>=0.21" \
-    "croniter>=2.0" \
-    "google-auth>=2.30" \
-    "google-auth-oauthlib>=1.2" \
-    "google-api-python-client>=2.130"
+# Gestionnaire de dépendances officiel du projet (cf. CLAUDE.md). Installé en
+# couche système ; on s'en sert ensuite pour synchroniser un venv applicatif à
+# partir de pyproject.toml + uv.lock — source de vérité unique. Évite la dérive
+# Dockerfile↔pyproject qui a déjà cassé la prod 4 fois (slowapi, asyncssh,
+# google-*, jsonschema/boto3) — voir LESSONS.md.
+RUN pip install --no-cache-dir uv
 
-# ATTENTION : la liste ci-dessus DOIT rester en sync avec backend/pyproject.toml.
-# Refactor à venir : faire lire pyproject.toml directement (pip install . avec
-# stub app/__init__.py temporaire pour hatch).
+# Étape 1 — install des dépendances *seules* (pas le projet lui-même).
+# On copie d'abord pyproject.toml + uv.lock pour profiter du cache Docker :
+# tant que ces deux fichiers ne changent pas, cette couche est réutilisée
+# même quand le code applicatif évolue.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Stage dev : bind-mount du code, reload activé
+# Stage dev : bind-mount du code, reload activé. Le venv applicatif est en
+# /opt/venv (hors /app), donc préservé du bind-mount. Le package `app` est
+# accessible parce que uvicorn ajoute le cwd (=/app, monté en bind) au sys.path.
 FROM base AS dev
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
      "--reload", "--reload-dir", "/app/app"]
 
-# Stage prod : code embarqué, user non-root
+# Stage prod : code embarqué + install du projet, user non-root
 FROM base AS prod
-RUN useradd -r -u 1001 -m harpocrate
 COPY app ./app
 COPY migrations ./migrations
 COPY types ./types
+
+# Étape 2 — installation du projet dans le venv (les deps sont déjà là). Le
+# package `app` devient importable depuis n'importe quel cwd, indépendamment
+# de PYTHONPATH.
+RUN uv sync --frozen --no-dev
+
 # Crée le path par défaut des backups (HARPOCRATE_BACKUP_LOCAL_PATH) avec les
 # bonnes permissions pour l'user non-root. Sans ça, mkdir échoue en runtime
 # (Errno 13 sur /var/lib). En prod, ce path est généralement masqué par un
 # volume monté depuis docker-compose.yml pour persister à travers les pulls.
-RUN mkdir -p /var/lib/harpocrate/backups \
- && chown -R harpocrate:harpocrate /var/lib/harpocrate
+RUN useradd -r -u 1001 -m harpocrate \
+ && mkdir -p /var/lib/harpocrate/backups \
+ && chown -R harpocrate:harpocrate /var/lib/harpocrate /opt/venv /app
+
 USER harpocrate
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

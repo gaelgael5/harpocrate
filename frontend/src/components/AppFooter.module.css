@@ -1,0 +1,92 @@
+/* AppFooter — pied de page global, deux variantes (page publique / AppShell). */
+
+.root {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid #dedad2;
+  background: #f8f7f4;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: rgba(10, 10, 10, 0.55);
+}
+
+.rootCompact {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 100%;
+  padding: 0 1rem;
+  border-top: 1px solid #dedad2;
+  background: #f8f7f4;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: rgba(10, 10, 10, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: rgba(10, 10, 10, 0.7);
+}
+
+.sep {
+  color: rgba(10, 10, 10, 0.25);
+}
+
+.link {
+  color: rgba(10, 10, 10, 0.6);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.link:hover {
+  color: #1e40af;
+  border-bottom-color: rgba(30, 64, 175, 0.4);
+}
+
+.copy {
+  margin-left: 0.4rem;
+  color: rgba(10, 10, 10, 0.4);
+}
+
+/* Adaptation dark mode (Mantine) — on s'aligne sur la palette de l'AppShell sombre */
+:global([data-mantine-color-scheme="dark"]) .root,
+:global([data-mantine-color-scheme="dark"]) .rootCompact {
+  background: #1a1b1e;
+  border-top-color: #2c2e33;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+:global([data-mantine-color-scheme="dark"]) .brand {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+:global([data-mantine-color-scheme="dark"]) .copy {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+:global([data-mantine-color-scheme="dark"]) .sep {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+:global([data-mantine-color-scheme="dark"]) .link {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+:global([data-mantine-color-scheme="dark"]) .link:hover {
+  color: #6090ff;
+  border-bottom-color: rgba(96, 144, 255, 0.4);
+}

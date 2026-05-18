@@ -1421,5 +1421,9 @@
         "body": "Les présentes CGU sont soumises au droit français, sauf disposition impérative contraire. À défaut de résolution amiable, tout litige sera porté devant les juridictions compétentes du ressort du siège de l'administrateur de l'instance."
       }
     ]
+  },
+  "footer": {
+    "rgpd": "RGPD",
+    "cgu": "CGU"
   }
 }

@@ -479,12 +479,6 @@ export function LandingPage() {
           </Link>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className={styles.footer}>
-        <span className={styles.footerLogo}>Harpocrate</span>
-        <span className={styles.footerCopy}>{t("landing.footer.tagline")}</span>
-      </footer>
     </div>
   );
 }

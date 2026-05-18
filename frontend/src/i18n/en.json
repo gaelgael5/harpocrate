@@ -1420,5 +1420,9 @@
         "body": "These Terms are governed by French law, unless mandatory law provides otherwise. Failing amicable resolution, any dispute shall be brought before the competent courts of the place of establishment of the operator of the instance."
       }
     ]
+  },
+  "footer": {
+    "rgpd": "Privacy",
+    "cgu": "Terms"
   }
 }

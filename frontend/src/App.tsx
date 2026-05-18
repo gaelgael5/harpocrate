@@ -15,6 +15,7 @@ import { useSessionStore } from "@/stores/session";
 
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
+import { PublicLayout } from "@/components/PublicLayout";
 import { InactivityGuard } from "@/components/InactivityGuard";
 import { DevModeBanner } from "@/components/DevModeBanner";
 import { InsecureContextGuard } from "@/components/InsecureContextGuard";
@@ -136,9 +137,11 @@ export default function App() {
         <DevModeBanner />
         <ContentWithBannerOffset>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/rgpd" element={<RgpdPage />} />
-            <Route path="/cgu" element={<CguPage />} />
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/rgpd" element={<RgpdPage />} />
+              <Route path="/cgu" element={<CguPage />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ContentWithBannerOffset>
@@ -160,16 +163,20 @@ export default function App() {
             }}
           >
             <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/rgpd" element={<RgpdPage />} />
-              <Route path="/cgu" element={<CguPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
-              <Route path="/first-login" element={<FirstLoginPage />} />
-              <Route path="/unlock" element={<UnlockPage />} />
-              <Route path="/recover/start" element={<RecoverStartPage />} />
-              <Route path="/recover/:sessionId" element={<RecoverPage />} />
+              {/* Public routes — wrapped by PublicLayout (footer global avec RGPD + CGU) */}
+              <Route element={<PublicLayout />}>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/rgpd" element={<RgpdPage />} />
+                <Route path="/cgu" element={<CguPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
+                <Route path="/first-login" element={<FirstLoginPage />} />
+                <Route path="/unlock" element={<UnlockPage />} />
+                <Route path="/recover/start" element={<RecoverStartPage />} />
+                <Route path="/recover/:sessionId" element={<RecoverPage />} />
+              </Route>
+
+              {/* /integration : sa propre logique (Layout si connecté, sinon page seule) */}
               <Route
                 path="/integration"
                 element={

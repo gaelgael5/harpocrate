@@ -82,7 +82,48 @@ class Settings(BaseSettings):
     sync_log_retention_days: int = Field(
         default=7,
         ge=1,
-        description="Rétention sync_log avant purge (futur lot de cron)",
+        description=(
+            "Rétention sync_log avant purge automatique "
+            "(scheduler horaire `sync_log_partition_scheduler`, migration 032)."
+        ),
+    )
+
+    # ─── Rate limiting (slowapi) — S-5 du rapport d'audit ──────────────────
+    # Désactivable globalement (utile en tests). Les limites par endpoint
+    # sont au format `limits` (https://limits.readthedocs.io) — ex: "5/minute"
+    # ou "20/hour;100/day" (cumul de plusieurs fenêtres).
+    rate_limit_enabled: bool = Field(
+        default=True,
+        description=(
+            "Active le rate limiting applicatif sur les endpoints d'auth. "
+            "En tests, mettre à false pour éviter les 429 lors des batchs."
+        ),
+    )
+    rate_limit_local_login: str = Field(
+        default="10/minute;100/hour",
+        description=(
+            "Limite sur POST /v1/auth/local-login (anti brute force admin local). "
+            "Compteur par IP (ou X-Forwarded-For si reverse-proxy)."
+        ),
+    )
+    rate_limit_recovery_start: str = Field(
+        default="5/minute;20/hour",
+        description=(
+            "Limite sur POST /v1/auth/recovery/start (anti-enum email + anti-spam mail)."
+        ),
+    )
+    rate_limit_recovery_attempt: str = Field(
+        default="10/minute;30/hour",
+        description=(
+            "Limite sur POST /v1/auth/recovery/{session_id}/attempt-failed "
+            "(complète la limite de 3 essais par session avec une borne IP)."
+        ),
+    )
+    rate_limit_passphrase_change: str = Field(
+        default="5/minute;30/hour",
+        description=(
+            "Limite sur PUT /v1/me/passphrase (anti brute force ancienne passphrase)."
+        ),
     )
 
     @field_validator("instance_id")

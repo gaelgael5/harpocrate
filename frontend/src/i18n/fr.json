@@ -365,7 +365,8 @@
     "noEvents": "Aucun événement.",
     "wallet": "Coffre",
     "since": "Depuis",
-    "until": "Jusqu'à"
+    "until": "Jusqu'à",
+    "exportCsv": "Exporter en CSV"
   },
   "account": {
     "title": "Mon compte",
@@ -555,6 +556,68 @@
       "never": "Jamais",
       "total": "{{count}} utilisateur(s) au total"
     },
+    "userDetail": {
+      "backToList": "Retour à la liste",
+      "info": "Informations",
+      "email": "Email",
+      "displayName": "Nom affiché",
+      "createdAt": "Créé le",
+      "lastUnlockAt": "Dernier déverrouillage",
+      "bootstrap": "Bootstrap",
+      "bootstrapDone": "Terminé",
+      "bootstrapPending": "En attente",
+      "disabledAt": "Désactivé le",
+      "quarantineUntil": "Quarantaine jusqu'à",
+      "statusActive": "Actif",
+      "statusDisabled": "Désactivé",
+      "statusQuarantine": "Quarantaine",
+      "statusForceReverify": "Re-vérif requise",
+      "actions": "Actions admin",
+      "enable": "Réactiver le compte",
+      "enableSuccess": "Compte réactivé",
+      "disable": "Désactiver le compte",
+      "disableTitle": "Désactiver le compte",
+      "disableWarning": "Le user ne pourra plus s'authentifier (les API keys restent fonctionnelles tant qu'elles ne sont pas révoquées).",
+      "disableReasonLabel": "Raison",
+      "disableReasonPlaceholder": "ex: compte compromis, départ collaborateur...",
+      "disableConfirm": "Désactiver",
+      "disableSuccess": "Compte désactivé",
+      "disableError": "Erreur lors de la désactivation",
+      "quarantineClear": "Lever la quarantaine",
+      "quarantineClearSuccess": "Quarantaine levée",
+      "forceReverify": "Force re-vérif au prochain login",
+      "forceReverifyHelp": "Quand activé, le prochain login imposera une re-saisie complète (JWT + passphrase).",
+      "identities": "Identités OIDC",
+      "noIdentities": "Aucune identité liée.",
+      "identityProvider": "Provider",
+      "identitySubject": "Subject",
+      "identityLinkedAt": "Liée le",
+      "identityLastLogin": "Dernier login",
+      "primary": "Primaire",
+      "unlink": "Délier",
+      "unlinkConfirm": "Délier l'identité {{provider}} ?",
+      "unlinkSuccess": "Identité déliée",
+      "unlinkError": "Erreur lors de la suppression de l'identité",
+      "wallets": "Coffres",
+      "walletsOwned": "possédé(s)",
+      "walletsShared": "partagé(s) avec ce user",
+      "walletsRecent": "Coffres récents (10 derniers possédés) :",
+      "anomalies": "Anomalies d'identité",
+      "anomaliesTotal": "{{n}} au total",
+      "anomaliesUnack": "{{n}} non reconnue(s)",
+      "noAnomalies": "Aucune anomalie détectée.",
+      "detectedAt": "Détectée le",
+      "severity": "Sévérité",
+      "anomalyType": "Type",
+      "acknowledged": "Reconnue",
+      "recentAudit": "Audit récent (20 dernières actions)",
+      "noAudit": "Aucune action récente.",
+      "occurredAt": "Date",
+      "action": "Action",
+      "success": "Succès",
+      "ip": "IP",
+      "notFound": "Utilisateur introuvable."
+    },
     "backups": {
       "title": "Sauvegardes",
       "create": "Créer une sauvegarde",
@@ -579,6 +642,16 @@
       "restoring": "Restauration en cours...",
       "restoreSuccess": "Restauration réussie — époque session : {{epoch}}",
       "restoreError": "Erreur lors de la restauration",
+      "verify": "Vérifier",
+      "verifyTitle": "Vérifier l'intégrité de {{filename}}",
+      "verifyHelp": "Le serveur déchiffre l'archive avec votre clé privée AGE et vérifie les checksums internes. La clé n'est jamais persistée.",
+      "verifying": "Vérification...",
+      "verifySuccess": "Backup vérifié — checksums OK",
+      "verifyInvalid": "Backup invalide ou corrompu",
+      "verifyValid": "Backup valide",
+      "verifyError": "Erreur lors de la vérification (clé incorrecte ou fichier corrompu)",
+      "checksumsMatch": "Checksums",
+      "dumpSqlLines": "Lignes SQL du dump",
       "descriptionLabel": "Description (optionnel)",
       "createSuccess": "Sauvegarde créée",
       "deleteSuccess": "Sauvegarde supprimée",
@@ -697,6 +770,27 @@
       }
     },
     "replication": {
+      "patroni": {
+        "title": "Opérations Patroni",
+        "help": "Switchover gracieux, réinitialisation de replica, pause/reprise du failover automatique. Voir wiki ops_replication_patroni pour les pièges.",
+        "switchover": "Switchover",
+        "switchoverTitle": "Switchover gracieux",
+        "switchoverWarning": "Le leader actuel passe en replica et un replica (celui que tu choisis ou que Patroni sélectionne) devient leader. Les connexions actives au leader sont interrompues quelques secondes le temps du basculement.",
+        "switchoverSuccess": "Switchover déclenché",
+        "candidateLabel": "Nom du candidat (optionnel — Patroni choisit si vide)",
+        "candidatePlaceholder": "ex: pg2",
+        "confirmLabel": "Confirmation (tapez : {{expected}})",
+        "reinit": "Réinitialiser un replica",
+        "reinitTitle": "Réinitialiser un replica",
+        "reinitWarning": "DESTRUCTIF : le data dir du membre cible est effacé puis re-cloné depuis le leader (durée = taille de la DB). Ne pas cibler le leader. Utiliser quand un replica est désynchronisé ou corrompu.",
+        "reinitSuccess": "Réinitialisation déclenchée",
+        "memberUrlLabel": "URL API Patroni du membre cible",
+        "availableReplicas": "Replicas disponibles (cliquer pour copier)",
+        "pause": "Suspendre auto-failover",
+        "pauseSuccess": "Auto-failover suspendu",
+        "resume": "Reprendre auto-failover",
+        "resumeSuccess": "Auto-failover réactivé"
+      },
       "promote": {
         "buttonLabel": "Promouvoir en master",
         "modalTitle": "Promouvoir cette instance en master",
@@ -936,6 +1030,7 @@
       "minutes_one": "{{count}} minute",
       "minutes_other": "{{count}} minutes",
       "preset": {
+        "dailyMidnight": "Quotidien minuit",
         "daily02": "Quotidien 2h",
         "weekly": "Hebdo dimanche 3h",
         "monthly": "Mensuel 1er 4h",
@@ -1168,8 +1263,167 @@
       "button": "Ouvrir votre coffre",
       "meta": "Open source · Auto-hébergé · Zero knowledge"
     },
+    "privacy": {
+      "label": "Confidentialité & responsabilité",
+      "title": "Données personnelles & limites du service",
+      "body": "Harpocrate ne stocke en clair que votre adresse e-mail et votre nom d'affichage — strictement le minimum nécessaire pour vous identifier dans votre coffre. Tous vos secrets sont chiffrés côté client et restent illisibles pour l'opérateur du serveur. Comme le service est zero-knowledge, l'oubli de votre passphrase ou de votre phrase de récupération entraîne la perte définitive et irréversible de vos secrets : nous ne pouvons pas la récupérer pour vous.",
+      "rgpdLink": "Politique de confidentialité (RGPD) →",
+      "cguLink": "Conditions générales d'utilisation →"
+    },
     "footer": {
       "tagline": "Le dieu du silence garde vos secrets."
     }
+  },
+  "rgpd": {
+    "back": "← Retour à l'accueil",
+    "label": "Politique de confidentialité",
+    "title": "Données personnelles & RGPD",
+    "subtitle": "Mentions conformes aux articles 13 et 14 du Règlement (UE) 2016/679 (RGPD).",
+    "updated": "Dernière mise à jour : 17 mai 2026",
+    "sections": [
+      {
+        "title": "1. Responsable du traitement",
+        "body": "Harpocrate est un logiciel auto-hébergé. Le responsable du traitement est l'administrateur (personne physique ou morale) qui exploite l'instance sur laquelle vous êtes inscrit. Pour exercer vos droits, adressez-vous directement à cet administrateur, dont les coordonnées doivent être affichées à la racine de l'instance ou dans son mentions légales."
+      },
+      {
+        "title": "2. Données personnelles collectées",
+        "body": "Le service collecte un strict minimum de données identifiantes, stockées en clair en base de données :",
+        "bullets": [
+          "Adresse e-mail — sert d'identifiant unique et de canal de notification.",
+          "Nom d'affichage (display_name) — affiché dans l'interface et le journal d'audit.",
+          "Identifiant utilisateur (UUID) généré automatiquement.",
+          "Horodatages techniques : date de création, dernière ouverture du coffre, mise en quarantaine."
+        ]
+      },
+      {
+        "title": "3. Données techniques liées à l'usage",
+        "body": "Pour des raisons de sécurité et de traçabilité, certaines données techniques sont enregistrées dans le journal d'audit :",
+        "bullets": [
+          "Adresse IP de connexion (durée de conservation alignée sur la rétention des logs).",
+          "Identifiants des coffres et secrets consultés, sans leur contenu.",
+          "Type d'action effectuée (lecture, écriture, partage, révocation) et son horodatage."
+        ]
+      },
+      {
+        "title": "4. Ce que le serveur ne voit jamais",
+        "body": "Harpocrate est conçu sur le principe du zero-knowledge. Les éléments suivants ne quittent jamais votre navigateur en clair et ne sont jamais stockés en clair sur le serveur :",
+        "bullets": [
+          "Votre passphrase et votre phrase de récupération.",
+          "Votre clé privée RSA (chiffrée localement avant tout envoi).",
+          "Le contenu des secrets eux-mêmes (valeurs, mots de passe, clés API)."
+        ]
+      },
+      {
+        "title": "5. Finalités du traitement",
+        "body": "Vos données sont traitées exclusivement pour : (a) vous authentifier sur l'instance, (b) vous permettre de déchiffrer vos propres coffres, (c) tracer les accès dans le journal d'audit afin de détecter d'éventuels abus, et (d) vous notifier des événements importants (réinitialisation, partage, quarantaine)."
+      },
+      {
+        "title": "6. Base légale",
+        "body": "Le traitement repose sur l'exécution du contrat de service entre vous et l'administrateur de l'instance (article 6.1.b du RGPD). La journalisation d'audit est fondée sur l'intérêt légitime du responsable à sécuriser le service (article 6.1.f)."
+      },
+      {
+        "title": "7. Durée de conservation",
+        "body": "Les données d'identification sont conservées tant que votre compte est actif. Le journal d'audit est conservé conformément à la politique de rétention de Loki configurée par l'administrateur (par défaut 7 jours). À la suppression de votre compte, vos données identifiantes sont effacées immédiatement ; les entrées d'audit historiques peuvent persister jusqu'à expiration normale de la rétention."
+      },
+      {
+        "title": "8. Destinataires & sous-traitants",
+        "body": "Aucune donnée n'est transmise à un tiers commercial. Harpocrate ne contient aucune télémétrie ni service analytique externe. Les seules dépendances externes possibles sont configurées par l'administrateur : fournisseur d'identité (Keycloak), stockage de backups distant (S3, SFTP, etc.), et collecteur de logs (Loki/Grafana). Chacune de ces dépendances relève d'une politique propre dont l'administrateur est responsable."
+      },
+      {
+        "title": "9. Vos droits",
+        "body": "Conformément aux articles 15 à 22 du RGPD, vous disposez des droits suivants :",
+        "bullets": [
+          "Droit d'accès — obtenir copie de vos données identifiantes.",
+          "Droit de rectification — corriger votre adresse e-mail ou votre nom d'affichage.",
+          "Droit à l'effacement — demander la suppression de votre compte.",
+          "Droit à la portabilité — exporter vos coffres au format chiffré.",
+          "Droit d'opposition — refuser certaines finalités de traitement.",
+          "Droit d'introduire une réclamation auprès de la CNIL (www.cnil.fr)."
+        ]
+      },
+      {
+        "title": "10. Sécurité",
+        "body": "Les communications sont chiffrées en transit (TLS). Les secrets sont chiffrés en AES-256-GCM avec une clé dérivée de votre passphrase via Argon2id, et la clé symétrique de coffre est elle-même chiffrée par votre clé publique RSA-4096. Aucun secret n'est jamais accessible en clair par l'opérateur du serveur."
+      }
+    ]
+  },
+  "cgu": {
+    "back": "← Retour à l'accueil",
+    "label": "Conditions générales d'utilisation",
+    "title": "Conditions générales d'utilisation",
+    "subtitle": "À lire attentivement avant toute utilisation du service. Votre inscription vaut acceptation pleine et entière de ces conditions.",
+    "updated": "Dernière mise à jour : 17 mai 2026",
+    "sections": [
+      {
+        "title": "1. Objet",
+        "body": "Les présentes conditions générales d'utilisation (« CGU ») régissent l'utilisation du service Harpocrate, gestionnaire de secrets zero-knowledge, par toute personne disposant d'un compte sur l'instance considérée. Elles constituent un contrat entre vous et l'administrateur de l'instance."
+      },
+      {
+        "title": "2. Description du service",
+        "body": "Harpocrate permet de stocker, organiser et partager des secrets (mots de passe, clés API, jetons, certificats) chiffrés de bout en bout. Le chiffrement et le déchiffrement s'effectuent intégralement dans votre navigateur ; le serveur ne reçoit et ne conserve que des blobs chiffrés. L'opérateur du service n'a aucun moyen technique d'accéder au contenu de vos secrets."
+      },
+      {
+        "title": "3. Inscription & compte",
+        "body": "Pour utiliser le service, vous devez créer un compte rattaché à une adresse e-mail valide et choisir une passphrase répondant aux exigences minimales affichées à la première connexion. Vous êtes seul responsable de la confidentialité de vos identifiants. Toute action effectuée depuis votre compte est réputée provenir de vous."
+      },
+      {
+        "title": "4. Perte de la passphrase — point critique",
+        "body": "Harpocrate est conçu sur le principe du zero-knowledge. Cela signifie que personne, y compris l'administrateur de l'instance, ne peut récupérer vos secrets si vous perdez à la fois votre passphrase et votre phrase de récupération. Sans elles, vos secrets sont mathématiquement et définitivement inaccessibles. En conséquence :",
+        "bullets": [
+          "Vous reconnaissez avoir compris cette caractéristique et l'accepter sans réserve.",
+          "Vous vous engagez à conserver votre passphrase et votre phrase de récupération en lieu sûr.",
+          "L'opérateur du service ne peut en aucun cas être tenu pour responsable de la perte de vos secrets résultant de l'oubli, de la divulgation ou de la destruction de vos identifiants secrets.",
+          "Aucun recours, financier ou autre, n'est ouvert à l'utilisateur dans cette situation."
+        ]
+      },
+      {
+        "title": "5. Obligations de l'utilisateur",
+        "body": "Vous vous engagez à utiliser le service conformément aux lois en vigueur et aux présentes CGU. En particulier, vous vous interdisez :",
+        "bullets": [
+          "De stocker des secrets dont la détention serait illégale.",
+          "De tenter de compromettre la sécurité du service ou des données d'autres utilisateurs.",
+          "D'exploiter une vulnérabilité du service à des fins malveillantes.",
+          "De partager votre compte avec un tiers ou d'usurper l'identité d'un autre utilisateur."
+        ]
+      },
+      {
+        "title": "6. Disponibilité du service",
+        "body": "Le service est fourni « en l'état », sans garantie de disponibilité ni engagement de niveau de service (SLA), sauf accord écrit contraire avec l'administrateur de l'instance. Des interruptions peuvent survenir pour maintenance, mises à jour ou en cas d'incident. L'opérateur s'efforce de maintenir un fonctionnement continu mais ne saurait être tenu responsable d'une interruption."
+      },
+      {
+        "title": "7. Limitation de responsabilité",
+        "body": "Dans la limite autorisée par le droit applicable, l'opérateur du service ne pourra être tenu pour responsable des dommages indirects, immatériels ou imprévisibles résultant de l'utilisation ou de l'impossibilité d'utiliser le service, et notamment :",
+        "bullets": [
+          "Perte de secrets consécutive à un oubli de passphrase ou de phrase de récupération.",
+          "Perte de secrets résultant d'une compromission de votre poste, de votre navigateur ou de votre session.",
+          "Perte d'opportunité commerciale, perte de chiffre d'affaires ou préjudice d'image.",
+          "Tout dommage résultant d'une attaque informatique sur l'infrastructure de l'instance, en l'absence de faute lourde de l'opérateur."
+        ]
+      },
+      {
+        "title": "8. Propriété intellectuelle",
+        "body": "Le logiciel Harpocrate est distribué sous licence open source. Les secrets que vous y stockez restent votre propriété exclusive ; aucune cession, licence ou exploitation par l'opérateur n'est concédée."
+      },
+      {
+        "title": "9. Données personnelles",
+        "body": "Le traitement des données à caractère personnel est régi par notre politique de confidentialité dédiée. Reportez-vous à la page Politique de confidentialité (RGPD) pour le détail des finalités, durées de conservation et exercice de vos droits."
+      },
+      {
+        "title": "10. Modification des CGU",
+        "body": "L'opérateur peut modifier les présentes CGU à tout moment pour les adapter à l'évolution du service ou de la législation. Toute modification substantielle vous sera notifiée par e-mail à l'adresse associée à votre compte. La poursuite de l'utilisation du service après notification vaut acceptation des nouvelles conditions."
+      },
+      {
+        "title": "11. Résiliation",
+        "body": "Vous pouvez à tout moment demander la suppression de votre compte depuis la page Compte. L'opérateur peut suspendre ou résilier votre compte en cas de manquement grave aux présentes CGU, notamment en cas d'usage frauduleux du service."
+      },
+      {
+        "title": "12. Loi applicable & juridiction",
+        "body": "Les présentes CGU sont soumises au droit français, sauf disposition impérative contraire. À défaut de résolution amiable, tout litige sera porté devant les juridictions compétentes du ressort du siège de l'administrateur de l'instance."
+      }
+    ]
+  },
+  "footer": {
+    "rgpd": "RGPD",
+    "cgu": "CGU"
   }
 }

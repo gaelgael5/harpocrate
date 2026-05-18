@@ -364,7 +364,8 @@
     "noEvents": "No events.",
     "wallet": "Vault",
     "since": "Since",
-    "until": "Until"
+    "until": "Until",
+    "exportCsv": "Export as CSV"
   },
   "account": {
     "title": "My account",
@@ -554,6 +555,68 @@
       "never": "Never",
       "total": "{{count}} user(s) total"
     },
+    "userDetail": {
+      "backToList": "Back to list",
+      "info": "Information",
+      "email": "Email",
+      "displayName": "Display name",
+      "createdAt": "Created at",
+      "lastUnlockAt": "Last unlock",
+      "bootstrap": "Bootstrap",
+      "bootstrapDone": "Done",
+      "bootstrapPending": "Pending",
+      "disabledAt": "Disabled at",
+      "quarantineUntil": "Quarantine until",
+      "statusActive": "Active",
+      "statusDisabled": "Disabled",
+      "statusQuarantine": "Quarantine",
+      "statusForceReverify": "Re-verify required",
+      "actions": "Admin actions",
+      "enable": "Re-enable account",
+      "enableSuccess": "Account re-enabled",
+      "disable": "Disable account",
+      "disableTitle": "Disable account",
+      "disableWarning": "The user will not be able to authenticate anymore (existing API keys remain valid until revoked).",
+      "disableReasonLabel": "Reason",
+      "disableReasonPlaceholder": "e.g., compromised account, employee left...",
+      "disableConfirm": "Disable",
+      "disableSuccess": "Account disabled",
+      "disableError": "Error while disabling",
+      "quarantineClear": "Clear quarantine",
+      "quarantineClearSuccess": "Quarantine cleared",
+      "forceReverify": "Force re-verify on next login",
+      "forceReverifyHelp": "When enabled, the next login forces a full re-verification (JWT + passphrase).",
+      "identities": "OIDC identities",
+      "noIdentities": "No identity linked.",
+      "identityProvider": "Provider",
+      "identitySubject": "Subject",
+      "identityLinkedAt": "Linked at",
+      "identityLastLogin": "Last login",
+      "primary": "Primary",
+      "unlink": "Unlink",
+      "unlinkConfirm": "Unlink the {{provider}} identity?",
+      "unlinkSuccess": "Identity unlinked",
+      "unlinkError": "Error while unlinking identity",
+      "wallets": "Wallets",
+      "walletsOwned": "owned",
+      "walletsShared": "shared with this user",
+      "walletsRecent": "Recent wallets (last 10 owned):",
+      "anomalies": "Identity anomalies",
+      "anomaliesTotal": "{{n}} total",
+      "anomaliesUnack": "{{n}} unacknowledged",
+      "noAnomalies": "No anomaly detected.",
+      "detectedAt": "Detected at",
+      "severity": "Severity",
+      "anomalyType": "Type",
+      "acknowledged": "Acknowledged",
+      "recentAudit": "Recent audit (last 20 actions)",
+      "noAudit": "No recent action.",
+      "occurredAt": "Date",
+      "action": "Action",
+      "success": "Success",
+      "ip": "IP",
+      "notFound": "User not found."
+    },
     "backups": {
       "title": "Backups",
       "create": "Create backup",
@@ -578,6 +641,16 @@
       "restoring": "Restoring...",
       "restoreSuccess": "Restore successful — session epoch: {{epoch}}",
       "restoreError": "Restore error",
+      "verify": "Verify",
+      "verifyTitle": "Verify integrity of {{filename}}",
+      "verifyHelp": "The server decrypts the archive with your AGE private key and checks internal checksums. The key is never persisted.",
+      "verifying": "Verifying...",
+      "verifySuccess": "Backup verified — checksums OK",
+      "verifyInvalid": "Backup invalid or corrupted",
+      "verifyValid": "Backup valid",
+      "verifyError": "Verification error (wrong key or corrupted file)",
+      "checksumsMatch": "Checksums",
+      "dumpSqlLines": "Dump SQL lines",
       "descriptionLabel": "Description (optional)",
       "createSuccess": "Backup created",
       "deleteSuccess": "Backup deleted",
@@ -696,6 +769,27 @@
       }
     },
     "replication": {
+      "patroni": {
+        "title": "Patroni operations",
+        "help": "Graceful switchover, replica reinit, pause/resume auto-failover. See wiki ops_replication_patroni for caveats.",
+        "switchover": "Switchover",
+        "switchoverTitle": "Graceful switchover",
+        "switchoverWarning": "The current leader becomes a replica and one replica (the one you choose or Patroni picks) becomes the new leader. Active connections to the current leader are interrupted for a few seconds during the swap.",
+        "switchoverSuccess": "Switchover triggered",
+        "candidateLabel": "Candidate name (optional — Patroni picks if empty)",
+        "candidatePlaceholder": "e.g. pg2",
+        "confirmLabel": "Confirmation (type: {{expected}})",
+        "reinit": "Reinitialize a replica",
+        "reinitTitle": "Reinitialize a replica",
+        "reinitWarning": "DESTRUCTIVE: the target member's data dir is wiped and re-cloned from the leader (duration = DB size). Do NOT target the leader. Use when a replica is out of sync or corrupted.",
+        "reinitSuccess": "Reinit triggered",
+        "memberUrlLabel": "Target member Patroni API URL",
+        "availableReplicas": "Available replicas (click to copy)",
+        "pause": "Pause auto-failover",
+        "pauseSuccess": "Auto-failover paused",
+        "resume": "Resume auto-failover",
+        "resumeSuccess": "Auto-failover resumed"
+      },
       "promote": {
         "buttonLabel": "Promote to master",
         "modalTitle": "Promote this instance to master",
@@ -935,6 +1029,7 @@
       "minutes_one": "{{count}} minute",
       "minutes_other": "{{count}} minutes",
       "preset": {
+        "dailyMidnight": "Daily midnight",
         "daily02": "Daily 2am",
         "weekly": "Weekly Sun 3am",
         "monthly": "Monthly 1st 4am",
@@ -1167,8 +1262,167 @@
       "button": "Open your vault",
       "meta": "Open source · Self-hosted · Zero knowledge"
     },
+    "privacy": {
+      "label": "Privacy & responsibility",
+      "title": "Personal data & service limits",
+      "body": "Harpocrate stores in plaintext only your e-mail address and display name — strictly the minimum needed to identify you inside your vault. All your secrets are encrypted client-side and remain unreadable to the server operator. Because the service is zero-knowledge, losing your passphrase or recovery phrase means the permanent and irreversible loss of your secrets: we cannot recover them for you.",
+      "rgpdLink": "Privacy policy (GDPR) →",
+      "cguLink": "Terms of service →"
+    },
     "footer": {
       "tagline": "The god of silence keeps your secrets."
     }
+  },
+  "rgpd": {
+    "back": "← Back to home",
+    "label": "Privacy policy",
+    "title": "Personal data & GDPR",
+    "subtitle": "Disclosure compliant with Articles 13 and 14 of Regulation (EU) 2016/679 (GDPR).",
+    "updated": "Last updated: May 17, 2026",
+    "sections": [
+      {
+        "title": "1. Data controller",
+        "body": "Harpocrate is self-hosted software. The data controller is the administrator (natural or legal person) who operates the instance you are registered on. To exercise your rights, contact that administrator directly; their contact information should be displayed at the root of the instance or in its legal notice."
+      },
+      {
+        "title": "2. Personal data collected",
+        "body": "The service collects a strict minimum of identifying data, stored in plaintext in the database:",
+        "bullets": [
+          "E-mail address — used as a unique identifier and notification channel.",
+          "Display name — shown in the interface and in the audit log.",
+          "User identifier (UUID) generated automatically.",
+          "Technical timestamps: creation date, last vault unlock, quarantine."
+        ]
+      },
+      {
+        "title": "3. Technical data tied to usage",
+        "body": "For security and traceability reasons, certain technical data is recorded in the audit log:",
+        "bullets": [
+          "Connecting IP address (retention aligned with the configured log retention).",
+          "Identifiers of vaults and secrets accessed, without their content.",
+          "Type of action performed (read, write, share, revoke) and its timestamp."
+        ]
+      },
+      {
+        "title": "4. What the server never sees",
+        "body": "Harpocrate is built on the zero-knowledge principle. The following items never leave your browser in plaintext and are never stored in plaintext on the server:",
+        "bullets": [
+          "Your passphrase and recovery phrase.",
+          "Your RSA private key (encrypted locally before any transfer).",
+          "The content of the secrets themselves (values, passwords, API keys)."
+        ]
+      },
+      {
+        "title": "5. Purposes of processing",
+        "body": "Your data is processed exclusively to: (a) authenticate you on the instance, (b) let you decrypt your own vaults, (c) trace accesses in the audit log to detect potential misuse, and (d) notify you of important events (reset, sharing, quarantine)."
+      },
+      {
+        "title": "6. Legal basis",
+        "body": "Processing is based on the performance of the service contract between you and the administrator of the instance (Article 6.1.b GDPR). Audit logging is based on the legitimate interest of the controller in securing the service (Article 6.1.f)."
+      },
+      {
+        "title": "7. Retention period",
+        "body": "Identification data is kept as long as your account is active. The audit log is kept according to the Loki retention policy configured by the administrator (7 days by default). When your account is deleted, your identifying data is erased immediately; historical audit entries may persist until the normal retention expires."
+      },
+      {
+        "title": "8. Recipients & processors",
+        "body": "No data is transmitted to a commercial third party. Harpocrate contains no telemetry or external analytics. The only possible external dependencies are configured by the administrator: identity provider (Keycloak), remote backup storage (S3, SFTP, etc.), and log collector (Loki/Grafana). Each of these dependencies has its own policy, for which the administrator is responsible."
+      },
+      {
+        "title": "9. Your rights",
+        "body": "Pursuant to Articles 15 to 22 of the GDPR, you have the following rights:",
+        "bullets": [
+          "Right of access — obtain a copy of your identifying data.",
+          "Right to rectification — correct your e-mail or display name.",
+          "Right to erasure — request the deletion of your account.",
+          "Right to portability — export your vaults in encrypted form.",
+          "Right to object — refuse certain processing purposes.",
+          "Right to lodge a complaint with the supervisory authority (CNIL in France, www.cnil.fr)."
+        ]
+      },
+      {
+        "title": "10. Security",
+        "body": "Communications are encrypted in transit (TLS). Secrets are encrypted with AES-256-GCM using a key derived from your passphrase via Argon2id, and the vault symmetric key is itself encrypted with your RSA-4096 public key. No secret is ever accessible in plaintext by the server operator."
+      }
+    ]
+  },
+  "cgu": {
+    "back": "← Back to home",
+    "label": "Terms of service",
+    "title": "Terms of service",
+    "subtitle": "Please read carefully before using the service. Registering for an account constitutes full acceptance of these terms.",
+    "updated": "Last updated: May 17, 2026",
+    "sections": [
+      {
+        "title": "1. Purpose",
+        "body": "These Terms of Service (\"Terms\") govern the use of the Harpocrate service, a zero-knowledge secrets manager, by any person holding an account on the relevant instance. They constitute a contract between you and the administrator of the instance."
+      },
+      {
+        "title": "2. Description of the service",
+        "body": "Harpocrate lets you store, organise and share secrets (passwords, API keys, tokens, certificates) encrypted end-to-end. Encryption and decryption are performed entirely in your browser; the server only receives and stores encrypted blobs. The operator has no technical means of accessing the content of your secrets."
+      },
+      {
+        "title": "3. Account & registration",
+        "body": "To use the service, you must create an account tied to a valid e-mail address and choose a passphrase meeting the minimum requirements shown at first login. You are solely responsible for keeping your credentials confidential. Any action taken from your account is presumed to come from you."
+      },
+      {
+        "title": "4. Loss of passphrase — critical notice",
+        "body": "Harpocrate is built on the zero-knowledge principle. This means that nobody, including the administrator of the instance, can recover your secrets if you lose both your passphrase and your recovery phrase. Without them, your secrets are mathematically and irreversibly inaccessible. Accordingly:",
+        "bullets": [
+          "You acknowledge having understood this characteristic and accept it without reservation.",
+          "You undertake to keep your passphrase and recovery phrase in a safe place.",
+          "The service operator cannot in any way be held liable for the loss of your secrets resulting from forgetting, disclosing or destroying your secret credentials.",
+          "No recourse, financial or otherwise, is available to the user in this situation."
+        ]
+      },
+      {
+        "title": "5. User obligations",
+        "body": "You undertake to use the service in compliance with applicable laws and with these Terms. In particular, you refrain from:",
+        "bullets": [
+          "Storing secrets whose possession would be unlawful.",
+          "Attempting to compromise the security of the service or of other users' data.",
+          "Exploiting a vulnerability of the service for malicious purposes.",
+          "Sharing your account with a third party or impersonating another user."
+        ]
+      },
+      {
+        "title": "6. Service availability",
+        "body": "The service is provided \"as is\", with no guarantee of availability nor service-level agreement (SLA), unless agreed otherwise in writing with the administrator. Interruptions may occur for maintenance, updates or incidents. The operator endeavours to maintain continuous operation but cannot be held liable for any outage."
+      },
+      {
+        "title": "7. Limitation of liability",
+        "body": "To the maximum extent permitted by applicable law, the operator shall not be liable for indirect, intangible or unforeseeable damages resulting from the use of, or inability to use, the service, and in particular:",
+        "bullets": [
+          "Loss of secrets following loss of the passphrase or recovery phrase.",
+          "Loss of secrets resulting from a compromise of your device, browser or session.",
+          "Loss of business opportunity, loss of revenue or reputational harm.",
+          "Any damage resulting from a cyberattack on the infrastructure, absent gross negligence of the operator."
+        ]
+      },
+      {
+        "title": "8. Intellectual property",
+        "body": "Harpocrate is distributed under an open-source licence. The secrets you store remain your exclusive property; no assignment, licence or exploitation by the operator is granted."
+      },
+      {
+        "title": "9. Personal data",
+        "body": "The processing of personal data is governed by our dedicated privacy policy. Refer to the Privacy policy (GDPR) page for details on purposes, retention periods and exercise of your rights."
+      },
+      {
+        "title": "10. Changes to the Terms",
+        "body": "The operator may amend these Terms at any time to reflect changes to the service or to applicable law. Any substantial change will be notified to you by e-mail at the address associated with your account. Continued use of the service after notification constitutes acceptance of the new Terms."
+      },
+      {
+        "title": "11. Termination",
+        "body": "You may at any time request the deletion of your account from the Account page. The operator may suspend or terminate your account in case of serious breach of these Terms, in particular fraudulent use of the service."
+      },
+      {
+        "title": "12. Governing law & jurisdiction",
+        "body": "These Terms are governed by French law, unless mandatory law provides otherwise. Failing amicable resolution, any dispute shall be brought before the competent courts of the place of establishment of the operator of the instance."
+      }
+    ]
+  },
+  "footer": {
+    "rgpd": "Privacy",
+    "cgu": "Terms"
   }
 }

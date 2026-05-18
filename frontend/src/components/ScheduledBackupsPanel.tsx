@@ -59,6 +59,7 @@ interface CronPreset {
 // Les 4 presets sont des points de départ. L'admin peut éditer librement
 // ensuite, le champ est libre.
 const CRON_PRESETS: CronPreset[] = [
+  { label: "dailyMidnight", expression: "0 0 * * *" },
   { label: "daily02", expression: "0 2 * * *" },
   { label: "weekly", expression: "0 3 * * 0" },
   { label: "monthly", expression: "0 4 1 * *" },

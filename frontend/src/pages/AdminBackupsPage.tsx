@@ -30,12 +30,14 @@ import {
   createBackup,
   deleteBackup,
   restoreBackup,
+  verifyBackup,
   enableMaintenance,
   disableMaintenance,
   backupDownloadUrl,
   fetchRemoteBackupConnections,
   pushBackupToRemote,
 } from "@/lib/adminApi";
+import type { BackupVerifyResult } from "@/lib/adminApi";
 import type { Backup } from "@/schemas/admin";
 import { ScheduledBackupsPanel } from "@/components/ScheduledBackupsPanel";
 
@@ -135,6 +137,120 @@ function RestoreModal({
   );
 }
 
+// A-7 — Modal de verification d'integrite d'un backup.
+//
+// L'admin colle sa cle privee AGE, le serveur dechiffre le `.tar.age`,
+// valide le manifest et les checksums internes. La cle n'est jamais
+// persistee (verification synchrone, libere la cle immediatement apres).
+function VerifyModal({
+  backup,
+  opened,
+  onClose,
+}: {
+  backup: Backup;
+  opened: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+
+  const [ageKey, setAgeKey] = useState("");
+  const [result, setResult] = useState<BackupVerifyResult | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => verifyBackup(backup.id, ageKey),
+    onSuccess: (res) => {
+      setResult(res);
+      if (res.valid) {
+        notifications.show({
+          color: "green",
+          message: t("admin.backups.verifySuccess"),
+        });
+      } else {
+        notifications.show({
+          color: "orange",
+          message: t("admin.backups.verifyInvalid"),
+        });
+      }
+    },
+    onError: (err: unknown) => {
+      const msg =
+        err instanceof Error ? err.message : t("admin.backups.verifyError");
+      notifications.show({ color: "red", message: msg });
+      setResult(null);
+    },
+  });
+
+  function handleClose() {
+    setAgeKey("");
+    setResult(null);
+    onClose();
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={handleClose}
+      title={t("admin.backups.verifyTitle", { filename: backup.filename })}
+      size="lg"
+    >
+      <Stack>
+        <Text size="sm" c="dimmed">
+          {t("admin.backups.verifyHelp")}
+        </Text>
+        <TextInput
+          label={t("admin.backups.agePrivateKey")}
+          placeholder={t("admin.backups.agePrivateKeyPlaceholder")}
+          value={ageKey}
+          onChange={(e) => setAgeKey(e.currentTarget.value)}
+        />
+        {result && (
+          <Alert
+            color={result.valid && result.checksums_match ? "green" : "orange"}
+            title={
+              result.valid && result.checksums_match
+                ? t("admin.backups.verifyValid")
+                : t("admin.backups.verifyInvalid")
+            }
+          >
+            <Stack gap="xs">
+              <Text size="sm">
+                <strong>{t("admin.backups.checksumsMatch")}:</strong>{" "}
+                {result.checksums_match ? "✓" : "✗"}
+              </Text>
+              {result.dump_sql_lines !== null && (
+                <Text size="sm">
+                  <strong>{t("admin.backups.dumpSqlLines")}:</strong>{" "}
+                  {result.dump_sql_lines}
+                </Text>
+              )}
+              {result.manifest && (
+                <Text size="xs" c="dimmed" component="pre">
+                  {JSON.stringify(result.manifest, null, 2)}
+                </Text>
+              )}
+            </Stack>
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="subtle" onClick={handleClose}>
+            {t("common.close")}
+          </Button>
+          <Button
+            loading={mutation.isPending}
+            disabled={!ageKey}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending
+              ? t("admin.backups.verifying")
+              : t("admin.backups.verify")}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+
 function MaintenancePanel() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -232,6 +348,7 @@ export function AdminBackupsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [restoreTarget, setRestoreTarget] = useState<Backup | null>(null);
+  const [verifyTarget, setVerifyTarget] = useState<Backup | null>(null);
   const [description, setDescription] = useState("");
 
   const { data, isLoading, error } = useQuery({
@@ -429,6 +546,13 @@ export function AdminBackupsPage() {
                     <Button
                       size="xs"
                       variant="outline"
+                      onClick={() => setVerifyTarget(b)}
+                    >
+                      {t("admin.backups.verify")}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
                       color="orange"
                       onClick={() => setRestoreTarget(b)}
                     >
@@ -466,6 +590,14 @@ export function AdminBackupsPage() {
           backup={restoreTarget}
           opened={true}
           onClose={() => setRestoreTarget(null)}
+        />
+      )}
+
+      {verifyTarget && (
+        <VerifyModal
+          backup={verifyTarget}
+          opened={true}
+          onClose={() => setVerifyTarget(null)}
         />
       )}
     </Stack>

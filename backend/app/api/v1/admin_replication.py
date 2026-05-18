@@ -23,11 +23,13 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from app.core.admin_auth import AdminJwt
+from app.core.replication import PatroniOperationError, PatroniStrategy
 from app.db.pool import get_pool
 from app.db.repositories import replication_strategies as strat_repo
 from app.db.repositories import system_metadata as meta_repo
 from app.services import replication as svc
 from app.services import streaming_replication as streaming_svc
+from app.services.audit import audit_log_insert
 
 router = APIRouter(prefix="/admin/replication", tags=["admin-replication"])
 
@@ -457,3 +459,209 @@ async def replication_status(admin: AdminJwt) -> JSONResponse:
             "live": live_status,
         }
     )
+
+
+# ─── A-9 : Patroni switchover / reinit / pause / resume ─────────────────────
+
+
+async def _get_active_patroni() -> PatroniStrategy:
+    """Recupere la PatroniStrategy active ou leve 409 si aucune.
+
+    Refuse aussi si plusieurs strategies actives mais aucune n'est Patroni.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        active = await svc.get_active(conn)
+    if active is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "no_active_strategy",
+                "message": "No active replication strategy",
+            },
+        )
+    _, strategy = active
+    if not isinstance(strategy, PatroniStrategy):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "patroni_not_active",
+                "message": "The active replication strategy is not Patroni",
+            },
+        )
+    return strategy
+
+
+class SwitchoverBody(BaseModel):
+    candidate_name: str | None = Field(default=None)
+    scheduled_at: str | None = Field(default=None)
+    confirmation: str = Field(min_length=1)
+
+
+class ReinitBody(BaseModel):
+    member_url: str = Field(min_length=1)
+    confirmation: str = Field(min_length=1)
+
+
+_SWITCHOVER_CONFIRMATION = "SWITCHOVER"
+_REINIT_CONFIRMATION = "REINIT"
+
+
+@router.post("/patroni/switchover", response_class=JSONResponse)
+async def patroni_switchover(
+    body: SwitchoverBody, admin: AdminJwt
+) -> JSONResponse:
+    """Switchover gracieux Patroni — A-9.
+
+    Necessite la chaine de confirmation `"SWITCHOVER"` dans le body pour
+    eviter les clics intempestifs. Si `candidate_name` est absent, Patroni
+    choisit le meilleur replica. Si `scheduled_at` est absent, le
+    switchover est immediat (cible le leader actuel).
+    """
+    if body.confirmation != _SWITCHOVER_CONFIRMATION:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_confirmation",
+                "message": f"confirmation must equal '{_SWITCHOVER_CONFIRMATION}'",
+            },
+        )
+    strategy = await _get_active_patroni()
+    try:
+        result = await strategy.switchover(
+            candidate_name=body.candidate_name,
+            scheduled_at=body.scheduled_at,
+        )
+    except PatroniOperationError as exc:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await audit_log_insert(
+                conn,
+                "admin.patroni_switchover_failed",
+                actor_user_id=admin.user_id,
+                metadata={"error_code": exc.code, "message": exc.message},
+                success=False,
+                error_code=exc.code,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": exc.code, "message": exc.message},
+        ) from exc
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await audit_log_insert(
+            conn,
+            "admin.patroni_switchover",
+            actor_user_id=admin.user_id,
+            metadata={
+                "candidate_name": body.candidate_name,
+                "scheduled_at": body.scheduled_at,
+                "leader_name": result.get("leader_name"),
+            },
+        )
+    return JSONResponse(result)
+
+
+@router.post("/patroni/reinit", response_class=JSONResponse)
+async def patroni_reinitialize(
+    body: ReinitBody, admin: AdminJwt
+) -> JSONResponse:
+    """Reinitialize un replica Patroni — A-9.
+
+    Drop le data dir du membre cible et le re-clone depuis le leader.
+    Operation longue (depend de la taille de la DB) et destructive pour
+    ce membre. Refuse de cibler le leader actuel.
+
+    Necessite confirmation `"REINIT"` dans le body.
+    """
+    if body.confirmation != _REINIT_CONFIRMATION:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_confirmation",
+                "message": f"confirmation must equal '{_REINIT_CONFIRMATION}'",
+            },
+        )
+    strategy = await _get_active_patroni()
+    try:
+        result = await strategy.reinitialize_member(body.member_url)
+    except PatroniOperationError as exc:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await audit_log_insert(
+                conn,
+                "admin.patroni_reinit_failed",
+                actor_user_id=admin.user_id,
+                metadata={
+                    "error_code": exc.code,
+                    "message": exc.message,
+                    "member_url": body.member_url,
+                },
+                success=False,
+                error_code=exc.code,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": exc.code, "message": exc.message},
+        ) from exc
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await audit_log_insert(
+            conn,
+            "admin.patroni_reinit",
+            actor_user_id=admin.user_id,
+            metadata={"member_url": body.member_url},
+        )
+    return JSONResponse(result)
+
+
+@router.post("/patroni/pause", response_class=JSONResponse)
+async def patroni_pause(admin: AdminJwt) -> JSONResponse:
+    """Suspend l'auto-failover Patroni — A-9.
+
+    Utilise avant une maintenance pour eviter qu'un restart du leader
+    declenche un failover non desire. Reactiver via /resume.
+    """
+    strategy = await _get_active_patroni()
+    try:
+        result = await strategy.pause()
+    except PatroniOperationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": exc.code, "message": exc.message},
+        ) from exc
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await audit_log_insert(
+            conn,
+            "admin.patroni_paused",
+            actor_user_id=admin.user_id,
+            metadata={"leader_url": result.get("leader_url")},
+        )
+    return JSONResponse(result)
+
+
+@router.post("/patroni/resume", response_class=JSONResponse)
+async def patroni_resume(admin: AdminJwt) -> JSONResponse:
+    """Reactive l'auto-failover Patroni — A-9."""
+    strategy = await _get_active_patroni()
+    try:
+        result = await strategy.resume()
+    except PatroniOperationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": exc.code, "message": exc.message},
+        ) from exc
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await audit_log_insert(
+            conn,
+            "admin.patroni_resumed",
+            actor_user_id=admin.user_id,
+            metadata={"leader_url": result.get("leader_url")},
+        )
+    return JSONResponse(result)

@@ -16,21 +16,24 @@ import pytest_asyncio
 # inter-fichiers quand les fixtures function-scoped changent les env vars.
 _TEST_HMAC_KEY_B64 = base64.b64encode(b"k" * 32).decode()
 
+# Env vars settées AU MODULE LEVEL (pas dans une fixture) — conftest.py est
+# importé par pytest AVANT toute collection de test_*.py. Ainsi, les imports
+# `from app.core.config import settings` au top des fichiers de test voient
+# déjà les bonnes variables et Pydantic Settings ne lève pas.
+os.environ.setdefault("HARPOCRATE_DB_DSN", "postgresql://x:y@h:5432/d")
+os.environ.setdefault("HARPOCRATE_KEYCLOAK_URL", "https://keycloak.yoops.org")
+os.environ.setdefault("HARPOCRATE_KEYCLOAK_REALM", "yoops")
+os.environ.setdefault("HARPOCRATE_KEYCLOAK_CLIENT_ID", "harpocrate-vault")
+os.environ.setdefault("HARPOCRATE_HMAC_KEY", _TEST_HMAC_KEY_B64)
+os.environ.setdefault("HARPOCRATE_PUBLIC_URL", "https://vault.yoops.org")
+# S-5 : désactive le rate limiter applicatif pour les tests (les batchs
+# de requêtes test_admin_* dépasseraient sinon les limites par IP).
+os.environ.setdefault("HARPOCRATE_RATE_LIMIT_ENABLED", "false")
+
 
 @pytest.fixture(autouse=True, scope="session")
 def _initialize_settings_singleton() -> None:
-    """Crée le singleton settings avant le premier test avec des valeurs stables.
-
-    Empêche la pollution de settings.hmac_key entre fichiers de test causée
-    par l'ordre d'exécution des fixtures function-scoped.
-    """
-    os.environ.setdefault("HARPOCRATE_DB_DSN", "postgresql://x:y@h:5432/d")
-    os.environ.setdefault("HARPOCRATE_KEYCLOAK_URL", "https://keycloak.yoops.org")
-    os.environ.setdefault("HARPOCRATE_KEYCLOAK_REALM", "yoops")
-    os.environ.setdefault("HARPOCRATE_KEYCLOAK_CLIENT_ID", "harpocrate-vault")
-    os.environ.setdefault("HARPOCRATE_HMAC_KEY", _TEST_HMAC_KEY_B64)
-    os.environ.setdefault("HARPOCRATE_PUBLIC_URL", "https://vault.yoops.org")
-
+    """Force le chargement de Settings une fois pour fixer les valeurs."""
     from app.core.config import settings as _settings  # noqa: F401
 
 

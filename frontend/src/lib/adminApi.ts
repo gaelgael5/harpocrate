@@ -95,9 +95,87 @@ export async function restoreBackup(
   return RestoreResultSchema.parse(raw);
 }
 
+// A-7 : verification d'integrite d'un backup local.
+// Le serveur dechiffre le `.tar.age` avec la cle privee fournie, ouvre le
+// manifest, et verifie les checksums internes. La cle privee n'est jamais
+// persistee — c'est l'admin qui la fournit a chaque verification.
+export interface BackupVerifyResult {
+  valid: boolean;
+  manifest: Record<string, unknown> | null;
+  checksums_match: boolean;
+  dump_sql_lines: number | null;
+}
+
+export async function verifyBackup(
+  id: string,
+  age_private_key: string,
+): Promise<BackupVerifyResult> {
+  return await api.post<BackupVerifyResult>(`/admin/backups/${id}/verify`, {
+    age_private_key,
+  });
+}
+
+// A-6 : URL de telechargement de l'export CSV de l'audit log.
+// Le navigateur ouvre cette URL ; le backend stream le CSV en attachement.
+export function auditLogExportUrl(filters: {
+  action?: string;
+  action_prefix?: string;
+  since?: string;
+  until?: string;
+  actor_user_id?: string;
+  actor_api_key_id?: string;
+  success?: boolean;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.action) params.set("action", filters.action);
+  if (filters.action_prefix) params.set("action_prefix", filters.action_prefix);
+  if (filters.since) params.set("since", filters.since);
+  if (filters.until) params.set("until", filters.until);
+  if (filters.actor_user_id) params.set("actor_user_id", filters.actor_user_id);
+  if (filters.actor_api_key_id)
+    params.set("actor_api_key_id", filters.actor_api_key_id);
+  if (filters.success !== undefined)
+    params.set("success", filters.success ? "true" : "false");
+  const qs = params.toString();
+  return `/v1/admin/audit-log/export${qs ? "?" + qs : ""}`;
+}
+
 export async function fetchSystemInfo(): Promise<SystemInfo> {
   const raw = await api.get<unknown>("/admin/system/info");
   return SystemInfoSchema.parse(raw);
+}
+
+export interface AdminWalletItem {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  owner: {
+    id: string | null;
+    email: string | null;
+    display_name: string | null;
+  };
+  secrets_count: number;
+}
+
+export interface AdminWalletsResponse {
+  wallets: AdminWalletItem[];
+  total: number;
+}
+
+export async function fetchAdminWallets(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<AdminWalletsResponse> {
+  const q = new URLSearchParams();
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  const query = q.toString();
+  return api.get<AdminWalletsResponse>(
+    `/admin/wallets${query ? `?${query}` : ""}`,
+  );
 }
 
 export async function fetchAdminUsers(params?: {
@@ -109,6 +187,112 @@ export async function fetchAdminUsers(params?: {
   if (params?.offset) q.set("offset", String(params.offset));
   const raw = await api.get<unknown>(`/admin/users?${q.toString()}`);
   return AdminUsersResponseSchema.parse(raw);
+}
+
+// A-1 — Detail aggrege d'un utilisateur admin.
+// Le shape correspond a `GET /v1/admin/users/{user_id}`.
+export interface AdminUserIdentity {
+  id: string;
+  provider: string;
+  external_subject: string;
+  is_primary: boolean;
+  linked_at: string;
+  last_login_at: string | null;
+  linked_email: string | null;
+  linked_display_name: string | null;
+}
+
+export interface AdminUserWalletSummary {
+  owned_count: number;
+  shared_count: number;
+  recent_owned: { id: string; name: string; created_at: string }[];
+}
+
+export interface AdminUserAnomaly {
+  id: number;
+  detected_at: string;
+  severity: "info" | "warning" | "critical" | string;
+  anomaly_type: string;
+  metadata: Record<string, unknown> | null;
+  acknowledged_at: string | null;
+}
+
+export interface AdminUserAuditEvent {
+  id: number;
+  occurred_at: string;
+  action: string;
+  success: boolean;
+  error_code: string | null;
+  actor_user_id: string | null;
+  actor_api_key_id: string | null;
+  actor_ip: string | null;
+  target_wallet_id: string | null;
+  target_secret_id: string | null;
+  target_api_key_id: string | null;
+}
+
+export interface AdminUserDetail {
+  user: {
+    id: string;
+    email: string;
+    display_name: string | null;
+    created_at: string;
+    last_unlock_at: string | null;
+    has_bootstrap: boolean;
+    disabled_at: string | null;
+    disabled_reason: string | null;
+    quarantine_until: string | null;
+    quarantine_reason: string | null;
+    force_reverify_next_login: boolean;
+  };
+  identities: AdminUserIdentity[];
+  wallets: AdminUserWalletSummary;
+  anomalies: {
+    total_count: number;
+    unacknowledged_count: number;
+    recent: AdminUserAnomaly[];
+  };
+  recent_audit: AdminUserAuditEvent[];
+}
+
+export async function fetchAdminUserDetail(
+  userId: string,
+): Promise<AdminUserDetail> {
+  return await api.get<AdminUserDetail>(`/admin/users/${userId}`);
+}
+
+// Actions admin (A-2..A-5) cablees pour la page detail.
+
+export async function disableAdminUser(
+  userId: string,
+  reason: string,
+): Promise<void> {
+  await api.post<unknown>(`/admin/users/${userId}/disable`, { reason });
+}
+
+export async function enableAdminUser(userId: string): Promise<void> {
+  await api.post<unknown>(`/admin/users/${userId}/enable`, {});
+}
+
+export async function clearAdminUserQuarantine(userId: string): Promise<void> {
+  await api.post<unknown>(`/admin/users/${userId}/quarantine/clear`, {});
+}
+
+export async function setAdminUserForceReverify(
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  await api.patch<unknown>(
+    `/admin/users/${userId}/force-reverify-next-login`,
+    { enabled },
+  );
+}
+
+export async function unlinkAdminUserIdentity(
+  userId: string,
+  identityId: string,
+): Promise<void> {
+  await api.delete<void>(`/admin/users/${userId}/identities/${identityId}`);
 }
 
 export async function fetchEnvConfig(): Promise<EnvConfig> {
@@ -353,6 +537,47 @@ export async function fetchReplicationStrategies(): Promise<ReplicationStrategyL
 export async function fetchReplicationStatus(): Promise<ReplicationStatusResponse> {
   const raw = await api.get<unknown>("/admin/replication/status");
   return ReplicationStatusResponseSchema.parse(raw);
+}
+
+// A-9 — Operations Patroni (switchover, reinit, pause, resume).
+
+export interface PatroniSwitchoverResult {
+  ok: boolean;
+  leader_url?: string;
+  leader_name?: string | null;
+  candidate?: string | null;
+}
+
+export async function patroniSwitchover(
+  body: { candidate_name?: string; scheduled_at?: string },
+): Promise<PatroniSwitchoverResult> {
+  return api.post<PatroniSwitchoverResult>(
+    "/admin/replication/patroni/switchover",
+    { ...body, confirmation: "SWITCHOVER" },
+  );
+}
+
+export async function patroniReinit(
+  memberUrl: string,
+): Promise<{ ok: boolean; member_url: string }> {
+  return api.post<{ ok: boolean; member_url: string }>(
+    "/admin/replication/patroni/reinit",
+    { member_url: memberUrl, confirmation: "REINIT" },
+  );
+}
+
+export async function patroniPause(): Promise<{ ok: boolean; paused: true }> {
+  return api.post<{ ok: boolean; paused: true }>(
+    "/admin/replication/patroni/pause",
+    {},
+  );
+}
+
+export async function patroniResume(): Promise<{ ok: boolean; paused: false }> {
+  return api.post<{ ok: boolean; paused: false }>(
+    "/admin/replication/patroni/resume",
+    {},
+  );
 }
 
 export async function activateReplicationStrategy(

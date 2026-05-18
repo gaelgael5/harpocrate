@@ -87,9 +87,12 @@ export function ApiDocsPage() {
         </Link>
       </Box>
 
-      {/* Swagger UI iframe */}
+      {/* Swagger UI iframe — endpoint custom servi par api_key_openapi.router
+          (Swagger UI standalone chargeant /v1/openapi-api-key.json, le schema
+          filtré aux endpoints API-key uniquement). Le /docs natif FastAPI
+          n'est pas exposé sous /v1. */}
       <iframe
-        src="/v1/docs"
+        src="/v1/api-docs"
         title="API Reference"
         style={{ flex: 1, border: "none", width: "100%" }}
       />

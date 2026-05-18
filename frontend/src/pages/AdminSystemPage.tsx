@@ -9,9 +9,11 @@ import {
   Center,
   Alert,
   NumberFormatter,
+  Table,
+  Badge,
 } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import { fetchSystemInfo } from "@/lib/adminApi";
+import { fetchSystemInfo, fetchAdminWallets } from "@/lib/adminApi";
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
@@ -32,6 +34,12 @@ export function AdminSystemPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin-system-info"],
     queryFn: fetchSystemInfo,
+    refetchInterval: 30_000,
+  });
+
+  const walletsQuery = useQuery({
+    queryKey: ["admin-wallets-list"],
+    queryFn: () => fetchAdminWallets({ limit: 200 }),
     refetchInterval: 30_000,
   });
 
@@ -85,6 +93,88 @@ export function AdminSystemPage() {
           value={data?.audit_events_count ?? 0}
         />
       </SimpleGrid>
+
+      {/* Liste détaillée des coffres avec leur propriétaire */}
+      <Title order={3} mt="lg">
+        {t("admin.system.walletsTableTitle", "Coffres et propriétaires")}
+      </Title>
+      {walletsQuery.isLoading && (
+        <Center py="md">
+          <Loader size="sm" />
+        </Center>
+      )}
+      {walletsQuery.error && (
+        <Alert color="red">
+          {walletsQuery.error instanceof Error
+            ? walletsQuery.error.message
+            : t("common.error")}
+        </Alert>
+      )}
+      {walletsQuery.data && (
+        <Card withBorder>
+          <Table highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>{t("admin.system.colName", "Nom")}</Table.Th>
+                <Table.Th>{t("admin.system.colOwner", "Propriétaire")}</Table.Th>
+                <Table.Th>{t("admin.system.colSecrets", "Secrets")}</Table.Th>
+                <Table.Th>{t("admin.system.colCreated", "Créé le")}</Table.Th>
+                <Table.Th>{t("admin.system.colStatus", "État")}</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {walletsQuery.data.wallets.map((w) => (
+                <Table.Tr key={w.id}>
+                  <Table.Td>
+                    <Text fw={500}>{w.name}</Text>
+                    {w.description && (
+                      <Text size="xs" c="dimmed">
+                        {w.description}
+                      </Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td>
+                    {w.owner.email ? (
+                      <>
+                        <Text size="sm">{w.owner.display_name ?? "—"}</Text>
+                        <Text size="xs" c="dimmed">
+                          {w.owner.email}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text size="xs" c="dimmed" fs="italic">
+                        {t("admin.system.ownerOrphan", "(sans propriétaire)")}
+                      </Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td>
+                    <NumberFormatter
+                      value={w.secrets_count}
+                      thousandSeparator
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="xs" c="dimmed">
+                      {new Date(w.created_at).toLocaleDateString()}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    {w.deleted_at ? (
+                      <Badge color="red" variant="light">
+                        {t("admin.system.deleted", "supprimé")}
+                      </Badge>
+                    ) : (
+                      <Badge color="green" variant="light">
+                        {t("admin.system.active", "actif")}
+                      </Badge>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Card>
+      )}
     </Stack>
   );
 }

@@ -25,6 +25,7 @@ import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { useDevMode, DEV_BANNER_HEIGHT } from "@/hooks/useDevMode";
 import { useAdminRole } from "@/hooks/useAdminRole";
 import { StandbyBanner } from "@/components/StandbyBanner";
+import { AppFooter } from "@/components/AppFooter";
 import styles from "./Layout.module.css";
 
 /**
@@ -70,6 +71,7 @@ export function Layout({ children }: { children?: ReactNode }) {
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 220, breakpoint: "sm", collapsed: { mobile: !opened } }}
+      footer={{ height: 36 }}
       padding="md"
       style={{ paddingTop: offset }}
     >
@@ -209,6 +211,10 @@ export function Layout({ children }: { children?: ReactNode }) {
         <StandbyBanner />
         {children ?? <Outlet />}
       </AppShell.Main>
+
+      <AppShell.Footer>
+        <AppFooter compact />
+      </AppShell.Footer>
     </AppShell>
   );
 }

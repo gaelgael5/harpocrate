@@ -278,9 +278,18 @@ async def delete_wallet(
     *,
     wallet_id: UUID,
     caller_user_id: UUID,
+    confirmation: str,
     actor_ip: str | None,
 ) -> None:
-    """Suppression logique. Requiert owner. Purge physique 24h après."""
+    """Suppression logique. Requiert owner + confirmation == wallet.name (strict).
+    Purge physique 24h après.
+
+    La comparaison de confirmation est case-sensitive volontairement : l'utilisateur
+    doit voir le nom exact tel qu'affiché à l'écran et le retaper. C'est une
+    protection contre les deletes accidentels (faute de frappe d'URL ou
+    confusion de wallet) — pas un anti-bruteforce, donc pas besoin de
+    constant-time comparison ici.
+    """
     wallet = await get_wallet(conn, wallet_id=wallet_id, caller_user_id=caller_user_id)
 
     if wallet.owner_user_id != caller_user_id:
@@ -293,6 +302,15 @@ async def delete_wallet(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"error": "already_deleted", "message": "Wallet is already pending deletion"},
+        )
+
+    if confirmation != wallet.name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "confirmation_mismatch",
+                "message": "Confirmation must match the wallet name exactly (case-sensitive)",
+            },
         )
 
     async with conn.transaction():

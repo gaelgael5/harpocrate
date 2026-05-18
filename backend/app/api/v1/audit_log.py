@@ -188,6 +188,22 @@ _KNOWN_AUDIT_ACTIONS: list[str] = [
     "admin.restore_executed",
     "admin.maintenance_enabled",
     "admin.maintenance_disabled",
+    # admin user management (Lot 4A — A-2..A-5)
+    "admin.user_disabled",
+    "admin.user_enabled",
+    "admin.user_quarantine_cleared",
+    "admin.user_force_reverify_set",
+    "admin.user_force_reverify_cleared",
+    "admin.user_identity_unlinked",
+    # admin observability (Lot 4B — A-6)
+    "admin.audit_log_exported",
+    # admin patroni (A-9)
+    "admin.patroni_switchover",
+    "admin.patroni_switchover_failed",
+    "admin.patroni_reinit",
+    "admin.patroni_reinit_failed",
+    "admin.patroni_paused",
+    "admin.patroni_resumed",
 ]
 
 

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
 from app.core.security import JwtUser
 from app.db.pool import get_pool
@@ -21,6 +22,17 @@ from app.models.api.wallets import (
     WalletListResponse,
     WalletPatchRequest,
 )
+
+
+class WalletDeleteRequest(BaseModel):
+    """Body de DELETE /wallets/{id} — confirmation explicite du nom pour
+    protéger contre les deletes accidentels (mauvais wallet_id en URL).
+
+    La comparaison est case-sensitive et stricte : l'utilisateur doit taper
+    le nom exact tel qu'affiché.
+    """
+
+    confirmation: str = Field(min_length=1, max_length=255)
 from app.models.db.wallet import WalletWithGrant
 from app.services import wallets as wallets_svc
 from app.services.permissions import PERM_READ, has
@@ -204,10 +216,16 @@ async def patch_wallet(
 @router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_wallet(
     wallet_id: UUID,
+    body: WalletDeleteRequest,
     current_user: JwtUser,
     request: Request,
 ) -> Response:
-    """Suppression logique du wallet. Purge physique automatique 24h après."""
+    """Suppression logique du wallet. Purge physique automatique 24h après.
+
+    Requiert un body `{"confirmation": "<nom exact du wallet>"}` qui doit matcher
+    `wallet.name` strictement (case-sensitive). 400 confirmation_mismatch sinon.
+    Protection contre les deletes accidentels (faute de frappe d'URL).
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
         user = await users_repo.get_by_keycloak_sub(conn, current_user.keycloak_sub)
@@ -221,6 +239,7 @@ async def delete_wallet(
             conn,
             wallet_id=wallet_id,
             caller_user_id=user.id,
+            confirmation=body.confirmation,
             actor_ip=_client_ip(request),
         )
 

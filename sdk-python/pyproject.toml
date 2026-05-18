@@ -1,6 +1,6 @@
 [project]
 name = "harpocrate"
-version = "0.6.0"
+version = "0.7.0"
 description = "Harpocrate SDK — client Python zero-knowledge pour Vault"
 readme = "README.md"
 requires-python = ">=3.10"

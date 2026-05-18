@@ -25,6 +25,8 @@ import {
   AuditLogActionsResponseSchema,
   type AuditLogItem,
 } from "@/schemas/audit";
+import { auditLogExportUrl } from "@/lib/adminApi";
+import { useAdminRole } from "@/hooks/useAdminRole";
 
 function AuditRow({ event }: { event: AuditLogItem }) {
   const { t } = useTranslation();
@@ -74,6 +76,7 @@ function AuditRow({ event }: { event: AuditLogItem }) {
 
 export function AuditLogPage() {
   const { t } = useTranslation();
+  const isAdmin = useAdminRole();
   const [actionFilter, setActionFilter] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
 
@@ -143,6 +146,19 @@ export function AuditLogPage() {
         >
           Reset
         </Button>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            component="a"
+            href={auditLogExportUrl({
+              action: actionFilter ?? undefined,
+            })}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("audit.exportCsv")}
+          </Button>
+        )}
       </Group>
 
       {data?.events.length === 0 ? (

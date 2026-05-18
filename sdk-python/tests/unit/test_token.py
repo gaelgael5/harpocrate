@@ -158,3 +158,95 @@ class TestTokenExpiry:
         """Un token avec exp=0 (pas d'expiration) est accepté."""
         parsed = parse_token(_TEST_TOKEN)
         assert parsed.exp == 0
+
+
+class TestTruncateTokenForTransport:
+    """Tests de la troncature du token avant envoi HTTP — SDK ≥0.7 split-token.
+
+    La promesse E2E sur les API keys exige que la `dkey` ne transite jamais
+    sur le canal HTTP. Le SDK doit donc remplacer le segment dkey du token
+    par un placeholder de longueur identique avant de l'envoyer au serveur.
+    Le HMAC reste valide (il ne couvre pas la dkey).
+    """
+
+    def test_truncation_removes_dkey_segment(self) -> None:
+        """La dkey originale n'est plus présente dans le token tronqué."""
+        from harpocrate.token import truncate_token_for_transport
+
+        truncated = truncate_token_for_transport(_TEST_TOKEN)
+        assert _TEST_DKEY_B64 not in truncated, (
+            f"La dkey {_TEST_DKEY_B64!r} a fuité dans le token tronqué"
+        )
+
+    def test_truncation_preserves_format_length(self) -> None:
+        """Le token tronqué a la même longueur que l'original (placeholder 43 chars)."""
+        from harpocrate.token import truncate_token_for_transport
+
+        truncated = truncate_token_for_transport(_TEST_TOKEN)
+        assert len(truncated) == len(_TEST_TOKEN)
+
+    def test_truncated_token_is_still_parsable(self) -> None:
+        """Le serveur doit pouvoir parser le token tronqué (même structure 8 segments)."""
+        from harpocrate.token import truncate_token_for_transport
+
+        truncated = truncate_token_for_transport(_TEST_TOKEN)
+        # Le format reste valide pour le parseur (la dkey décodée n'est plus
+        # la vraie clé, mais le parsing ne planterait pas côté serveur).
+        # Note : `parse_token` côté SDK décode aussi la dkey ; il ne lèvera
+        # pas car le placeholder est un base64url valide.
+        reparsed = parse_token(truncated)
+        assert reparsed.api_key_id == _TEST_API_KEY_ID
+        assert reparsed.permissions == 0x3F
+        assert reparsed.exp == 0
+
+    def test_truncated_token_preserves_auth_secret(self) -> None:
+        """Le segment auth_secret (signé par HMAC) est intact dans le token tronqué."""
+        from harpocrate.token import truncate_token_for_transport
+
+        truncated = truncate_token_for_transport(_TEST_TOKEN)
+        reparsed = parse_token(truncated)
+        # auth_secret_b64 doit être identique à l'original (sinon le HMAC casse)
+        assert reparsed.auth_secret_b64 == _TEST_AUTH_SECRET
+
+    def test_truncated_token_preserves_hmac(self) -> None:
+        """Le segment HMAC est intact dans le token tronqué (vérification serveur OK)."""
+        from harpocrate.token import truncate_token_for_transport
+
+        truncated = truncate_token_for_transport(_TEST_TOKEN)
+        reparsed = parse_token(truncated)
+        assert reparsed.hmac_b64 == _TEST_HMAC
+
+    def test_truncated_token_dkey_segment_is_constant(self) -> None:
+        """Deux tokens différents tronqués partagent le même placeholder dkey
+        (constant déterministe, pas d'info-leak via du random)."""
+        from harpocrate.token import truncate_token_for_transport
+
+        other_dkey_bytes = bytes([0xFF] * 32)
+        other_dkey_b64 = base64.urlsafe_b64encode(other_dkey_bytes).rstrip(b"=").decode()
+        other_token = (
+            f"hrpv_1_{_TEST_ID_B32}_0_3f_{_TEST_AUTH_SECRET}_{other_dkey_b64}_{_TEST_HMAC}"
+        )
+
+        t1 = truncate_token_for_transport(_TEST_TOKEN)
+        t2 = truncate_token_for_transport(other_token)
+
+        # Les deux tokens tronqués diffèrent uniquement par leur auth_secret/hmac,
+        # pas par le segment dkey (qui doit être le même placeholder).
+        d1 = parse_token(t1).dkey_b64
+        d2 = parse_token(t2).dkey_b64
+        assert d1 == d2, "Le placeholder dkey doit être constant entre tokens"
+
+    def test_invalid_token_raises(self) -> None:
+        """Un token malformé lève InvalidTokenError, pas de fallback silencieux."""
+        from harpocrate.token import truncate_token_for_transport
+
+        with pytest.raises(InvalidTokenError):
+            truncate_token_for_transport("hrpv_garbage")
+
+    def test_truncation_is_idempotent(self) -> None:
+        """Tronquer un token déjà tronqué redonne le même résultat."""
+        from harpocrate.token import truncate_token_for_transport
+
+        once = truncate_token_for_transport(_TEST_TOKEN)
+        twice = truncate_token_for_transport(once)
+        assert once == twice

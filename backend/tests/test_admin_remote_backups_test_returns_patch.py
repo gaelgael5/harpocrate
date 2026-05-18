@@ -19,18 +19,18 @@ _CONN_ID = uuid.UUID("22222222-0000-0000-0000-000000000001")
 
 @pytest.fixture(autouse=True)
 def env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HARPOCRATE_DB_DSN", "postgresql://x:y@h:5432/d")
-    monkeypatch.setenv("HARPOCRATE_KEYCLOAK_URL", "https://kc.test")
-    monkeypatch.setenv("HARPOCRATE_KEYCLOAK_REALM", "yoops")
-    monkeypatch.setenv("HARPOCRATE_KEYCLOAK_CLIENT_ID", "test-client")
-    monkeypatch.setenv("HARPOCRATE_HMAC_KEY", base64.b64encode(b"x" * 32).decode())
-    monkeypatch.setenv("HARPOCRATE_PUBLIC_URL", "https://t")
-    monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_ENABLED", "true")
-    monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_USERNAME", "admin")
-    monkeypatch.setenv("HARPOCRATE_ADMIN_LOCAL_PASSWORD", "test-password")
+    # Pas de réassignation de settings — voir test_admin_remote_backups.py:env()
+    # pour le rationale (évite la pollution cross-fichiers via stale imports).
     import app.core.config
 
-    app.core.config.settings = app.core.config.Settings()
+    settings = app.core.config.settings
+    monkeypatch.setattr(settings, "keycloak_url", "https://kc.test")
+    monkeypatch.setattr(settings, "keycloak_realm", "yoops")
+    monkeypatch.setattr(settings, "keycloak_client_id", "test-client")
+    monkeypatch.setattr(settings, "public_url", "https://t")
+    monkeypatch.setattr(settings, "admin_local_enabled", True)
+    monkeypatch.setattr(settings, "admin_local_username", "admin")
+    monkeypatch.setattr(settings, "admin_local_password", "test-password")
 
 
 def _admin_jwt() -> str:

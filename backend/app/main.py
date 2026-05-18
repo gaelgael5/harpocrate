@@ -25,6 +25,7 @@ from app.api.v1 import (
     admin_secret_types,
     admin_snapshots,
     admin_system,
+    admin_users,
     api_key_openapi,
     api_keys,
     api_keys_self,
@@ -58,6 +59,7 @@ from app.services import replication as replication_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
 from app.services import seed_types as seed_svc
 from app.services import snapshot_scheduler as sched_svc
+from app.services import sync_log_partition_scheduler as sync_log_partition_svc
 from app.services import sync_replication_service as sync_svc
 from app.services import wallets as wallets_svc
 from app.services.secret_paths import InvalidSecretPath
@@ -117,6 +119,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await scheduled_backups_scheduler.start()
     except Exception as exc:
         logger.warning("scheduled_backups_scheduler_start_failed", error=str(exc))
+
+    # R-1/R-2 — partitionnement journalier de sync_log + purge horaire.
+    # Crée today + tomorrow au boot, drop les partitions plus vieilles que
+    # HARPOCRATE_SYNC_LOG_RETENTION_DAYS. La partition `sync_log_default`
+    # reste en place comme filet de sécurité (jamais touchée).
+    sync_log_partition_scheduler = sync_log_partition_svc.init_scheduler()
+    try:
+        await sync_log_partition_scheduler.start()
+    except Exception as exc:
+        logger.warning(
+            "sync_log_partition_scheduler_start_failed", error=str(exc)
+        )
 
     # Closures background : on n'utilise PAS la variable `pool` du lifespan
     # (qui pointe vers l'ancien pool après refresh_pool post-pairing). Chaque
@@ -202,6 +216,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await replication_purge_task
         await scheduler.stop()
         await scheduled_backups_scheduler.stop()
+        await sync_log_partition_scheduler.stop()
         await sync_svc.stop_sync_replication()
         sync = get_cluster_sync()
         if sync is not None:
@@ -217,11 +232,36 @@ app = FastAPI(
 )
 
 
+# Rate limiting (S-5) : pas d'app.state.limiter ni de middleware ici.
+# La protection est appliquée endpoint par endpoint via la dépendance
+# `Depends(rate_limit_dep(...))` (cf. `app.core.rate_limit`), qui lève
+# directement `HTTPException(429)` — pas besoin d'exception handler
+# slowapi global.
+
+
 @app.exception_handler(InvalidSecretPath)
 async def _invalid_secret_path_handler(_request: Request, exc: InvalidSecretPath) -> JSONResponse:
     return JSONResponse(
         status_code=400,
         content={"error": "invalid_secret_path", "message": str(exc)},
+    )
+
+
+# A-2 : transforme `UserDisabledError` (levee par users_repo.get_by_keycloak_sub)
+# en 403 cohérent avec les autres erreurs Harpocrate.
+from app.db.repositories.users import UserDisabledError  # noqa: E402
+
+
+@app.exception_handler(UserDisabledError)
+async def _user_disabled_handler(
+    _request: Request, _exc: UserDisabledError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": "user_disabled",
+            "message": "This account has been disabled by an administrator.",
+        },
     )
 
 
@@ -295,6 +335,7 @@ app.include_router(admin_snapshots.router, prefix="/v1")
 app.include_router(admin_secret_types.router, prefix="/v1")
 app.include_router(admin_secret_types.public_router, prefix="/v1")
 app.include_router(admin_system.router, prefix="/v1")
+app.include_router(admin_users.router, prefix="/v1")
 app.include_router(admin_anomalies.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")

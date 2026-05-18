@@ -743,6 +743,63 @@
   letter-spacing: 0.08em;
 }
 
+/* ─── Privacy notice ─────────────────────────────────────────────────────── */
+.privacy {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--vault-border);
+  padding: 2.5rem 5vw;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.privacyLabel {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--vault-text-dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.privacyTitle {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--vault-text);
+}
+
+.privacyText {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--vault-text);
+  max-width: 800px;
+  margin: 0;
+}
+
+.privacyLinks {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.privacyLink {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--vault-gold);
+  text-decoration: none;
+  border-bottom: 1px solid var(--vault-gold-dim);
+  padding-bottom: 1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.privacyLink:hover {
+  color: var(--vault-gold-bright);
+  border-bottom-color: var(--vault-gold-bright);
+}
+
 /* ─── Footer ─────────────────────────────────────────────────────────────── */
 .footer {
   position: relative;

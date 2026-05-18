@@ -20,9 +20,12 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HARPOCRATE_KEYCLOAK_CLIENT_ID", "x")
     monkeypatch.setenv("HARPOCRATE_HMAC_KEY", base64.b64encode(b"x" * 32).decode())
     monkeypatch.setenv("HARPOCRATE_PUBLIC_URL", "https://t")
+    # Pas de réassignation de settings (cf. test_admin_remote_backups.py:env).
     import app.core.config
 
-    app.core.config.settings = app.core.config.Settings()
+    _new_s = app.core.config.Settings()
+    for _a, _v in _new_s.model_dump().items():
+        monkeypatch.setattr(app.core.config.settings, _a, _v)
 
 
 _NOW = datetime.datetime(2026, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
@@ -124,11 +127,25 @@ async def test_dto_does_not_expose_credentials() -> None:
 
     assert len(items) == 1
     d = items[0].to_dict()
-    # Vérifier qu'aucun champ credentials/password/blob n'est dans le DTO
-    serialized = json.dumps(d)
-    assert "credentials" not in serialized
-    assert "password" not in serialized
-    assert "private_key" not in serialized
+    # Vérifier qu'aucun champ secret n'est dans le DTO. On teste au niveau
+    # des CLÉS du dict (récursivement), pas en substring du JSON sérialisé
+    # — sinon `has_credentials` (champ booléen public légitime) déclenche
+    # un faux positif sur "credentials".
+    _assert_no_secret_keys(d)
+
+
+def _assert_no_secret_keys(obj: object) -> None:
+    """Assert récursivement qu'aucune clé secrète (credentials, password,
+    private_key, encrypted) n'apparait dans un dict/liste imbriqué.
+    Tolère `has_credentials` (booléen public)."""
+    secret_keys = {"credentials", "password", "private_key", "secret_key", "encrypted_value"}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            assert k not in secret_keys, f"DTO leaks secret key: {k}"
+            _assert_no_secret_keys(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _assert_no_secret_keys(item)
 
 
 @pytest.mark.asyncio

@@ -24,6 +24,30 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HARPOCRATE_PUBLIC_URL", "https://t")
 
 
+@pytest.fixture(autouse=True)
+def _reset_cluster_state():
+    """Restaure tout le singleton cluster_state aux valeurs par défaut.
+
+    Les tests modifient cluster_state.session_epoch et .maintenance_active
+    (+ autres champs maintenance_*) sans cleanup → maintenance_active=True
+    persiste après ce fichier et cascade en 503 sur tous les tests suivants
+    qui appellent l'app (db_availability middleware).
+
+    On reset systématiquement aux defaults APRÈS chaque test pour garantir
+    l'isolation, indépendamment de l'état initial.
+    """
+    from app.core.cluster_state import cluster_state
+
+    yield
+    cluster_state.session_epoch = 0
+    cluster_state.maintenance_active = False
+    cluster_state.maintenance_reason = None
+    cluster_state.maintenance_started_at = None
+    cluster_state.maintenance_effective_at = None
+    cluster_state.maintenance_estimated_end_at = None
+    cluster_state.last_synced_at = None
+
+
 def _pool_with_rows(epoch: int, maintenance: dict[str, Any] | None) -> MagicMock:
     """Build un fake pool dont fetchrow renvoie séquentiellement epoch row puis maint row."""
     epoch_row = {"epoch": epoch} if epoch is not None else None

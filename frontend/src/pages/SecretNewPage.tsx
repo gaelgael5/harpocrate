@@ -55,7 +55,7 @@ function validateSecretName(name: string): string | null {
   if (!stripped) return "common.required";
   if (stripped.length > 256) return "Max 256 characters";
   if (!stripped.includes("/")) {
-    return NAME_RE_ROOT.test(stripped) ? null : "secrets.nameHint";
+    return NAME_RE_ROOT.test(stripped) ? null : "secrets.nameRootError";
   }
   if (stripped.endsWith("/")) return "secrets.nameTrailingSlash";
   if (stripped.includes("//")) return "secrets.nameDoubleSlash";

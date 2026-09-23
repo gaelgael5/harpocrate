@@ -1,224 +1,363 @@
 # Harpocrate — Instructions Claude Code
 
+> Coffre-fort de secrets chiffré de bout en bout, self-hosted. **Infrastructure partagée** :
+> tous les projets de la maison consomment Harpocrate ; Harpocrate ne dépend d'aucun d'eux
+> (aucun couplage de source ni de runtime avec le portail devpod, docflow, ragflow ou un autre
+> projet ag-flow).
+
+> Généré depuis les standards globaux (docflow, workspace `globals`, bloc `documentation`).
+> Génération : 2026-09-23. Standards repris :
+> STANDARD — Fichier d'instructions agent de projet : principes, invariants et recette de génération — 2026-09-21
+> Fichier d'instructions — spécificités Python — 2026-09-02
+> Fichier d'instructions — spécificités TypeScript / frontend — 2026-09-02
+> Fichier d'instructions — spécificités PostgreSQL — 2026-09-02
+> Fichier d'instructions — Tests (agnostique) — 2026-09-02
+> Fichier d'instructions — Observabilité et logs (agnostique) — 2026-09-02
+> Fichier d'instructions — Contrats d'interface et documentation (agnostique) — 2026-09-09
+> Fichier d'instructions — Commentaires de code (agnostique) — 2026-09-06
+> Fichier d'instructions — Patrons de conception (agnostique) — 2026-09-02
+> Fichier d'instructions — spécificités Secrets — 2026-09-02
+> Fichier d'instructions — spécificités Authentification OIDC — 2026-09-02
+> Fichier d'instructions — Script de déploiement sur machine de test (agnostique) — 2026-09-11
+> Fichier d'instructions — Déclarer un service exposé au portail (annuaire, code TOTP) — 2026-09-16
+> Déploiement et machines de test — leçons d'incidents réels — 2026-09-06
+> Travail d'agent — leçons d'erreurs réelles — 2026-09-02
+> STANDARD — Sécurité : secrets et coffres Harpocrate (modèle, IHM, résolution) — 2026-09-20
+> STANDARD — Authentification OIDC & liaison d'identité — 2026-09-15
+> Non retenu : Fichier d'instructions — Analyse statique et qualité (agnostique) — 2026-09-02
+> (aucune configuration d'analyse dans le dépôt ; `docs/sonarQube.md` décrit SonarCloud sans
+> preuve d'activation — à confirmer).
+> Mise à jour par `--update` : ne reporter que le delta depuis cette date.
+
+**Colibri** commence systématiquement tes réponses par 🎺
+
+**Ce fichier prime sur ton comportement par défaut.** Il est lu en tête de chaque session ;
+ses règles sont impératives. Une consigne ambiguë ici est un bug : la signaler.
+
+## mcp
+Tu es connecté au MCP du portail devpod (`dev.yoops.org`) via le serveur `claude-code`
+(déclaré dans `.mcp.json`, non versionné).
+
+## Backlog
+La gateway MCP expose une API vers docflow (workspaces ⊃ blocs ⊃ documents).
+Le backlog des tâches à exécuter est dans le workspace `harpocrate`, bloc `backlog`.
+
+**Avant de commencer, découvre les statuts réels.** Les valeurs de statut dépendent du
+type de ticket et diffèrent d'un type à l'autre. Introspecte le bloc pour connaître, pour
+chaque type présent, la valeur qui joue chacun de ces rôles :
+- **disponible** — la tâche peut être prise ;
+- **en cours** — tu travailles dessus ;
+- **en revue** — tu as fini, elle attend une revue humaine ;
+- **terminée** — elle est close ;
+- **en attente** — elle attend une réponse de l'utilisateur (ce rôle peut ne pas exister).
+N'écris JAMAIS une valeur de statut de mémoire : une valeur inexistante est refusée, et un
+statut approximatif choisi au jugé fausse l'état du backlog pour tout le monde.
+
+Quand on te demande de traiter le backlog :
+- ne retiens que les tâches au rôle **disponible** — ni en cours, ni en revue, ni
+  terminées, ni en attente ;
+- **AVANT de toucher au code**, passe la tâche au rôle **en cours** ;
+- **quand tu as fini**, passe-la au rôle **en revue**.
+Ces deux écritures ne sont pas optionnelles : c'est ce qui dit aux autres — humains et
+agents — qu'une tâche est prise, et ce qui permet de reprendre après une interruption.
+
+**Le backlog est la source de vérité, jamais ta mémoire.** Ne tiens pas la liste des tâches
+restantes dans ta tête : elle s'éloigne à mesure que ton contexte se remplit, et tu
+t'arrêteras en croyant avoir fini. Après CHAQUE tâche, réinterroge le backlog et reprends
+la suivante.
+
+**Le statut s'écrit à chaque tâche, pas à la fin du lot.** Une session interrompue doit
+pouvoir reprendre sur la seule lecture du backlog.
+
+**Une tâche dont un prédécesseur n'est pas terminé n'est pas éligible.** Vérifie les
+prédécesseurs déclarés avant de prendre une tâche, et prends la suivante éligible.
+
+**Une question ne bloque pas la file.** Si une tâche soulève un vrai doute : écris la
+question en tête de la tâche, puis passe-la au rôle **en attente** s'il existe. S'il
+n'existe pas, laisse-la dans son état et signale-la explicitement à la fin du lot. Dans
+les deux cas, CONTINUE avec la suivante. Ne gèle jamais le lot entier sur un doute isolé.
+
+**Tu ne t'arrêtes que pour une de ces quatre raisons, et tu la nommes :**
+1. plus aucune tâche éligible — le lot est fini ;
+2. toutes les tâches restantes attendent une réponse de l'utilisateur ;
+3. toutes les tâches restantes ont un prédécesseur non terminé ;
+4. quelque chose a échoué — dis quoi.
+
+Si tu t'apprêtes à conclure sans pouvoir citer l'une des quatre, c'est que tu t'arrêtes par
+oubli : réinterroge le backlog et continue.
+
+## Recherche — le RAG d'abord
+
+**Toute recherche documentaire passe EN PRIORITÉ par le RAG**, via les primitives `rag__*`
+de la gateway MCP. Le corpus y est déjà indexé et enrichi : c'est plus rapide et plus
+complet qu'un `grep` sur un dépôt, et ça couvre la doc Docflow que le système de fichiers
+ne contient pas.
+
+Méthode (namespace `rag`) :
+
+1. **`rag__list_workspaces`** — **à appeler en premier** : donne les slugs interrogeables
+   et le scope de la clef. Corpus utiles : `harpocrate-docs` (ce projet),
+   `globals-docs` (savoir cross-projet), et un `<voisin>-docs` par projet voisin.
+2. **`rag__rag_search(workspace, query, top_k, min_score, scope)`** — recherche
+   **sémantique** : question en langue naturelle, concept, intention. C'est le point
+   d'entrée par défaut. `min_score` 0.3 par défaut ; monter à 0.5–0.7 pour une question
+   précise. `scope='enriched_only'` pour n'interroger que les résumés, listes de fonctions
+   et graphes de dépendances.
+3. **`rag__search_files(workspace, pattern, mode)`** — recherche **littérale** quand on
+   cherche un identifiant exact (nom de fonction, constante, chaîne) : `mode='exact'` par
+   défaut (tokens entiers, ne trouve pas les sous-chaînes), `'substring'` pour un fragment,
+   `'regex'` en dernier recours (lent).
+
+Ordre de repli, jamais l'inverse : RAG → si le corpus ne répond pas (sujet non indexé, code
+modifié depuis l'indexation) → outils locaux (Grep/Glob/Read) ou sous-agent Explore. Le RAG
+lit le contenu **indexé**, jamais les fichiers live : pour vérifier l'état courant d'un
+fichier qu'on vient de modifier, lire le fichier.
+
+Ce que tu apprends de neuf s'écrit en article de documentation — c'est ce qui alimente le
+RAG pour les prochains agents.
+
+**Le RAG muet n'est pas une réponse.** Le corpus ne couvre que ce qu'on y a écrit : une
+route d'interface, un motif d'URL, un flag de CLI peuvent en être absents sans que rien ne
+le signale — l'absence ressemble à une réponse vide, pas à une lacune. Le repli n'est donc
+jamais « la documentation ne le dit pas », c'est **aller lire l'artefact réel** : le bundle
+du front pour une route, `--help` pour un flag, l'API pour une forme de réponse, le fichier
+lui-même pour son état courant.
+
+Rendre un identifiant brut, un chemin approximatif ou un « je ne peux pas savoir » alors que
+l'artefact est joignable, c'est renvoyer le travail à l'utilisateur. Chercher d'abord,
+répondre ensuite — et si la recherche échoue vraiment, dire ce qui a été tenté.
+
+> État au 2026-09-23 : le corpus `harpocrate-docs` existe (chunking `docflow-docs`) mais est
+> **vide** — les automates d'indexation du bloc `documentation` ne sont pas encore posés. Un
+> résultat vide y est attendu : se replier sur le dépôt, `docs/specs/` et le wiki.
+
+## Quand charger un fragment
+
+Ces fichiers ne sont PAS chargés d'office. Chacun a son déclencheur : quand il se produit,
+lire le fichier AVANT d'écrire quoi que ce soit — pas après, pas « si ça semble utile ».
+
+| Tu t'apprêtes à… | Lis d'abord |
+|---|---|
+| modifier un fichier `.py` (backend, `sdk-python/`) | `ia_instructions/10_python.md` |
+| modifier un fichier sous `frontend/` | `ia_instructions/10_typescript.md` |
+| écrire ou modifier une migration, une requête SQL, ou un fichier de `backend/app/db/` | `ia_instructions/10_postgresql.md` |
+| écrire ou modifier un test, ou corriger un bug | `ia_instructions/20_tests.md` |
+| écrire ou modifier du code (`.py`, `.ts`, `.tsx`, `.sh`, `.sql`) | `ia_instructions/20_commentaires.md` |
+| ajouter ou modifier un appel de log, un middleware HTTP, `infra/alloy-agent/` | `ia_instructions/20_observabilite.md` |
+| modifier une route `backend/app/api/`, un DTO `models/api/`, un SDK, `cli-bash/`, `docs/vault.md`, le protocole MQTT, un webhook | `ia_instructions/20_contrats.md` |
+| toucher à une valeur sensible, `.env.example`, `core/config.py`, `core/api_key_*`, un Dockerfile ou un compose | `ia_instructions/20_secrets.md` |
+| modifier l'authentification (`core/security.py`, `admin_auth.py`, `api/v1/auth*.py`, `identity_*`, `frontend/src/lib/oidc.ts`) | `ia_instructions/20_oidc.md` |
+| modifier `dev-deploy.sh`, `scripts/`, un compose, `nginx.conf` — ou déployer / diagnostiquer sur `test1` | `ia_instructions/20_deploiement.md` |
+| introduire une abstraction (classe de base, factory, stratégie, bus…) ou proposer un refactor structurel | `ia_instructions/30_patrons.md` |
+
+Un fragment introuvable se **signale** ; on ne devine pas ce qu'il contenait.
+
+## Standard de qualité
+Code propre et bien fait, jamais la rapidité au détriment de la rigueur. Pas de raccourcis,
+pas de « c'est pas grave », pas de « on simplifiera plus tard ». Chaque tâche est faite
+correctement ou pas du tout.
+
+**Pas de quick-and-dirty, JAMAIS.** Quand tu présentes des options de design, ne propose PAS
+d'option « quick & dirty » / « hardcode » / « wire-it-up-and-clean-later ». On fait toujours
+propre. Si une tâche est déraisonnable (scope qui explose, dépendance hors d'atteinte, flag/API
+qui n'existe pas dans la version installée), **alerte explicitement l'utilisateur** plutôt que
+de proposer un compromis dégradé. L'utilisateur préfère qu'on découpe le chantier et qu'on
+fasse correctement la part qu'on prend, plutôt que tout faire à moitié.
+
 ## Projet
 
-Coffre-fort de secrets E2E (end-to-end encrypted) self-hosted. **Le serveur ne déchiffre jamais les valeurs des secrets** — tout le chiffrement/déchiffrement se fait côté client (navigateur ou SDK). Authentification OIDC (Keycloak en PKCE public) avec mode break-glass admin local. Backups chiffrés `age`, réplication via Patroni (HA Postgres) et MQTT Mosquitto (multi-instances applicative).
+Secrets organisés en **wallets**, partagés par **grants**, consommés par une UI web et par
+des SDK via des **API keys `hrpv_*`**. **Le serveur ne déchiffre jamais une valeur** : tout se
+fait côté client (navigateur ou SDK). OIDC (Keycloak, client public PKCE) + admin local
+**break-glass**. Backups `age`, snapshots planifiés, backups distants (S3, SFTP, FTPS, Google
+Drive), réplication Postgres (streaming / Patroni), synchronisation multi-instances par MQTT.
+Instance de la maison : `https://vault.yoops.org`.
 
-Documentation complète et à jour : `harpocrate.wiki/docs/fr/` (FR) et `harpocrate.wiki/docs/en/` (EN). Specs d'implémentation lot par lot : `docs/specs/` (LOT_00 à LOT_22, 27 fichiers).
+Intention et critères de succès : `docs/specs/HARPOCRATE_OVERVIEW.md` puis `docs/specs/LOT_*.md`.
+Doc utilisateur/exploitation FR/EN : wiki `harpocrate.wiki/` (dépôt séparé
+`gaelgael5/harpocrate.wiki`, `master` — absent du checkout courant). Contrats et savoir
+d'agent : docflow `harpocrate`, bloc `documentation`.
 
-**Standard de qualité** : code propre et bien fait, jamais la rapidité au détriment de la rigueur. Pas de raccourcis, pas de "c'est pas grave", pas de "on simplifiera plus tard". Chaque tâche est faite correctement ou pas du tout.
+**Où vit l'état — non rediscutable** : PostgreSQL 16 est la **source de vérité unique**
+(extensions `pgcrypto`, `uuid-ossp`). Coordination de cluster par `LISTEN/NOTIFY` et
+advisory locks. Un incident en cours d'écriture ne doit jamais corrompre l'existant :
+transaction explicite pour tout ce qui touche plusieurs tables.
 
-**Pas de quick-and-dirty, JAMAIS.** Quand tu présentes des options de design, ne propose PAS d'option "quick & dirty" / "hardcode" / "wire-it-up-and-clean-later". On fait toujours propre, tant pis pour l'effort. Si tu sens qu'une tâche est déraisonnable (>3 mois, scope qui explose, dépendance hors d'atteinte), **alerte explicitement l'utilisateur** plutôt que de proposer un compromis dégradé. L'utilisateur préfère qu'on découpe le chantier et qu'on en fasse correctement la part qu'on prend, plutôt que tout faire à moitié.
+**Hors périmètre / interdits d'architecture** — ne pas proposer, même « pour simplifier » :
+- tout déchiffrement côté serveur, tout stockage en clair de passphrase, phrase de récupération
+  ou clé privée ;
+- ORM (SQLAlchemy ou autre) — asyncpg direct ;
+- Redis ou tout cache distribué ; EMQX (le broker est Eclipse Mosquitto) ;
+- toute dépendance runtime vers un autre projet de la maison ;
+- une CLI `python -m harpocrate …` : les opérations (backup, snapshot, maintenance, restore,
+  quarantaine) passent par l'UI admin ou les endpoints `/v1/admin/…`.
 
-## Stack technique
+## Stack
 
-- **Backend** : Python 3.12 + FastAPI + asyncpg (**pas SQLAlchemy**) + structlog JSON + pytest + pytest-asyncio. Géré via **uv** (pas pip + requirements.txt).
-- **Frontend** : Vite + React 18 + TypeScript strict + react-router-dom + TanStack Query + **Mantine** (UI) + Zustand (state global) + Zod (validation) + react-i18next (FR/EN) + Vitest + RJSF (secrets typés).
-- **BDD** : PostgreSQL 16 + extensions `pgcrypto`, `uuid-ossp`. Source de vérité unique. Coordination cluster via `LISTEN/NOTIFY` + advisory locks (pas de Redis, pas de cache distribué).
-- **Crypto client** : Argon2id (`hash-wasm`), AES-256-GCM + RSA-OAEP-SHA256 (WebCrypto natif), BIP-39 (phrase de récupération 24 mots).
-- **Crypto serveur** : `cryptography` (PyCA). Token API key `hrpv_*` (8 segments, HMAC-SHA256 tronqué). Backups chiffrés `age` (clé générée par `age_keygen.py`, stockée en DB).
-- **Auth** : Keycloak OIDC en **client public PKCE** (pas de client_secret backend) + auth admin locale break-glass (`HARPOCRATE_ADMIN_LOCAL_*`).
-- **Reverse proxy** : nginx embarqué dans le conteneur frontend (cert auto-signé en dev sur `:8443`). En prod, Cloudflare Tunnel ou Caddy/Nginx externe terminent TLS.
-- **Réplication** : Patroni + etcd (HA Postgres) / Eclipse Mosquitto + `aiomqtt` (sync multi-instances applicative). **Pas EMQX.**
-- **Observabilité** : structlog JSON. Stack Loki/Grafana via Grafana Alloy (collecteur dans `infra/alloy-agent/`) — optionnelle, pas un prérequis.
-
-## Dev & cible
-
-- **Développement** : local Windows (uv + node) ou Linux. Tests d'intégration backend connectés à un Postgres local ou LXC Proxmox.
-- **Cible de déploiement** : LXC Proxmox Docker-ready, ou n'importe quelle machine Linux avec Docker ≥ 24 et Compose v2. Procédures :
-  - **Dev** : `./dev-deploy.sh` (build local + compose up).
-  - **Prod** : `scripts/setup.sh` (init LXC + .env) puis `scripts/refresh.sh` (pull GHCR + compose up).
-- **Test d'intégration LXC** : `scripts/run-test.sh` (création LXC + clone + déploiement + smoke), procédure complète dans `docs/test.md`.
+- **Backend** : Python 3.12, FastAPI, asyncpg, Pydantic v2 / Settings, structlog JSON, pytest.
+  Dépendances par **uv** (`pyproject.toml` + `uv.lock`), jamais pip/requirements.
+- **Frontend** : Vite, React 18, TS strict, TanStack Query, **Mantine**, Zustand, Zod,
+  react-i18next (FR/EN), RJSF, Vitest.
+- **Crypto** : client Argon2id (`hash-wasm`), AES-256-GCM, RSA-OAEP-SHA256 (WebCrypto), BIP-39 ;
+  serveur `cryptography` (PyCA), HMAC-SHA256 (`hrpv_*`), `age`.
+- **Exploitation** : nginx dans l'image frontend (`:8443` auto-signé en dev) ; Patroni + etcd ;
+  Mosquitto + `aiomqtt` ; Grafana Alloy → Loki (optionnel).
+- **Exceptions assumées** : processus externes `pg_dump`, `age`, `age-keygen` lancés par
+  `asyncio.create_subprocess_exec` (pas d'API Python équivalente) ; `aiodocker` / `asyncssh`
+  pour l'exécution du wizard de pairing.
 
 ## Commandes essentielles
 
 ```bash
-# Backend local
 cd backend && uv sync
-cd backend && uv run uvicorn app.main:app --reload         # :8000
-cd backend && uv run pytest -v                             # Tests Python
-cd backend && uv run ruff check app/ tests/                # Lint
-cd backend && uv run ruff format app/ tests/               # Format
+cd backend && uv run uvicorn app.main:app --reload         # :8000 — migrations au boot (lifespan)
+cd backend && uv run pytest -v
+cd backend && uv run ruff check app/ tests/
+cd backend && uv run ruff format --check app/ tests/
 
-# Frontend local
 cd frontend && npm install
 cd frontend && npm run dev                                  # :5173, proxy /v1 -> :8000
-cd frontend && npm test                                     # Vitest
-cd frontend && npx tsc --noEmit                             # TS strict check
-cd frontend && npm run lint                                 # ESLint
-cd frontend && npm run format                               # Prettier
+cd frontend && npx tsc --noEmit -p tsconfig.json
+cd frontend && npm run lint
+cd frontend && npx vitest run
+cd frontend && npm run build
 
-# Migrations DB : appliquées automatiquement au boot du backend
-# via le lifespan FastAPI (app/db/migrations.py). Pas de CLI dédiée.
-
-# Stack complète en dev (build local + Postgres)
-./dev-deploy.sh                                             # :8443 HTTPS auto-signé
-
-# Stack complète en prod (pull GHCR sur LXC)
-ssh pve "pct exec <ctid> -- bash -c 'cd /opt/harpocrate && ./refresh.sh'"
-
-# Test d'intégration LXC depuis le poste local
-./scripts/run-test.sh                                       # config par défaut
-CLEANUP=1 ./scripts/run-test.sh                             # purge le LXC après tests
+./dev-deploy.sh [branche] [--reset]                         # stack dev, build local, :8443
 ```
 
-> **Pas de CLI `python -m harpocrate ...`** — aucun `__main__.py` n'est défini dans `backend/app/`. Toutes les opérations (backup, snapshot, maintenance, restore, quarantaine) passent par l'UI admin ou par appel HTTP direct aux endpoints `/v1/admin/...`.
+Le devcontainer courant n'a **ni `uv` ni Docker** : le signaler au lieu de contourner.
+Prod (`scripts/setup.sh`, `scripts/refresh.sh`) : **jamais lancée par l'agent**.
 
-## Layout du code
+## Layout
 
 ```
-harpocrate/
-├── backend/
-│   ├── pyproject.toml          # uv
-│   ├── app/
-│   │   ├── main.py             # FastAPI app + lifespan
-│   │   ├── api/v1/             # Endpoints publics + admin_*
-│   │   ├── core/               # Pydantic Settings, security, api_key_token, cluster_sync
-│   │   ├── db/                 # Pool asyncpg, repositories, migrations runner
-│   │   ├── middleware/         # cluster_coherence, log_requests
-│   │   ├── models/             # Pydantic schemas + DB models
-│   │   └── services/           # ~40 services (auth, secrets, wallets, backup, replication...)
-│   ├── migrations/             # SQL numérotés 000_*.sql à 031_*.sql + apply_migrations.py
-│   └── tests/
-├── frontend/
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── nginx.conf              # Image Docker : sert SPA + proxy /v1/ sur :8443 (cert auto-signé)
-│   └── src/
-│       ├── pages/              # Pages React (route-level)
-│       ├── components/         # Composants réutilisables
-│       ├── crypto/             # Argon2id, AES-GCM, RSA-OAEP, BIP-39, helpers
-│       ├── hooks/
-│       ├── i18n/               # fr.json, en.json
-│       ├── lib/                # api-client, oidc, query
-│       ├── schemas/            # Zod
-│       └── stores/             # Zustand (session, crypto)
-├── sdk-python/                 # SDK officiel (publié `harpocrate` sur PyPI, v0.6.0)
-├── sdk-typescript/, sdk-javascript/, sdk-go/, sdk-rust/, sdk-csharp/  # Squelettes
-├── cli-bash/                   # harpocrate-cli + harpocrate-gen
-├── infra/
-│   ├── patroni/                # install-patroni.sh + templates + callbacks (DNS dnsmasq)
-│   ├── etcd/                   # install-etcd.sh + service
-│   ├── mosquitto/              # Eclipse Mosquitto (broker MQTT pour sync multi-instances)
-│   └── alloy-agent/            # Grafana Alloy (collecteur logs vers Loki)
-├── scripts/
-│   ├── setup.sh                # Pull docker-compose.yml + .env sur LXC (init prod)
-│   ├── refresh.sh              # Pull GHCR + compose up -d (prod)
-│   ├── run-test.sh, test-create-lxc.sh, destroy-test.sh
-│   └── install-alloy.sh
-├── dev-deploy.sh               # Build local + compose up (dev)
-├── db/init/                    # 01-extensions.sql, 02-replication-hba.sh
-├── docker-compose.yml          # Prod (pull images GHCR)
-├── docker-compose-dev.yml      # Dev (build local)
-├── docker-compose.cluster.yml  # Ajoute Mosquitto pour multi-instances
-├── docs/specs/                 # LOT_00 à LOT_22 (briefs d'implémentation, 27 fichiers)
-└── harpocrate.wiki/            # Wiki bilingue FR/EN (sous-module Git)
+backend/app/        main.py (app + lifespan + middlewares) · api/v1/ (routes publiques et admin_*)
+                    core/ (config, security, api_key_*, cluster_sync, rate_limit…) · db/ (pool,
+                    repositories/) · middleware/ · models/{api,db}/ · services/ (~40 services)
+backend/migrations/ 000_…sql → 032_…sql + apply_migrations.py
+backend/tests/      tests pytest, à plat
+frontend/src/       pages/ components/ crypto/ hooks/ i18n/ lib/ schemas/ stores/ tests/
+sdk-python/         SDK officiel (PyPI `harpocrate`, 0.7.0) · sdk-{typescript,javascript,go,rust,csharp}/ squelettes
+cli-bash/           harpocrate-cli + harpocrate-gen
+infra/              patroni/ etcd/ mosquitto/ alloy-agent/
+scripts/            setup.sh refresh.sh (prod) · run-test.sh test-create-lxc.sh destroy-test.sh · install-alloy.sh
+docs/               specs/ (LOT_*) · vault.md (contrat consommateurs) · operations/ · superpowers/plans/
+ia_instructions/    fragments d'instructions par technologie (voir « Quand charger un fragment »)
 ```
 
-## Conventions de code
+Le code ajouté **se fond dans l'existant** : densité de commentaires, nommage, idiomes du
+fichier touché — pas le style personnel de l'agent. Fichiers ≤ 300 lignes, une
+responsabilité par unité.
 
-### Python (backend)
-- Python 3.12+, async/await partout.
-- **Pas de SQLAlchemy** — asyncpg direct avec helpers dans `app/db/pool.py` et repositories dans `app/db/repositories/`.
-- **Pydantic v2** pour les DTOs, **Pydantic Settings** pour la config (`core/config.py`).
-- Logs structurés via `structlog.get_logger(__name__)` — **jamais** `print()` ni `logging` brut.
-- `from __future__ import annotations` en tête de fichier, type hints partout.
-- Fichiers max 300 lignes ; classes SRP ; méthodes 5-15 lignes.
-- Transactions explicites pour les opérations multi-tables (`async with conn.transaction():`).
-- `SELECT FOR UPDATE` pour les opérations critiques concurrentes.
-- Pour les endpoints API key : utiliser la dépendance `require_api_key` (ne lit JAMAIS `caller.decryption_key_b64` côté serveur — la dkey est juste parsée pour traverser le format).
-- Pour les endpoints admin : `require_admin` (vérifie le claim `realm_access.roles` contre `HARPOCRATE_ADMIN_ROLE_NAME`).
+## Sécurité — interdits qui coupent un commit
 
-### TypeScript (frontend)
-- `strict: true`, `noUncheckedIndexedAccess: true`.
-- Composants fonctionnels + hooks, pas de classes.
-- **TanStack Query** pour tout appel API, pas de `useEffect + fetch` direct.
-- **Mantine** pour les composants UI (pas Tailwind/shadcn).
-- **Zustand** pour le state global (session, crypto). **Zod** pour la validation des réponses API.
-- **react-i18next** sur **tous** les labels affichés (`useTranslation()`), jamais de string brute.
-- Fichiers max 300 lignes. Props typées via `interface`, exports nommés.
-- **Crypto** : utiliser les helpers de `src/crypto/` (Argon2id via `hash-wasm`, AES-GCM/RSA-OAEP via WebCrypto natif). Jamais de KDF maison.
-- **Sécurité UI** : ne jamais afficher une valeur de secret dans un log console ou une notification. Toujours masquer par défaut, dévoiler sur action explicite.
+- **Aucune valeur de secret** dans un log, une notification, un `console.*`, une URL, un
+  message d'erreur, un fixture de test réel, le dépôt, un argument de build, une variable ou
+  une couche d'image. Le middleware `log_requests` ne lit jamais le body : ne jamais le
+  contourner.
+- **Jamais** de passphrase, phrase de récupération (24 mots) ou clé privée RSA en clair en DB.
+- **Aucun code serveur ne déchiffre** ni ne lit `caller.decryption_key_b64`.
+- Toute entrée validée par Pydantic **avant** traitement ; regex stricte avant usage en chemin,
+  identifiant ou nom d'hôte.
+- Toute route vérifie les permissions par sa dépendance (`require_api_key`, `require_admin`,
+  `require_jwt_user`…) — **fail closed** : une route sans autorisation explicite est une faute.
+- Jamais de logging des en-têtes `Authorization` (app ou reverse-proxy).
+- Ne pas modifier `.env` sauf demande explicite.
+- `docs/vault.md`, `/v1/openapi-api-key.json`, les SDK et le format `hrpv_*` sont des
+  **contrats consommés par tous les projets** : aucune modification sans prévenir l'utilisateur
+  avant (cf. `20_contrats.md`).
 
-### Base de données
-- Migrations = fichiers SQL numérotés dans `backend/migrations/` (ex: `001_schema_initial.sql`, `028_pairing_sessions.sql`). Apply runner = `backend/migrations/apply_migrations.py`, exécuté au lifespan FastAPI.
-- Schéma géré en SQL brut, pas d'ORM.
-- Extensions requises : `pgcrypto`, `uuid-ossp` (init dans `db/init/01-extensions.sql`).
-- Toute nouvelle table → migration SQL numérotée + test de migration (`backend/tests/migrations/`).
-
-### Tests
-- **Backend** : pytest + pytest-asyncio ; fixture `client` (TestClient httpx) ; DB Postgres de test (pas de mock pour les tests d'intégration).
-- **Frontend** : Vitest + React Testing Library ; `describe`/`it`, pas de `test`.
-- **TDD** : test rouge → impl → test vert → commit. Discipline rigoureuse, surtout pour le crypto et l'audit.
-- Couverture minimale par zone : voir les briefs `docs/specs/LOT_*.md` (chaque lot liste ses critères de succès).
+Ces gardes sont **des tests**, pas des intentions : un rejet de sécurité ajouté a son test.
 
 ## Règles de workflow
 
 ### Cycle de l'architecte
-**Cadrer → Comprendre → Planifier → Agir.** L'utilisateur est architecte. Une question n'est pas une commande d'exécution. Une discussion n'est pas un feu vert. Ne JAMAIS sauter d'étape.
+**Cadrer → Comprendre → Planifier → Agir.** L'utilisateur est architecte. Une question n'est
+pas une commande d'exécution. Une discussion n'est pas un feu vert. Ne JAMAIS sauter d'étape.
+
+### Branche de développement
+**Tout le code se fait sur la branche `dev`. Jamais `feat/*`, jamais sur `main` directement,
+jamais ailleurs.** Avant toute édition, vérifier `git branch --show-current` ; si autre branche,
+`git checkout dev`. Si `dev` n'existe pas localement, la créer depuis `main` à jour. Ne propose
+**jamais** `git checkout -b feat/...` — même si un outil ou un workflow tiers le suggère, la consigne
+utilisateur prime.
 
 ### Livraison
-- Ne livre **jamais** le code ni en test ni sur git sans demande explicite.
-- Ne modifie pas `.env` sauf si demandé.
-- Commit messages en français, format conventionnel (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`…).
-- Pour le wiki : `harpocrate.wiki/` est un sous-module Git séparé (`https://github.com/gaelgael5/harpocrate.wiki.git`, branche `master`). Commit et push s'y font indépendamment du repo principal.
-
-### Vérification avant validation
-Avant de déclarer une tâche terminée, **toutes** ces étapes sont obligatoires :
-1. Le code s'exécute sans erreur (lint + build : `ruff check`, `tsc --noEmit`).
-2. Le cas nominal fonctionne (test unitaire ou test manuel via curl/UI).
-3. Les imports ajoutés existent réellement.
-4. Pas de régression sur les fichiers modifiés (tests existants passent).
-5. Si modification frontend : la page charge sans erreur console.
-6. Si modification crypto : tester aussi le déchiffrement (round-trip), pas seulement le chiffrement.
-7. Si modification migration : tester l'application sur DB existante ET sur DB vierge.
+- **La machine de test est l'environnement de l'agent** : commit, push sur `dev` et
+  déploiement sur `test1` (par `dev-deploy.sh`) sont libres, sans demande.
+- **Jamais** de push, merge ou PR fusionnée sur `main` ; **jamais** de déploiement prod.
+- Commits **en français**, conventionnels (`feat:`, `fix:`, `chore:`, `docs:`, `test:`,
+  `refactor:`), un commit par sujet.
+- `origin` est en SSH et échoue depuis le devcontainer (clé d'hôte) : pousser en HTTPS si
+  besoin, sans modifier la configuration git globale.
+- Wiki : `harpocrate.wiki/` est un dépôt séparé (`master`) ; il se commite et se pousse à part.
 
 ### Discipline d'exécution
 - Exécute directement, ne décris pas ce que tu vas faire — fais-le.
 - N'explique pas les étapes intermédiaires. Rapporte uniquement le résultat final.
 - Termine TOUTES les étapes d'un plan avant de faire un résumé.
-- Pas de raccourci "pour simplifier".
-- Si tu rencontres un problème, signale-le et propose une solution — ne l'ignore pas silencieusement.
+- Pas de raccourci « pour simplifier ».
+- Si tu rencontres un problème, signale-le et propose une solution — ne l'ignore pas
+  silencieusement.
 
-### Sécurité — règles dures
-- **Jamais** de valeur de secret dans les logs (le middleware `log_requests` masque le body, ne le contourne jamais).
-- **Jamais** de passphrase, phrase de récupération 24 mots, ou clé privée RSA stockée en clair en DB.
-- **Toujours** valider les entrées via Pydantic avant traitement.
-- **Toujours** vérifier les permissions avant accès aux données (dépendances `require_*` côté API).
-- **API keys** : aujourd'hui le SDK envoie le token complet dans le header `Authorization` (`sdk-python/harpocrate/http.py:73`). La conception cible — split-token côté SDK — est sur la roadmap (cf. wiki `philosophy_e2e-model.md`). Tant qu'elle n'est pas faite, ne pas activer le logging des headers `Authorization` côté reverse-proxy.
+**Vérifier avant de se souvenir** : `--help` avant d'appeler une CLI, doc à jour avant
+d'utiliser une bibliothèque ; un écart spec ↔ code se **signale**, il ne se contourne pas.
+**Chercher avant d'écrire** : le nom d'une table, d'un module ou d'un document avant de le créer.
 
-## Outils Claude Code
+### Vérification avant de déclarer « terminé »
+1. Style, types et build passent : `ruff check` + `ruff format --check` (backend),
+   `tsc --noEmit` + `eslint` + `npm run build` (frontend).
+2. Le cas nominal est testé (test automatisé, ou appel réel sur `test1`).
+3. Les imports ajoutés existent réellement.
+4. Aucune régression : suites complètes, **ensemble** des échecs comparé à l'avant.
+5. Parts de checklist des fragments touchés, **relues et cochées** : `10_python.md`,
+   `10_typescript.md`, `10_postgresql.md`, `20_tests.md`, `20_commentaires.md`,
+   `20_secrets.md` — et selon le cas `20_contrats.md`, `20_oidc.md`, `20_observabilite.md`,
+   `20_deploiement.md`. Crypto : aller-retour chiffrer → déchiffrer. Migration : base vierge
+   ET base existante. Front : la page charge sans erreur console.
+6. Aucun secret dans le diff — `git diff` relu sous cet angle.
 
-### Context7 — documentation live
-**Quand** : avant d'écrire du code qui utilise FastAPI, Pydantic v2, asyncpg, aiomqtt, aiohttp, React, TanStack Query, Vite, Mantine, react-i18next, RJSF, Zod, etc. Les API évoluent, ne te fie pas à ta mémoire.
+Ce qui n'a pas pu être vérifié (outil absent, tests skippés) se **dit** dans le compte rendu.
 
-### Serena / Grep / Glob — navigation sémantique
-**Quand** : avant un refactor, pour comprendre les dépendances entre modules, ou pour trouver tous les usages d'une fonction/classe/endpoint.
+## Outils de l'agent
 
-### Superpowers skills
-- `writing-plans` : rédiger un plan d'implémentation TDD avant de coder.
-- `executing-plans` / `subagent-driven-development` : exécuter un plan tâche par tâche.
-- `systematic-debugging` : méthode pour debug un bug ou test qui échoue.
-- `test-driven-development` : discipline TDD rigoureuse.
-- `brainstorming` : explorer le design avant d'écrire quoi que ce soit.
-- `verification-before-completion` : vérifier que le travail est réellement fini avant de le dire.
+| Fonction | Déclencheur | Ici |
+|---|---|---|
+| Doc à jour d'une bibliothèque | avant d'écrire du code qui l'utilise (FastAPI, Pydantic, asyncpg, aiomqtt, React, TanStack Query, Mantine, RJSF, Zod…) | Context7 (`resolve-library-id` puis `query-docs`) |
+| Contrat réel d'une CLI | avant tout appel à une CLI externe (`age`, `pg_dump`, `docker`, `patronictl`…) | `--help` first — le binaire installé fait foi |
+| Navigation sémantique | avant un refactor, pour trouver les usages | pas de Serena ici : Grep/Glob, ou sous-agent Explore |
+| Méthodes de travail | plan, exécution, débogage, TDD | pas de skills Superpowers ici : plan écrit dans `docs/superpowers/plans/AAAA-MM-JJ-<sujet>.md`, TDD rouge → vert → commit, débogage par hypothèse testée une variable à la fois |
+| Revue | > 3 fichiers ou > 100 lignes | `/code-review` ; `/security-review` si crypto, auth ou secrets |
+| Commit | sur la branche `dev` | à la main, au format ci-dessus (pas de `/commit` ici) |
 
-### /review
-**Quand** : avant de présenter un changement multi-fichiers (>3 fichiers ou >100 lignes).
+## Messagerie inter-agents
 
-### /commit
-**Quand** : quand l'utilisateur demande explicitement de committer. Format français conventionnel.
+`message_send` (MCP devpod) est **fire-and-forget** : consigner dans le compte rendu l'id,
+le destinataire, l'attendu et l'impact ; **jamais de polling** sur `message_status` ; la
+réponse arrive injectée par l'utilisateur ; signaler explicitement en fin de tour toute tâche
+bloquée sur une réponse.
+
+## Écarts connus avec les standards — non tranchés
+
+Constatés le 2026-09-23 et détaillés dans les fragments (sections « Écarts ») : OIDC
+(`20_oidc.md`), config et mypy (`10_python.md`), runner de migrations (`10_postgresql.md`),
+`dev-deploy.sh` (`20_deploiement.md`). **Ne pas les propager dans du code neuf, ne pas les
+« corriger » au passage** : chacun relève d'une tâche dédiée validée par l'utilisateur.
+`docs/python-dev-rules.md` et `docs/tests-python.md` viennent d'un autre projet (LandGraph) :
+ne pas les appliquer tels quels.
 
 ## Auto-amélioration
-
 Quand tu fais une erreur ou que l'utilisateur te corrige :
-- Ajoute une leçon dans `LESSONS.md` à la racine du repo.
+- Ajoute une leçon dans `LESSONS.md`.
 - Format : `- [module] description courte de l'erreur et de la bonne pratique`.
-- Relis `@LESSONS.md` en début de tâche qui touche un module mentionné.
+- Relis `LESSONS.md` en début de tâche qui touche un module mentionné.
 - Ne dépasse pas 50 lignes — consolide les leçons similaires.
 
-## Notifications de skills
+Erreurs de méthode récurrentes, tous projets confondus : globals › « Travail d'agent — leçons
+d'erreurs réelles » — à relire avant de **créer** une pièce (table, module, document), avant
+de **conclure** d'un symptôme, et avant de **transformer un document en masse**.
 
-Quand tu invoques une skill via l'outil Skill, affiche systématiquement un marqueur visuel **avant** d'exécuter :
-
-> **`🟢 SKILL`** → _nom-de-la-skill_ — raison en une phrase
+## Notifications de capacités
+Quand tu invoques une capacité outillée (skill, commande, extension), affiche systématiquement
+un marqueur **avant** d'exécuter :
+> **`🟢 SKILL`** → _nom_ — raison en une phrase

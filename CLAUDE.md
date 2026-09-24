@@ -131,7 +131,16 @@ répondre ensuite — et si la recherche échoue vraiment, dire ce qui a été t
 > Depuis le 2026-09-24, le bloc docflow `harpocrate › documentation` est poussé automatiquement
 > vers `harpocrate-docs` (création, modification, suppression). Il porte les spécifications, les
 > plans, l'exploitation, les audits et les fragments d'instructions — **plus aucun de ces
-> documents ne vit dans le dépôt**.
+> documents ne vit dans le dépôt** : un `grep` local ne les trouvera pas.
+>
+> **Repli propre à ce projet** quand `harpocrate-docs` ne répond pas : recherche plein texte
+> docflow `doc__search_documents(q)` (résultats filtrés sur `workspace_slug = "harpocrate"`),
+> puis lecture intégrale par `doc__get_document`. Les outils locaux ne couvrent que le code.
+>
+> **État au 2026-09-24 : `harpocrate-docs` est vide** — un bug d'indexation des nouveaux
+> documents côté ragflow est en cours de correction. En attendant, seuls les corpus déjà
+> indexés (`globals-docs`, voisins) répondent ; pour ce projet, passer directement par le repli
+> ci-dessus. Retirer ce paragraphe dès que l'index compte les documents du bloc.
 
 ## Quand charger un fragment
 

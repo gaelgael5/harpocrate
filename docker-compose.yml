@@ -89,7 +89,7 @@ services:
     volumes:
       # Pour activer le mode "exécution auto du wizard pairing", décommenter
       # la ligne suivante. Cela monte le socket Docker dans le conteneur backend
-      # et lui donne un accès équivalent à root sur l'hôte. Voir Install-dev.md.
+      # et lui donne un accès équivalent à root sur l'hôte. Voir docflow « Installation environnement de DEV — Harpocrate ».
       # - /var/run/docker.sock:/var/run/docker.sock
       # Cross-app launcher menu — éditable côté serveur sans rebuild
       - ./apps.json:/app/apps.json:ro

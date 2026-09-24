@@ -1,7 +1,7 @@
 # Harpocrate — Backend
 
-Spec : `docs/specs/OVERVIEW.md` et `docs/specs/LOT_00_FOUNDATIONS.md`.
-Roadmap : `docs/superpowers/plans/2026-05-01-harpocrate-roadmap.md`.
+Spec : docflow `harpocrate` › Documentation › « Spécifications — vue d'ensemble et lots » (cadrage + « Lot 00 — Fondations projet »).
+Roadmap : docflow `harpocrate` › Documentation › « Plans d'implémentation et designs » › « 2026-05-01 — Harpocrate — Roadmap d'implémentation ».
 
 ## Démarrer en local (Docker)
 

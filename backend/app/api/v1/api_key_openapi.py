@@ -3,7 +3,8 @@
 - GET /v1/openapi-api-key.json  -> schema OpenAPI reduit (endpoints hrpv_* OK)
 - GET /v1/api-docs               -> Swagger UI standalone pointant vers le schema
 
-Reference : OVERVIEW.md section 6 (table d'eligibilite JWT vs API key).
+Reference : docflow harpocrate, article HARPOCRATE_OVERVIEW (document de cadrage),
+section 6 (table d'eligibilite JWT vs API key).
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ router = APIRouter()
 
 
 # Endpoints qui acceptent un token API key (hrpv_*) ou public.
-# Source de verite : table OVERVIEW.md section 6.
+# Source de verite : table section 6 du cadrage (docflow, article HARPOCRATE_OVERVIEW).
 # Tuple (path_template, http_method_lowercase).
 _API_KEY_ENDPOINTS: set[tuple[str, str]] = {
     # Public (sans auth)

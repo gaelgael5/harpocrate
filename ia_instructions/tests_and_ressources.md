@@ -14,7 +14,7 @@
 
 - Accès : bloc « portal test-vm test1 » de `~/.ssh/config`, via le rebond `devflow-jump`.
 - Constaté le 2026-09-23 : Debian 12, Docker 29.8, **git 2.39.5** (piège HTTP/2 → 401 contre
-  GitHub, cf. `ia_instructions/20_deploiement.md`).
+  GitHub, cf. docflow « Fragment — Déploiement »).
 - **Machine partagée** : héberge déjà `wsportal-dev-*` (portail, caddy, postgres, zulip, grafana,
   loki, victoriametrics), `devpod-alloy-*`, `browserless-chromium`, une CI `ci-fable5` dans `/root`.
 - Ports libres le 2026-09-23 pour la stack dev : `5432`, `8000`, `8080`, `8443` — **à revérifier

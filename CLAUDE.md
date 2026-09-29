@@ -88,11 +88,9 @@ Rendre un identifiant brut, un chemin approximatif ou un « je ne peux pas savoi
 l'artefact est joignable, c'est renvoyer le travail à l'utilisateur. Chercher d'abord,
 répondre ensuite — et si la recherche échoue vraiment, dire ce qui a été tenté.
 
-> Le bloc docflow `harpocrate › documentation` est poussé automatiquement vers `harpocrate-docs`.
-> Il porte les spécifications, les plans, l'exploitation et les audits — **ils ne vivent plus dans
-> le dépôt** : un `grep` local ne les trouvera pas. Repli propre à ce projet quand le RAG ne
-> répond pas : `doc__search_documents(q)` (filtré sur le workspace `harpocrate`) puis
-> `doc__get_document`. Les fragments d'instructions, eux, sont dans le dépôt (`ia_instructions/`).
+> Specs, plans, exploitation et audits vivent dans docflow `harpocrate › documentation` (indexé
+> dans `harpocrate-docs`), plus dans le dépôt. RAG muet → `doc__search_documents(q)` filtré sur
+> `harpocrate`, puis `doc__get_document` ; un `grep` local ne couvre que le code.
 
 ## Quand charger un fragment
 
@@ -104,25 +102,28 @@ lire le fichier AVANT d'écrire quoi que ce soit — pas après, pas « si ça s
 | prendre, passer en cours ou clore une tâche du backlog | `ia_instructions/00_backlog.md` |
 | ouvrir la session, voir `[TCHAT] nouveau message`, appeler ou répondre à un agent | `ia_instructions/00_tchat.md` |
 | committer ou pousser pour livrer, déployer ou tester sur une machine de test, ou recevoir / rendre une ressource | `ia_instructions/00_machines_et_livraison.md` et `ia_instructions/tests_and_ressources.md` |
-| modifier un fichier `.py` (backend, `sdk-python/`) | `ia_instructions/10_python.md` |
-| modifier un fichier sous `frontend/` | `ia_instructions/10_typescript.md` |
-| écrire ou modifier une migration, une requête SQL, ou un fichier de `backend/app/db/` | `ia_instructions/10_postgresql.md` |
-| écrire ou modifier un test, ou corriger un bug | `ia_instructions/20_tests.md` |
-| écrire ou modifier du code (`.py`, `.ts`, `.tsx`, `.sh`, `.sql`) | `ia_instructions/20_commentaires.md` |
-| ajouter ou modifier un appel de log, un middleware HTTP, `infra/alloy-agent/` | `ia_instructions/20_observabilite.md` |
-| modifier une route `backend/app/api/`, un DTO `models/api/`, un SDK, `cli-bash/`, `docs/vault.md`, le protocole MQTT, un webhook | `ia_instructions/20_contrats.md` |
-| toucher à une valeur sensible, `.env.example`, `core/config.py`, `core/api_key_*`, un Dockerfile ou un compose | `ia_instructions/20_secrets.md` |
-| modifier l'authentification (`core/security.py`, `admin_auth.py`, `api/v1/auth*.py`, `identity_*`, `frontend/src/lib/oidc.ts`) | `ia_instructions/20_oidc.md` |
-| modifier `dev-deploy.sh`, `scripts/`, un compose, `nginx.conf` — ou déployer / diagnostiquer sur `test1` | `ia_instructions/20_deploiement.md` |
-| introduire une abstraction (classe de base, factory, stratégie, bus…) ou proposer un refactor structurel | `ia_instructions/30_patrons.md` |
+| modifier un fichier `.py` (backend, `sdk-python/`) | docflow « Fragment — Python » `ea520edf-962d-4edc-80e2-0ae049b86a2f` |
+| modifier un fichier sous `frontend/` | docflow « Fragment — TypeScript / frontend » `cdd2fc80-7a46-4a47-bf96-fba21ecaf0bf` |
+| écrire ou modifier une migration, une requête SQL, ou un fichier de `backend/app/db/` | docflow « Fragment — PostgreSQL » `ac055cea-6cf6-48f4-8d1d-42bde70a502a` |
+| écrire ou modifier un test, ou corriger un bug | docflow « Fragment — Tests » `9d52c6ae-9eb0-415c-8fec-711821fee6c6` |
+| écrire ou modifier du code (`.py`, `.ts`, `.tsx`, `.sh`, `.sql`) | docflow « Fragment — Commentaires de code » `186e11e6-9d6a-45b2-807a-26142f8c4f44` |
+| ajouter ou modifier un appel de log, un middleware HTTP, `infra/alloy-agent/` | docflow « Fragment — Observabilité et logs » `275b86e4-51d5-4a23-8ca4-cd9de560f58b` |
+| modifier une route `backend/app/api/`, un DTO `models/api/`, un SDK, `cli-bash/`, `docs/vault.md`, le protocole MQTT, un webhook | docflow « Fragment — Contrats d'interface et documentation » `68799bc2-3e9c-4394-a2ed-c99aecad1f9c` |
+| toucher à une valeur sensible, `.env.example`, `core/config.py`, `core/api_key_*`, un Dockerfile ou un compose | docflow « Fragment — Secrets » `7e889340-cdc6-441c-a60c-bbbe65a64404` |
+| modifier l'authentification (`core/security.py`, `admin_auth.py`, `api/v1/auth*.py`, `identity_*`, `frontend/src/lib/oidc.ts`) | docflow « Fragment — Authentification OIDC » `22284d2d-a1d5-41c0-a3cc-c87bcf3208e3` |
+| modifier `dev-deploy.sh`, `scripts/`, un compose, `nginx.conf` — ou déployer / diagnostiquer sur `test1` | docflow « Fragment — Déploiement » `126aa026-b42c-4681-be49-844a66739bcf` |
+| introduire une abstraction (classe de base, factory, stratégie, bus…) ou proposer un refactor structurel | docflow « Fragment — Patrons de conception » `a9a5f018-d256-4492-b247-ee3af806d76b` |
 
 Un fragment introuvable se **signale** ; on ne devine pas ce qu'il contenait.
 
-> **Remise en forme (quota, 2026-09-29)** — toutes règles appliquées, ce fichier dépassait
-> ~350 lignes. Les blocs invariants « Backlog », « Tchat agents », « Machines de test » et
-> « Livrer sur une machine de test » sont ici **en synthèse** ; leur texte intégral, au mot près,
-> est dans `ia_instructions/00_*.md`. Ne pas les remettre en clair : c'est voulu (règle du
-> standard, le plafond ne se relève pas).
+> **Remise en forme (quota, 2026-09-29)** : « Backlog », « Tchat agents », « Machines de test »
+> et « Livrer sur une machine de test » sont ici en synthèse, texte intégral au mot près dans
+> `ia_instructions/00_*.md`. Ne pas les remettre en clair : le plafond ne se relève pas.
+
+### ⚠ Divergence assumée vs le standard — fragments dans docflow (décision du 2026-09-29)
+Les fragments par technologie vivent dans docflow, pas dans `ia_instructions/` : les lire par
+`doc__get_document(workspace_slug="harpocrate", doc_id=<id>)` (version courante, pas un extrait
+RAG) ; MCP indisponible → **s'arrêter et le signaler**. Ne jamais les recopier dans le dépôt.
 
 ## Standard de qualité
 Code propre et bien fait, jamais la rapidité au détriment de la rigueur. Pas de raccourcis,
@@ -214,7 +215,7 @@ sdk-python/         SDK officiel (PyPI `harpocrate`, 0.7.0) · sdk-{typescript,j
 cli-bash/           harpocrate-cli + harpocrate-gen
 infra/              patroni/ etcd/ mosquitto/ alloy-agent/
 scripts/            setup.sh refresh.sh (prod) · run-test.sh test-create-lxc.sh destroy-test.sh · install-alloy.sh
-ia_instructions/    fragments d'instructions + mémoire des ressources (`tests_and_ressources.md`)
+ia_instructions/    blocs invariants sortis du quota (`00_*.md`) + mémoire des ressources (`tests_and_ressources.md`)
 docs/vault.md       guide de consommation — contrat cité par le standard globals, reste dans le dépôt
 releases/           index.json + artefacts SDK + docs/*.md (servis par le backend, ne pas déplacer)
 ```
@@ -239,7 +240,7 @@ responsabilité par unité.
 - Ne pas modifier `.env` sauf demande explicite.
 - `docs/vault.md`, `/v1/openapi-api-key.json`, les SDK et le format `hrpv_*` sont des
   **contrats consommés par tous les projets** : aucune modification sans prévenir l'utilisateur
-  avant (cf. `ia_instructions/20_contrats.md`).
+  avant (cf. fragment « Contrats d'interface et documentation »).
 
 Ces gardes sont **des tests**, pas des intentions : un rejet de sécurité ajouté a son test.
 
@@ -294,9 +295,10 @@ d'utiliser une bibliothèque ; un écart spec ↔ code se **signale**, il ne se 
 2. Le cas nominal est testé (test automatisé, ou appel réel sur `test1`).
 3. Les imports ajoutés existent réellement.
 4. Aucune régression : suites complètes, **ensemble** des échecs comparé à l'avant.
-5. Parts de checklist des fragments touchés, **relues et cochées** : `10_python.md`,
-   `10_typescript.md`, `10_postgresql.md`, `20_tests.md`, `20_commentaires.md`, `20_secrets.md`
-   — et selon le cas `20_contrats.md`, `20_oidc.md`, `20_observabilite.md`, `20_deploiement.md`. Crypto : aller-retour chiffrer → déchiffrer. Migration : base vierge
+5. Parts de checklist des fragments touchés, **relues et cochées** : « Python »,
+   « TypeScript / frontend », « PostgreSQL », « Tests », « Commentaires de code », « Secrets »
+   — et selon le cas « Contrats d'interface… », « Authentification OIDC », « Observabilité… »,
+   « Déploiement ». Crypto : aller-retour chiffrer → déchiffrer. Migration : base vierge
    ET base existante. Front : la page charge sans erreur console.
 6. Aucun secret dans le diff — `git diff` relu sous cet angle.
 7. **Les tests passent, là où ils sont le plus révélateurs** — sur `test1` dès qu'elle peut
@@ -326,13 +328,10 @@ Périmètre à citer : docflow « Périmètre — ce que fait Harpocrate ». Blo
 `ia_instructions/00_tchat.md`.
 
 ## Écarts connus avec les standards — non tranchés
-
-Constatés le 2026-09-23 et détaillés dans les fragments (sections « Écarts ») : OIDC
-(`20_oidc.md`), config et mypy (`10_python.md`), runner de migrations (`10_postgresql.md`),
-`dev-deploy.sh` (`20_deploiement.md`). **Ne pas les propager dans du code neuf, ne pas les
-« corriger » au passage** : chacun relève d'une tâche dédiée validée par l'utilisateur.
-Les « Règles … Python (héritées de LandGraph) » (section docflow « Archives ») viennent d'un
-autre projet : ne pas les appliquer.
+Détaillés dans les fragments (sections « Écarts ») : OIDC, config et mypy (« Python »), runner de
+migrations (« PostgreSQL »), `dev-deploy.sh` (« Déploiement »). **Ne pas les propager ni les
+« corriger » au passage** : tâche dédiée validée par l'utilisateur. Les règles « héritées de
+LandGraph » (section docflow « Archives ») ne s'appliquent pas.
 
 ## Auto-amélioration
 Quand tu fais une erreur ou que l'utilisateur te corrige :

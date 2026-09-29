@@ -6,12 +6,12 @@
 > projet ag-flow).
 
 > Généré depuis les standards globaux (docflow, workspace `globals`, bloc `documentation`).
-> Génération : 2026-09-23. Standards repris :
-> STANDARD — Fichier d'instructions agent de projet : principes, invariants et recette de génération — 2026-09-21
+> Génération : 2026-09-23. Mise à jour `--update` : 2026-09-29. Standards repris :
+> STANDARD — Fichier d'instructions agent de projet : principes, invariants et recette de génération — 2026-09-26 (v42)
 > Fichier d'instructions — spécificités Python — 2026-09-02
 > Fichier d'instructions — spécificités TypeScript / frontend — 2026-09-02
 > Fichier d'instructions — spécificités PostgreSQL — 2026-09-02
-> Fichier d'instructions — Tests (agnostique) — 2026-09-02
+> Fichier d'instructions — Tests (agnostique) — 2026-09-25
 > Fichier d'instructions — Observabilité et logs (agnostique) — 2026-09-02
 > Fichier d'instructions — Contrats d'interface et documentation (agnostique) — 2026-09-09
 > Fichier d'instructions — Commentaires de code (agnostique) — 2026-09-06
@@ -20,7 +20,7 @@
 > Fichier d'instructions — spécificités Authentification OIDC — 2026-09-02
 > Fichier d'instructions — Script de déploiement sur machine de test (agnostique) — 2026-09-11
 > Fichier d'instructions — Déclarer un service exposé au portail (annuaire, code TOTP) — 2026-09-16
-> Déploiement et machines de test — leçons d'incidents réels — 2026-09-06
+> Déploiement et machines de test — leçons d'incidents réels — 2026-09-25
 > Travail d'agent — leçons d'erreurs réelles — 2026-09-02
 > STANDARD — Sécurité : secrets et coffres Harpocrate (modèle, IHM, résolution) — 2026-09-20
 > STANDARD — Authentification OIDC & liaison d'identité — 2026-09-15
@@ -40,52 +40,12 @@ Tu es connecté au MCP du portail devpod (`dev.yoops.org`) via le serveur `claud
 (déclaré dans `.mcp.json`, non versionné).
 
 ## Backlog
-La gateway MCP expose une API vers docflow (workspaces ⊃ blocs ⊃ documents).
-Le backlog des tâches à exécuter est dans le workspace `harpocrate`, bloc `backlog`.
-
-**Avant de commencer, découvre les statuts réels.** Les valeurs de statut dépendent du
-type de ticket et diffèrent d'un type à l'autre. Introspecte le bloc pour connaître, pour
-chaque type présent, la valeur qui joue chacun de ces rôles :
-- **disponible** — la tâche peut être prise ;
-- **en cours** — tu travailles dessus ;
-- **en revue** — tu as fini, elle attend une revue humaine ;
-- **terminée** — elle est close ;
-- **en attente** — elle attend une réponse de l'utilisateur (ce rôle peut ne pas exister).
-N'écris JAMAIS une valeur de statut de mémoire : une valeur inexistante est refusée, et un
-statut approximatif choisi au jugé fausse l'état du backlog pour tout le monde.
-
-Quand on te demande de traiter le backlog :
-- ne retiens que les tâches au rôle **disponible** — ni en cours, ni en revue, ni
-  terminées, ni en attente ;
-- **AVANT de toucher au code**, passe la tâche au rôle **en cours** ;
-- **quand tu as fini**, passe-la au rôle **en revue**.
-Ces deux écritures ne sont pas optionnelles : c'est ce qui dit aux autres — humains et
-agents — qu'une tâche est prise, et ce qui permet de reprendre après une interruption.
-
-**Le backlog est la source de vérité, jamais ta mémoire.** Ne tiens pas la liste des tâches
-restantes dans ta tête : elle s'éloigne à mesure que ton contexte se remplit, et tu
-t'arrêteras en croyant avoir fini. Après CHAQUE tâche, réinterroge le backlog et reprends
-la suivante.
-
-**Le statut s'écrit à chaque tâche, pas à la fin du lot.** Une session interrompue doit
-pouvoir reprendre sur la seule lecture du backlog.
-
-**Une tâche dont un prédécesseur n'est pas terminé n'est pas éligible.** Vérifie les
-prédécesseurs déclarés avant de prendre une tâche, et prends la suivante éligible.
-
-**Une question ne bloque pas la file.** Si une tâche soulève un vrai doute : écris la
-question en tête de la tâche, puis passe-la au rôle **en attente** s'il existe. S'il
-n'existe pas, laisse-la dans son état et signale-la explicitement à la fin du lot. Dans
-les deux cas, CONTINUE avec la suivante. Ne gèle jamais le lot entier sur un doute isolé.
-
-**Tu ne t'arrêtes que pour une de ces quatre raisons, et tu la nommes :**
-1. plus aucune tâche éligible — le lot est fini ;
-2. toutes les tâches restantes attendent une réponse de l'utilisateur ;
-3. toutes les tâches restantes ont un prédécesseur non terminé ;
-4. quelque chose a échoué — dis quoi.
-
-Si tu t'apprêtes à conclure sans pouvoir citer l'une des quatre, c'est que tu t'arrêtes par
-oubli : réinterroge le backlog et continue.
+Le backlog est dans le workspace docflow `harpocrate`, bloc `backlog`. **Avant de prendre, de
+passer en cours ou de clore une tâche**, lis `ia_instructions/00_backlog.md` (bloc intégral).
+Invariants : statuts découverts par introspection, jamais écrits de mémoire ; une tâche passe
+« en cours » AVANT de toucher au code et « en revue » à la fin ; le backlog fait foi, pas ta
+mémoire ; une question ne bloque pas la file ; on ne s'arrête que pour l'une des quatre raisons
+nommées.
 
 ## Recherche — le RAG d'abord
 
@@ -128,46 +88,41 @@ Rendre un identifiant brut, un chemin approximatif ou un « je ne peux pas savoi
 l'artefact est joignable, c'est renvoyer le travail à l'utilisateur. Chercher d'abord,
 répondre ensuite — et si la recherche échoue vraiment, dire ce qui a été tenté.
 
-> Depuis le 2026-09-24, le bloc docflow `harpocrate › documentation` est poussé automatiquement
-> vers `harpocrate-docs` (création, modification, suppression). Il porte les spécifications, les
-> plans, l'exploitation, les audits et les fragments d'instructions — **plus aucun de ces
-> documents ne vit dans le dépôt** : un `grep` local ne les trouvera pas.
->
-> **Repli propre à ce projet** quand `harpocrate-docs` ne répond pas : recherche plein texte
-> docflow `doc__search_documents(q)` (résultats filtrés sur `workspace_slug = "harpocrate"`),
-> puis lecture intégrale par `doc__get_document`. Les outils locaux ne couvrent que le code.
->
-> **État au 2026-09-24 : `harpocrate-docs` est vide** — un bug d'indexation des nouveaux
-> documents côté ragflow est en cours de correction. En attendant, seuls les corpus déjà
-> indexés (`globals-docs`, voisins) répondent ; pour ce projet, passer directement par le repli
-> ci-dessus. Retirer ce paragraphe dès que l'index compte les documents du bloc.
+> Le bloc docflow `harpocrate › documentation` est poussé automatiquement vers `harpocrate-docs`.
+> Il porte les spécifications, les plans, l'exploitation et les audits — **ils ne vivent plus dans
+> le dépôt** : un `grep` local ne les trouvera pas. Repli propre à ce projet quand le RAG ne
+> répond pas : `doc__search_documents(q)` (filtré sur le workspace `harpocrate`) puis
+> `doc__get_document`. Les fragments d'instructions, eux, sont dans le dépôt (`ia_instructions/`).
 
 ## Quand charger un fragment
 
 Ces fichiers ne sont PAS chargés d'office. Chacun a son déclencheur : quand il se produit,
 lire le fichier AVANT d'écrire quoi que ce soit — pas après, pas « si ça semble utile ».
 
-Les fragments sont des documents docflow (workspace `harpocrate`, bloc `documentation`,
-section « Instructions agent — fragments par technologie ») : les lire par
-`doc__get_document(workspace_slug="harpocrate", doc_id=<id ci-dessous>)` — la version
-courante, pas un extrait RAG. Si le MCP est indisponible, **s'arrêter et le signaler** :
-ne jamais travailler sans le fragment déclenché.
-
 | Tu t'apprêtes à… | Lis d'abord |
 |---|---|
-| modifier un fichier `.py` (backend, `sdk-python/`) | « Fragment — Python » `ea520edf-962d-4edc-80e2-0ae049b86a2f` |
-| modifier un fichier sous `frontend/` | « Fragment — TypeScript / frontend » `cdd2fc80-7a46-4a47-bf96-fba21ecaf0bf` |
-| écrire ou modifier une migration, une requête SQL, ou un fichier de `backend/app/db/` | « Fragment — PostgreSQL » `ac055cea-6cf6-48f4-8d1d-42bde70a502a` |
-| écrire ou modifier un test, ou corriger un bug | « Fragment — Tests » `9d52c6ae-9eb0-415c-8fec-711821fee6c6` |
-| écrire ou modifier du code (`.py`, `.ts`, `.tsx`, `.sh`, `.sql`) | « Fragment — Commentaires de code » `186e11e6-9d6a-45b2-807a-26142f8c4f44` |
-| ajouter ou modifier un appel de log, un middleware HTTP, `infra/alloy-agent/` | « Fragment — Observabilité et logs » `275b86e4-51d5-4a23-8ca4-cd9de560f58b` |
-| modifier une route `backend/app/api/`, un DTO `models/api/`, un SDK, `cli-bash/`, `docs/vault.md`, le protocole MQTT, un webhook | « Fragment — Contrats d'interface et documentation » `68799bc2-3e9c-4394-a2ed-c99aecad1f9c` |
-| toucher à une valeur sensible, `.env.example`, `core/config.py`, `core/api_key_*`, un Dockerfile ou un compose | « Fragment — Secrets » `7e889340-cdc6-441c-a60c-bbbe65a64404` |
-| modifier l'authentification (`core/security.py`, `admin_auth.py`, `api/v1/auth*.py`, `identity_*`, `frontend/src/lib/oidc.ts`) | « Fragment — Authentification OIDC » `22284d2d-a1d5-41c0-a3cc-c87bcf3208e3` |
-| modifier `dev-deploy.sh`, `scripts/`, un compose, `nginx.conf` — ou déployer / diagnostiquer sur `test1` | « Fragment — Déploiement » `126aa026-b42c-4681-be49-844a66739bcf` |
-| introduire une abstraction (classe de base, factory, stratégie, bus…) ou proposer un refactor structurel | « Fragment — Patrons de conception » `a9a5f018-d256-4492-b247-ee3af806d76b` |
+| prendre, passer en cours ou clore une tâche du backlog | `ia_instructions/00_backlog.md` |
+| ouvrir la session, voir `[TCHAT] nouveau message`, appeler ou répondre à un agent | `ia_instructions/00_tchat.md` |
+| committer ou pousser pour livrer, déployer ou tester sur une machine de test, ou recevoir / rendre une ressource | `ia_instructions/00_machines_et_livraison.md` et `ia_instructions/tests_and_ressources.md` |
+| modifier un fichier `.py` (backend, `sdk-python/`) | `ia_instructions/10_python.md` |
+| modifier un fichier sous `frontend/` | `ia_instructions/10_typescript.md` |
+| écrire ou modifier une migration, une requête SQL, ou un fichier de `backend/app/db/` | `ia_instructions/10_postgresql.md` |
+| écrire ou modifier un test, ou corriger un bug | `ia_instructions/20_tests.md` |
+| écrire ou modifier du code (`.py`, `.ts`, `.tsx`, `.sh`, `.sql`) | `ia_instructions/20_commentaires.md` |
+| ajouter ou modifier un appel de log, un middleware HTTP, `infra/alloy-agent/` | `ia_instructions/20_observabilite.md` |
+| modifier une route `backend/app/api/`, un DTO `models/api/`, un SDK, `cli-bash/`, `docs/vault.md`, le protocole MQTT, un webhook | `ia_instructions/20_contrats.md` |
+| toucher à une valeur sensible, `.env.example`, `core/config.py`, `core/api_key_*`, un Dockerfile ou un compose | `ia_instructions/20_secrets.md` |
+| modifier l'authentification (`core/security.py`, `admin_auth.py`, `api/v1/auth*.py`, `identity_*`, `frontend/src/lib/oidc.ts`) | `ia_instructions/20_oidc.md` |
+| modifier `dev-deploy.sh`, `scripts/`, un compose, `nginx.conf` — ou déployer / diagnostiquer sur `test1` | `ia_instructions/20_deploiement.md` |
+| introduire une abstraction (classe de base, factory, stratégie, bus…) ou proposer un refactor structurel | `ia_instructions/30_patrons.md` |
 
 Un fragment introuvable se **signale** ; on ne devine pas ce qu'il contenait.
+
+> **Remise en forme (quota, 2026-09-29)** — toutes règles appliquées, ce fichier dépassait
+> ~350 lignes. Les blocs invariants « Backlog », « Tchat agents », « Machines de test » et
+> « Livrer sur une machine de test » sont ici **en synthèse** ; leur texte intégral, au mot près,
+> est dans `ia_instructions/00_*.md`. Ne pas les remettre en clair : c'est voulu (règle du
+> standard, le plafond ne se relève pas).
 
 ## Standard de qualité
 Code propre et bien fait, jamais la rapidité au détriment de la rigueur. Pas de raccourcis,
@@ -259,6 +214,7 @@ sdk-python/         SDK officiel (PyPI `harpocrate`, 0.7.0) · sdk-{typescript,j
 cli-bash/           harpocrate-cli + harpocrate-gen
 infra/              patroni/ etcd/ mosquitto/ alloy-agent/
 scripts/            setup.sh refresh.sh (prod) · run-test.sh test-create-lxc.sh destroy-test.sh · install-alloy.sh
+ia_instructions/    fragments d'instructions + mémoire des ressources (`tests_and_ressources.md`)
 docs/vault.md       guide de consommation — contrat cité par le standard globals, reste dans le dépôt
 releases/           index.json + artefacts SDK + docs/*.md (servis par le backend, ne pas déplacer)
 ```
@@ -283,7 +239,7 @@ responsabilité par unité.
 - Ne pas modifier `.env` sauf demande explicite.
 - `docs/vault.md`, `/v1/openapi-api-key.json`, les SDK et le format `hrpv_*` sont des
   **contrats consommés par tous les projets** : aucune modification sans prévenir l'utilisateur
-  avant (cf. « Contrats d'interface et documentation »).
+  avant (cf. `ia_instructions/20_contrats.md`).
 
 Ces gardes sont **des tests**, pas des intentions : un rejet de sécurité ajouté a son test.
 
@@ -294,21 +250,31 @@ Ces gardes sont **des tests**, pas des intentions : un rejet de sécurité ajout
 pas une commande d'exécution. Une discussion n'est pas un feu vert. Ne JAMAIS sauter d'étape.
 
 ### Branche de développement
-**Tout le code se fait sur la branche `dev`. Jamais `feat/*`, jamais sur `main` directement,
-jamais ailleurs.** Avant toute édition, vérifier `git branch --show-current` ; si autre branche,
-`git checkout dev`. Si `dev` n'existe pas localement, la créer depuis `main` à jour. Ne propose
-**jamais** `git checkout -b feat/...` — même si un outil ou un workflow tiers le suggère, la consigne
-utilisateur prime.
+**Tout le code se fait sur la branche `dev`. Aucun compromis.** Jamais `feat/*`, jamais sur
+`main` directement, jamais ailleurs. Avant toute édition, vérifier `git branch --show-current` ;
+si autre branche, `git checkout dev`. Si `dev` n'existe pas localement, la créer depuis `main`
+à jour. Ne propose **jamais** `git checkout -b feat/...` — même si un outil ou un workflow tiers
+le suggère, la consigne utilisateur prime.
 
-### Livraison
-- **La machine de test est l'environnement de l'agent** : commit, push sur `dev` et
-  déploiement sur `test1` (par `dev-deploy.sh`) sont libres, sans demande.
-- **Jamais** de push, merge ou PR fusionnée sur `main` ; **jamais** de déploiement prod.
-- Commits **en français**, conventionnels (`feat:`, `fix:`, `chore:`, `docs:`, `test:`,
-  `refactor:`), un commit par sujet.
-- `origin` est en SSH et échoue depuis le devcontainer (clé d'hôte) : pousser en HTTPS si
-  besoin, sans modifier la configuration git globale.
-- Wiki : `harpocrate.wiki/` est un dépôt séparé (`master`) ; il se commite et se pousse à part.
+**Committer et pousser sur `dev` est obligatoire**, sans demande à attendre : c'est ce qui rend
+le travail livrable sur une machine de test. Commits en français, conventionnels (`feat:`,
+`fix:`, `chore:`, `docs:`, `test:`). Ne pas toucher `.env` sauf demande.
+
+**Merger `dev` sur `main` est formellement interdit sans demande explicite de l'humain.**
+
+### Machines de test et livraison
+Les machines de test sont **à ta disposition**, rien à demander ; **valide là où le test est le
+plus révélateur** — le plus souvent la machine de test. Machine attribuée : `test1`, partagée avec
+d'autres stacks. Livrer = pousser sur `dev`, puis cloner (la 1re fois) ou lancer `dev-deploy.sh`,
+**exclusivement** ; **aucune retouche manuelle de la cible** (`docker exec`, édition à la main…) :
+tout correctif va dans le script de déploiement. Consigne chaque ressource attribuée ou reprise
+dans `ia_instructions/tests_and_ressources.md`. Texte intégral : `ia_instructions/00_machines_et_livraison.md`.
+Prod (`scripts/setup.sh`, `refresh.sh`) : jamais l'agent. Wiki `harpocrate.wiki/` : dépôt séparé
+(`master`), commité et poussé à part.
+
+### Définition de « terminé »
+**Une tâche est finie quand les tests passent.** Pas quand le code compile, pas quand il est
+poussé. Tant qu'un test échoue, la tâche n'est pas finie et ne passe pas au rôle « en revue ».
 
 ### Discipline d'exécution
 - Exécute directement, ne décris pas ce que tu vas faire — fais-le.
@@ -328,12 +294,13 @@ d'utiliser une bibliothèque ; un écart spec ↔ code se **signale**, il ne se 
 2. Le cas nominal est testé (test automatisé, ou appel réel sur `test1`).
 3. Les imports ajoutés existent réellement.
 4. Aucune régression : suites complètes, **ensemble** des échecs comparé à l'avant.
-5. Parts de checklist des fragments touchés, **relues et cochées** : « Python »,
-   « TypeScript / frontend », « PostgreSQL », « Tests », « Commentaires de code »,
-   « Secrets » — et selon le cas « Contrats d'interface et documentation », « Authentification OIDC », « Observabilité et logs »,
-   « Déploiement ». Crypto : aller-retour chiffrer → déchiffrer. Migration : base vierge
+5. Parts de checklist des fragments touchés, **relues et cochées** : `10_python.md`,
+   `10_typescript.md`, `10_postgresql.md`, `20_tests.md`, `20_commentaires.md`, `20_secrets.md`
+   — et selon le cas `20_contrats.md`, `20_oidc.md`, `20_observabilite.md`, `20_deploiement.md`. Crypto : aller-retour chiffrer → déchiffrer. Migration : base vierge
    ET base existante. Front : la page charge sans erreur console.
 6. Aucun secret dans le diff — `git diff` relu sous cet angle.
+7. **Les tests passent, là où ils sont le plus révélateurs** — sur `test1` dès qu'elle peut
+   révéler davantage que le local ; c'est ce qui rend la tâche terminée.
 
 Ce qui n'a pas pu être vérifié (outil absent, tests skippés) se **dit** dans le compte rendu.
 
@@ -348,18 +315,21 @@ Ce qui n'a pas pu être vérifié (outil absent, tests skippés) se **dit** dans
 | Revue | > 3 fichiers ou > 100 lignes | `/code-review` ; `/security-review` si crypto, auth ou secrets |
 | Commit | sur la branche `dev` | à la main, au format ci-dessus (pas de `/commit` ici) |
 
-## Messagerie inter-agents
-
-`message_send` (MCP devpod) est **fire-and-forget** : consigner dans le compte rendu l'id,
-le destinataire, l'attendu et l'impact ; **jamais de polling** sur `message_status` ; la
-réponse arrive injectée par l'utilisateur ; signaler explicitement en fin de tour toute tâche
-bloquée sur une réponse.
+## Tchat agents
+Coordination multi-agents par conversations (tools `tchat_*`), adossée à Zulip. **En début de
+session, inscris-toi** : `agent_register(session="harpocrate", command="claude")` (identité
+`admin-harpocrate.harpocrate`) — s'il manque à ta liste d'outils, c'est le cache client :
+vérifier côté serveur, jamais `session_open`. Notification par le marqueur stdin
+`[TCHAT] nouveau message`, **jamais de polling** ; fire-and-forget ; `tchat_get_conversations`
+en début de session et avant de rendre la main ; le fil ne porte que des **références docflow**.
+Périmètre à citer : docflow « Périmètre — ce que fait Harpocrate ». Bloc intégral :
+`ia_instructions/00_tchat.md`.
 
 ## Écarts connus avec les standards — non tranchés
 
 Constatés le 2026-09-23 et détaillés dans les fragments (sections « Écarts ») : OIDC
-(« Authentification OIDC »), config et mypy (« Python »), runner de migrations (« PostgreSQL »),
-`dev-deploy.sh` (« Déploiement »). **Ne pas les propager dans du code neuf, ne pas les
+(`20_oidc.md`), config et mypy (`10_python.md`), runner de migrations (`10_postgresql.md`),
+`dev-deploy.sh` (`20_deploiement.md`). **Ne pas les propager dans du code neuf, ne pas les
 « corriger » au passage** : chacun relève d'une tâche dédiée validée par l'utilisateur.
 Les « Règles … Python (héritées de LandGraph) » (section docflow « Archives ») viennent d'un
 autre projet : ne pas les appliquer.

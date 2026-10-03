@@ -28,6 +28,11 @@
   dans `/root/harpocrate-test-passphrase` (600). Ne jamais afficher ces valeurs : les lire sur la machine.
 - Script de validation UI réutilisable : `/root/harpocrate-ui-check.py` (pilote `browserless` sur
   `127.0.0.1:3000`, sans jeton ; clics par le DOM, les contrôles Mantine n'étant pas cliquables par Puppeteer).
+- Recette « Se connecter avec Harpocrate » (2026-10-03) : `/root/harpocrate-connect-check.py` (API, exécuté DANS
+  `harpocrate-backend` : `docker cp` puis `docker exec … python`, identifiants lus dans l'environnement du conteneur ;
+  laisse une application `recette-*` désactivée dans le registre) et `/root/harpocrate-connect-ui-check.py`
+  (navigateur, `/connect`). La Keycloak configurée sur l'instance (`keycloak.yoops.org`, realm `yoops`) refuse l'origine
+  `https://192.168.10.179:8443` (CORS) : le parcours complet demande un client Keycloak public valide pour cette origine.
 - **Base jetable de tests d'intégration** : conteneur `harpocrate-testdb` (`postgres:16-alpine`,
   labels `projet=harpocrate`, `usage=tests-jetables`), `127.0.0.1:55433`, utilisateur `harpo` ; bases
   `harpocrate_test`, `harpocrate_existing`, `harpocrate_blank`, `harpocrate_032`. Accès depuis le

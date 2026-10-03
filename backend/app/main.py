@@ -37,6 +37,7 @@ from app.api.v1 import (
     auth_recovery,
     config_keycloak,
     config_public,
+    connect,
     grants,
     health,
     identity_management,
@@ -50,6 +51,7 @@ from app.api.v1 import (
 from app.core.cluster_sync import get_cluster_sync, init_cluster_sync
 from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
+from app.core.log_redaction import loggable_path
 from app.core.logging import configure_logging, logger
 from app.db.pool import close_pool, get_pool, init_pool
 from app.db.repositories import recovery_sessions as recovery_repo
@@ -299,7 +301,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
     logger.info(
         "http_request",
         method=request.method,
-        path=path,
+        path=loggable_path(path),
         status=response.status_code,
         body_logged=body_logged,
     )
@@ -339,6 +341,7 @@ app.include_router(admin_system.router, prefix="/v1")
 app.include_router(admin_users.router, prefix="/v1")
 app.include_router(admin_anomalies.router, prefix="/v1")
 app.include_router(admin_connect_clients.router, prefix="/v1")
+app.include_router(connect.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")

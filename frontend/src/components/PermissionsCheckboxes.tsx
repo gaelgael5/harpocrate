@@ -3,29 +3,13 @@
  */
 import { Checkbox, Stack } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import {
-  PERM_READ,
-  PERM_ADD,
-  PERM_INIT,
-  PERM_WRITE,
-  PERM_REMOVE,
-  PERM_SHARE,
-} from "@/schemas/grants";
+import { PERMISSION_KEYS } from "@/schemas/grants";
 
 interface Props {
   value: number;
   onChange: (v: number) => void;
   disabled?: boolean;
 }
-
-const PERMS = [
-  { bit: PERM_READ, key: "read" },
-  { bit: PERM_ADD, key: "add" },
-  { bit: PERM_INIT, key: "init" },
-  { bit: PERM_WRITE, key: "write" },
-  { bit: PERM_REMOVE, key: "remove" },
-  { bit: PERM_SHARE, key: "share" },
-] as const;
 
 export function PermissionsCheckboxes({ value, onChange, disabled }: Props) {
   const { t } = useTranslation();
@@ -36,7 +20,7 @@ export function PermissionsCheckboxes({ value, onChange, disabled }: Props) {
 
   return (
     <Stack gap="xs">
-      {PERMS.map(({ bit, key }) => (
+      {PERMISSION_KEYS.map(({ bit, key }) => (
         <Checkbox
           key={key}
           label={t(`permissions.${key}`)}

@@ -23,6 +23,7 @@ import asyncpg.exceptions
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
+from app.core.log_redaction import loggable_path
 from app.core.logging import logger
 
 # Exceptions signifiant "Postgres temporairement injoignable" — pas un bug
@@ -61,7 +62,7 @@ async def db_availability_middleware(
             raise
         logger.warning(
             "db_unavailable_during_request",
-            path=request.url.path,
+            path=loggable_path(request.url.path),
             method=request.method,
             error_type=type(actual).__name__,
             error=str(actual)[:200],

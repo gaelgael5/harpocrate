@@ -17,6 +17,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 from app.core.cluster_state import cluster_state
+from app.core.log_redaction import loggable_path
 from app.core.logging import logger
 from app.db.pool import get_pool
 
@@ -85,7 +86,7 @@ async def cluster_coherence_middleware(
             "node_epoch_incoherent_request_rejected",
             ram_epoch=cluster_state.session_epoch,
             db_epoch=db_epoch,
-            path=path,
+            path=loggable_path(path),
         )
         return JSONResponse(
             status_code=503,

@@ -1462,6 +1462,26 @@
       }
     ]
   },
+  "connect": {
+    "title": "Demande d'accès à un coffre",
+    "returnTo": "Vous serez ensuite renvoyé vers {{host}}.",
+    "requestedPermissions": "Permissions demandées",
+    "requestedTtlDays_one": "Durée demandée : {{count}} jour",
+    "requestedTtlDays_other": "Durée demandée : {{count}} jours",
+    "requestedTtlNone": "Durée demandée : sans expiration",
+    "invalidTitle": "Lien de connexion invalide",
+    "invalidMessage": "Ce lien est incomplet ou mal formé. Relancez la connexion depuis l'application.",
+    "unavailableTitle": "Connexion automatique indisponible",
+    "unavailableMessage": "Cette instance de Harpocrate n'a pas de fournisseur d'identité (Keycloak) : la connexion automatique d'une application n'est pas possible. Créez l'API key à la main depuis la page « API keys » du coffre, puis saisissez-la dans l'application.",
+    "errorTitle": "Demande impossible à traiter",
+    "errors": {
+      "request_not_found": "Cette demande est introuvable ou ne vous est pas destinée. Relancez la connexion depuis l'application.",
+      "request_expired": "Cette demande a expiré (15 minutes). Relancez la connexion depuis l'application.",
+      "request_not_pending": "Cette demande a déjà reçu une réponse.",
+      "local_admin_not_allowed": "Le compte administrateur de secours ne peut pas connecter une application. Connectez-vous avec votre compte personnel.",
+      "generic": "Une erreur est survenue. Réessayez dans un instant."
+    }
+  },
   "footer": {
     "rgpd": "RGPD",
     "cgu": "CGU"

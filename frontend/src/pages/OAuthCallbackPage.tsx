@@ -1,10 +1,12 @@
 /**
- * OAuth2 callback page — processes the OIDC redirect and routes to /login.
+ * OAuth2 callback page — processes the OIDC redirect and routes to /login,
+ * or back to a pending /connect request.
  */
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Center, Loader, Text, Stack } from "@mantine/core";
 import { useTranslation } from "react-i18next";
+import { peekConnectResume } from "@/lib/connectResume";
 import { handleCallback } from "@/lib/oidc";
 
 export function OAuthCallbackPage() {
@@ -18,8 +20,10 @@ export function OAuthCallbackPage() {
       try {
         await handleCallback();
         if (!cancelled) {
-          // Redirect to /login which will re-probe /me and route appropriately
-          navigate("/login", { replace: true });
+          // Demande « Se connecter avec Harpocrate » en cours : on y retourne directement
+          // (la page /connect gère premier login et déverrouillage). Sinon /login, qui
+          // re-sonde /me et oriente.
+          navigate(peekConnectResume() ?? "/login", { replace: true });
         }
       } catch (err) {
         if (!cancelled) {

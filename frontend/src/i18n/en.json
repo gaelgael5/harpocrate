@@ -1461,6 +1461,26 @@
       }
     ]
   },
+  "connect": {
+    "title": "Wallet access request",
+    "returnTo": "You will then be sent back to {{host}}.",
+    "requestedPermissions": "Requested permissions",
+    "requestedTtlDays_one": "Requested duration: {{count}} day",
+    "requestedTtlDays_other": "Requested duration: {{count}} days",
+    "requestedTtlNone": "Requested duration: no expiry",
+    "invalidTitle": "Invalid connection link",
+    "invalidMessage": "This link is incomplete or malformed. Start the connection again from the application.",
+    "unavailableTitle": "Automatic connection unavailable",
+    "unavailableMessage": "This Harpocrate instance has no identity provider (Keycloak): an application cannot be connected automatically. Create the API key manually from the wallet's “API keys” page, then enter it in the application.",
+    "errorTitle": "Request cannot be processed",
+    "errors": {
+      "request_not_found": "This request cannot be found or is not meant for you. Start the connection again from the application.",
+      "request_expired": "This request has expired (15 minutes). Start the connection again from the application.",
+      "request_not_pending": "This request has already been answered.",
+      "local_admin_not_allowed": "The break-glass administrator account cannot connect an application. Sign in with your personal account.",
+      "generic": "Something went wrong. Please try again in a moment."
+    }
+  },
   "footer": {
     "rgpd": "Privacy",
     "cgu": "Terms"

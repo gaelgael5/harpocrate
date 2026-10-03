@@ -80,8 +80,13 @@ def mock_admin_user_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
 
 _REAL_DB_DSN_ENV = "HARPOCRATE_DB_DSN_TEST"
 
+# Référence capturée à l'import, AVANT le stub autouse `patch_asyncpg_create_pool` :
+# `real_db_pool` est désormais de portée « function » et s'exécute donc après ce
+# stub ; sans cette référence il recevrait le faux pool.
+_REAL_CREATE_POOL = asyncpg.create_pool
 
-@pytest_asyncio.fixture(scope="session")
+
+@pytest_asyncio.fixture
 async def real_db_pool() -> AsyncIterator[asyncpg.Pool[asyncpg.Record]]:
     """Pool asyncpg connecté à une vraie DB de test.
 
@@ -89,13 +94,19 @@ async def real_db_pool() -> AsyncIterator[asyncpg.Pool[asyncpg.Record]]:
     Sinon, les tests qui dépendent de ce fixture sont skipés.
     Les tables sont supposées déjà migrées (la migration 001 doit avoir tourné).
     Chaque test doit nettoyer ses données.
+
+    Portée « function », volontairement : un pool asyncpg est lié à la boucle
+    d'événements qui l'a créé, et pytest-asyncio 1.x exécute chaque test dans
+    sa propre boucle. En portée « session », le pool vivait dans une autre
+    boucle que les tests : tous les tests d'intégration échouaient
+    (« attached to a different loop »). Coût accepté : un pool par test.
     """
     dsn = os.environ.get(_REAL_DB_DSN_ENV)
     if not dsn:
         pytest.skip(
             f"{_REAL_DB_DSN_ENV} non défini — tests d'intégration DB skippés"
         )
-    pool: asyncpg.Pool[asyncpg.Record] = await asyncpg.create_pool(
+    pool: asyncpg.Pool[asyncpg.Record] = await _REAL_CREATE_POOL(
         dsn=dsn, min_size=1, max_size=4
     )
     try:

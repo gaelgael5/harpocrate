@@ -34,6 +34,7 @@ import { useCryptoStore } from "@/stores/crypto";
 import { useSessionStore } from "@/stores/session";
 import { BootstrapResponseSchema, MeResponseSchema } from "@/schemas/auth";
 import { RecoveryPhraseDisplay } from "@/components/RecoveryPhraseDisplay";
+import { peekConnectResume } from "@/lib/connectResume";
 
 export function FirstLoginPage() {
   const { t } = useTranslation();
@@ -243,7 +244,8 @@ export function FirstLoginPage() {
         message: t("firstLogin.success"),
       });
 
-      navigate("/", { replace: true });
+      // Premier login arrivé par une demande « Se connecter avec Harpocrate » : on y retourne.
+      navigate(peekConnectResume() ?? "/", { replace: true });
     } catch (err) {
       let msg = String(err);
       if (err instanceof ApiError) msg = err.message;

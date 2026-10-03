@@ -23,6 +23,8 @@ import { useDevMode, DEV_BANNER_HEIGHT } from "@/hooks/useDevMode";
 
 import { LoginPage } from "@/pages/LoginPage";
 import { OAuthCallbackPage } from "@/pages/OAuthCallbackPage";
+import { ConnectPage } from "@/pages/ConnectPage";
+import { ConnectUnavailablePage } from "@/pages/ConnectUnavailablePage";
 import { FirstLoginPage } from "@/pages/FirstLoginPage";
 import { UnlockPage } from "@/pages/UnlockPage";
 import { RecoverStartPage } from "@/pages/RecoverStartPage";
@@ -43,6 +45,7 @@ import { AdminRemoteBackupsPage } from "@/pages/AdminRemoteBackupsPage";
 import { AdminReplicationPage } from "@/pages/AdminReplicationPage";
 import { AdminReplicationNodeDetailPage } from "@/pages/AdminReplicationNodeDetailPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
+import { AdminConnectClientsPage } from "@/pages/AdminConnectClientsPage";
 import { AdminUserDetailPage } from "@/pages/AdminUserDetailPage";
 import { AdminSystemPage } from "@/pages/AdminSystemPage";
 import { AdminSnapshotsPage } from "@/pages/AdminSnapshotsPage";
@@ -142,6 +145,7 @@ export default function App() {
               <Route path="/rgpd" element={<RgpdPage />} />
               <Route path="/cgu" element={<CguPage />} />
             </Route>
+            <Route path="/connect" element={<ConnectUnavailablePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ContentWithBannerOffset>
@@ -175,6 +179,10 @@ export default function App() {
                 <Route path="/recover/start" element={<RecoverStartPage />} />
                 <Route path="/recover/:sessionId" element={<RecoverPage />} />
               </Route>
+
+              {/* Flux « Se connecter avec Harpocrate » : public, gère lui-même
+                  authentification Keycloak et déverrouillage. */}
+              <Route path="/connect" element={<ConnectPage />} />
 
               {/* /integration : sa propre logique (Layout si connecté, sinon page seule) */}
               <Route
@@ -273,6 +281,10 @@ export default function App() {
                 <Route
                   path="/admin/anomalies"
                   element={<AdminAnomaliesPage />}
+                />
+                <Route
+                  path="/admin/connect-clients"
+                  element={<AdminConnectClientsPage />}
                 />
                 <Route path="/export-all" element={<ExportAllPage />} />
                 <Route path="/admin/env" element={<AdminEnvPage />} />

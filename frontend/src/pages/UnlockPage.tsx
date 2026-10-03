@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { notifications } from "@mantine/notifications";
 
 import { api, ApiError } from "@/lib/api-client";
+import { peekConnectResume } from "@/lib/connectResume";
 import { getUserManager } from "@/lib/oidc";
 import { useSessionStore } from "@/stores/session";
 import { deriveKey } from "@/crypto/argon2";
@@ -35,7 +36,7 @@ export function UnlockPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isUnlocked) navigate("/", { replace: true });
+    if (isUnlocked) navigate(peekConnectResume() ?? "/", { replace: true });
   }, [isUnlocked, navigate]);
 
   useEffect(() => {
@@ -90,7 +91,8 @@ export function UnlockPage() {
 
       setUnlocked(rsaPriv, symKey, rsaPub);
       notifications.show({ color: "green", message: t("auth.unlockSuccess") });
-      navigate("/", { replace: true });
+      // Une demande « Se connecter avec Harpocrate » attend ce déverrouillage.
+      navigate(peekConnectResume() ?? "/", { replace: true });
     } catch (err) {
       let msg = t("errors.serverError");
       if (err instanceof ApiError) {

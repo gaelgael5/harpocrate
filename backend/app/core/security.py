@@ -211,3 +211,28 @@ async def _validate_jwt(token: str) -> dict[str, Any]:
 
 # Type alias pour l'injection dans les routes
 JwtUser = Annotated[CurrentUser, Depends(require_jwt_user)]
+
+
+async def require_oidc_user(
+    authorization: Annotated[str | None, Header()] = None,
+) -> CurrentUser:
+    """Dependency FastAPI — comme `require_jwt_user`, mais refuse l'admin local.
+
+    Réservée aux parcours d'usage courant dont le compte de dépannage est exclu
+    (flux « Se connecter avec Harpocrate », décision D10) : seul un JWT Keycloak passe.
+    """
+    user = await require_jwt_user(authorization)
+    # require_jwt_user a validé le jeton : l'en-tête est présent et décodable.
+    token = (authorization or "")[7:]
+    if jwt.get_unverified_header(token).get("alg") != "RS256":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_admin_not_allowed",
+                "message": "This flow requires a Keycloak session",
+            },
+        )
+    return user
+
+
+OidcUser = Annotated[CurrentUser, Depends(require_oidc_user)]

@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, Response
 from app.api.v1 import (
     admin_anomalies,
     admin_backups,
+    admin_connect_clients,
     admin_install_mode,
     admin_maintenance,
     admin_pairing_exec,
@@ -36,6 +37,7 @@ from app.api.v1 import (
     auth_recovery,
     config_keycloak,
     config_public,
+    connect,
     grants,
     health,
     identity_management,
@@ -49,12 +51,13 @@ from app.api.v1 import (
 from app.core.cluster_sync import get_cluster_sync, init_cluster_sync
 from app.core.config import settings
 from app.core.jwks_cache import prefetch_jwks
+from app.core.log_redaction import loggable_path
 from app.core.logging import configure_logging, logger
 from app.db.pool import close_pool, get_pool, init_pool
 from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.middleware.db_availability import db_availability_middleware
-from app.services import local_admin_bootstrap
+from app.services import connect_purge, local_admin_bootstrap
 from app.services import replication as replication_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
 from app.services import seed_types as seed_svc
@@ -195,6 +198,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     recovery_expire_task = asyncio.create_task(_recovery_expire_loop())
 
+    # « Se connecter avec Harpocrate » — demandes échues purgées, clés non livrées révoquées.
+    connect_purge_task = asyncio.create_task(connect_purge.run_purge_loop())
+
     try:
         yield
     finally:
@@ -204,12 +210,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("shutdown_initiated", instance_id=settings.instance_id)
         purge_task.cancel()
         recovery_expire_task.cancel()
+        connect_purge_task.cancel()
         replication_refresh_task.cancel()
         replication_purge_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await purge_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await recovery_expire_task
+        with contextlib.suppress(asyncio.CancelledError):
+            await connect_purge_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await replication_refresh_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -298,7 +307,7 @@ async def log_requests(request: Request, call_next: object) -> Response:
     logger.info(
         "http_request",
         method=request.method,
-        path=path,
+        path=loggable_path(path),
         status=response.status_code,
         body_logged=body_logged,
     )
@@ -337,6 +346,8 @@ app.include_router(admin_secret_types.public_router, prefix="/v1")
 app.include_router(admin_system.router, prefix="/v1")
 app.include_router(admin_users.router, prefix="/v1")
 app.include_router(admin_anomalies.router, prefix="/v1")
+app.include_router(admin_connect_clients.router, prefix="/v1")
+app.include_router(connect.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")

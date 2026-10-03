@@ -200,6 +200,11 @@ export function Layout({ children }: { children?: ReactNode }) {
             />
             <NavLink
               component={RouterNavLink}
+              to="/admin/connect-clients"
+              label={t("admin.nav_connect_clients")}
+            />
+            <NavLink
+              component={RouterNavLink}
               to="/admin/env"
               label={t("admin.nav_env")}
             />

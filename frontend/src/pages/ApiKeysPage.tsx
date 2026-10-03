@@ -44,20 +44,9 @@ import { ApiKeyTokenModal } from "@/components/ApiKeyTokenModal";
 import { PermissionsCheckboxes } from "@/components/PermissionsCheckboxes";
 import { permissionsToBadges } from "@/schemas/apiKeys";
 import { MyGrantResponseSchema } from "@/schemas/grants";
-import { randomBytes, toBase64 } from "@/crypto/helpers";
-import { hashAuthSecret, DEFAULT_KDF_PARAMS } from "@/crypto/argon2";
-import { aesGcmEncrypt } from "@/crypto/aes-gcm";
-import { rsaOaepEncrypt } from "@/crypto/rsa-oaep";
+import { generateApiKeyMaterial } from "@/crypto/api-key-material";
 import { rsaOaepDecrypt } from "@/crypto/rsa-oaep";
 import { useCryptoStore } from "@/stores/crypto";
-
-/** Encode des bytes en base64url sans padding (pour auth_secret, decryption_key). */
-function toBase64Url(bytes: Uint8Array): string {
-  return toBase64(bytes)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
-}
 
 export function ApiKeysPage() {
   const { t } = useTranslation();
@@ -128,36 +117,11 @@ export function ApiKeysPage() {
 
     setIsCreating(true);
     try {
-      // 1. Générés aléatoirement côté client
-      const authSecretBytes = randomBytes(32);
-      const decryptionKeyBytes = randomBytes(32);
-      const authSaltBytes = randomBytes(16);
-
-      // 2. auth_hash = Argon2id PHC string of base64url(auth_secret)
-      // Le backend vérifie avec _ph.verify(phc_string, auth_secret_b64.encode())
-      const authSecretB64Url = toBase64Url(authSecretBytes);
-      const authHashPhc = await hashAuthSecret(
-        authSecretB64Url,
-        authSaltBytes,
-        DEFAULT_KDF_PARAMS,
-      );
-
-      // 3. Récupérer wallet_key
+      // Éléments de la clé (auth_secret, hash, dkey chiffrée…) — crypto/api-key-material.
       const walletKey = await getWalletKey();
+      const material = await generateApiKeyMaterial(walletKey, rsaPublicKey);
 
-      // 4. encrypted_wallet_key = AES-GCM(wallet_key, decryption_key)
-      const encryptedWalletKey = await aesGcmEncrypt(
-        walletKey,
-        decryptionKeyBytes,
-      );
-
-      // 5. encrypted_decryption_key_for_owner = RSA-OAEP(decryption_key, rsa_pub_owner)
-      const encryptedDecryptionKey = await rsaOaepEncrypt(
-        decryptionKeyBytes,
-        rsaPublicKey,
-      );
-
-      // 6. expires_at — valeur 'never' = pas d'expiration, sinon nombre de jours
+      // expires_at — valeur 'never' = pas d'expiration, sinon nombre de jours
       let expiresAt: string | null = null;
       if (expiresInDays !== "never") {
         const days = parseInt(expiresInDays, 10);
@@ -168,20 +132,14 @@ export function ApiKeysPage() {
         }
       }
 
+      // Création manuelle : la dkey part au serveur, qui assemble le token complet.
       const result = await createMutation.mutateAsync({
         name: name.trim(),
         description: description.trim() || null,
         permissions,
         expires_at: expiresAt,
-        auth_secret: authSecretB64Url,
-        auth_hash: btoa(authHashPhc),
-        auth_salt: toBase64(authSaltBytes),
-        auth_kdf_memory_kb: DEFAULT_KDF_PARAMS.memory_kb,
-        auth_kdf_iterations: DEFAULT_KDF_PARAMS.iterations,
-        auth_kdf_parallelism: DEFAULT_KDF_PARAMS.parallelism,
-        encrypted_wallet_key: toBase64(encryptedWalletKey),
-        encrypted_decryption_key_for_owner: toBase64(encryptedDecryptionKey),
-        decryption_key: toBase64Url(decryptionKeyBytes),
+        ...material.body,
+        decryption_key: material.decryptionKey,
       });
 
       setShownToken(result.token);
@@ -366,6 +324,13 @@ export function ApiKeysPage() {
                       <Text size="xs" c="dimmed">
                         {k.description}
                       </Text>
+                    )}
+                    {k.connect_client && (
+                      <Badge size="xs" variant="light" color="grape">
+                        {t("apiKeys.viaApplication", {
+                          name: k.connect_client.name,
+                        })}
+                      </Badge>
                     )}
                   </Table.Td>
                   <Table.Td>

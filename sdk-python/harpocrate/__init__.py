@@ -18,12 +18,14 @@ Modules :
     harpocrate.models     — SecretInfo, PopulateResult, WalletInfo, ApiKeyInfo
     harpocrate.exceptions — toutes les exceptions SDK
     harpocrate.cli        — CLI Click (harpocrate-gen)
+    harpocrate.connect    — assistant « Se connecter avec Harpocrate » (start, finish)
 """
 
 from __future__ import annotations
 
 from harpocrate.client import VaultClient
 from harpocrate.exceptions import (
+    ConnectError,
     GeneratorError,
     HarpocrateError,
     InvalidTokenError,
@@ -35,11 +37,12 @@ from harpocrate.exceptions import (
     VaultHttpError,
 )
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = [
     "VaultClient",
     "HarpocrateError",
+    "ConnectError",
     "InvalidTokenError",
     "TokenExpiredError",
     "PermissionDenied",

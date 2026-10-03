@@ -62,6 +62,16 @@ export const PERM_REMOVE = 16;
 export const PERM_SHARE = 32;
 export const PERM_ALL = 63;
 
+/** Bits de permission dans l'ordre d'affichage, avec leur clé i18n (`permissions.<key>`). */
+export const PERMISSION_KEYS = [
+  { bit: PERM_READ, key: "read" },
+  { bit: PERM_ADD, key: "add" },
+  { bit: PERM_INIT, key: "init" },
+  { bit: PERM_WRITE, key: "write" },
+  { bit: PERM_REMOVE, key: "remove" },
+  { bit: PERM_SHARE, key: "share" },
+] as const;
+
 export function hasPermission(perms: number, bit: number): boolean {
   return (perms & bit) !== 0;
 }

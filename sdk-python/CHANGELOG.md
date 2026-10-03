@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0 — 2026-10-03
+
+### Nouveau — assistant « Se connecter avec Harpocrate » (`harpocrate.connect`)
+
+Une application déclarée dans le registre d'une instance Harpocrate obtient une API key
+sur un wallet choisi par l'utilisateur, sans copier-coller de token, et sans que
+Harpocrate voie jamais la `dkey` de la clé :
+
+- `connect.start(base_url, client_id, redirect_uri, permissions, ttl_days=None)` —
+  génère PKCE S256 et une paire de clés éphémère P-256, dépose la demande (PAR) et rend
+  `(browser_url, ConnectState)` ;
+- `connect.finish(pending, code=..., state=...)` — vérifie le `state` (CSRF), échange le
+  code (une seule fois), ouvre le scellé JWE ECDH-ES / A256GCM avec la clé privée
+  éphémère et rend un `ConnectResult(token, api_key_id, wallet_id)`.
+
+`ConnectState` contient le `code_verifier` et la clé privée éphémère : à garder côté
+serveur entre la redirection et le retour (`to_dict` / `from_dict`), jamais dans un
+cookie lisible ni dans l'URL. Ni `ConnectState` ni `ConnectResult` n'affichent leurs
+secrets dans `repr`.
+
+- `harpocrate.token.with_decryption_key(token, dkey_b64)` — inverse de
+  `truncate_token_for_transport` : réinsère la dkey dans un token signé sans elle.
+- Nouvelle exception `ConnectError` (attribut `error_code`).
+
+### Dépendances
+
+- `joserfc>=1.7` (descellement JWE ; pas de primitive cryptographique maison).
+
 ## 0.7.0 — 2026-05-17
 
 ### Security — split-token client-side

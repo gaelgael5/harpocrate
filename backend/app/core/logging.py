@@ -8,6 +8,7 @@ import sys
 import structlog
 
 from app.core.config import settings
+from app.core.log_redaction import install_access_log_redaction
 
 
 def configure_logging() -> None:
@@ -28,6 +29,9 @@ def configure_logging() -> None:
         wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, settings.log_level)),
         cache_logger_on_first_use=True,
     )
+    # La référence d'une demande de connexion ne doit pas sortir par le journal d'accès
+    # d'uvicorn, qui écrit le chemin brut (cf. app/core/log_redaction.py).
+    install_access_log_redaction()
     # LOT_21A — chaque log de ce process porte l'instance_id du nœud.
     structlog.contextvars.bind_contextvars(instance=settings.instance_id)
 

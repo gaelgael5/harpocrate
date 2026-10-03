@@ -1,6 +1,6 @@
 [project]
 name = "harpocrate"
-version = "0.7.0"
+version = "0.8.0"
 description = "Harpocrate SDK — client Python zero-knowledge pour Vault"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.6",
     "click>=8.1",
     "cachetools>=5.3",
+    "joserfc>=1.7",
 ]
 
 [project.scripts]

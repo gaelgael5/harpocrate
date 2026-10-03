@@ -10,7 +10,8 @@ export interface KdfParams {
   parallelism: number;
 }
 
-// Default parameters matching backend floors (OVERVIEW.md §3) :
+// Default parameters matching backend floors (docflow, article
+// HARPOCRATE_OVERVIEW, section 3) :
 // memory_kb >= 65536, iterations >= 3, parallelism >= 4.
 // Le serveur rejette toute config en dessous des floors (400 kdf_floor_violation).
 export const DEFAULT_KDF_PARAMS: KdfParams = {

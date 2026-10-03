@@ -379,3 +379,23 @@ async def test_sealed_route_rejects_unexpected_jwe_algorithms(
         headers=_bearer(make_jwt_token(sub=_SUB)),
     )
     assert r.status_code == 422
+
+
+def test_uvicorn_access_log_filter_redacts_the_reference() -> None:
+    import logging
+
+    from app.core.log_redaction import AccessLogRedactionFilter
+
+    ref = "urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3A" + "Z" * 43
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:1", "GET", f"/v1/connect/requests/{ref}?client_id=app", "1.1", 403),
+        None,
+    )
+    assert AccessLogRedactionFilter().filter(record) is True
+    assert "Z" * 43 not in record.getMessage()
+    assert "/v1/connect/requests/[redacted]" in record.getMessage()

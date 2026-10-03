@@ -20,7 +20,18 @@
 - Ports libres le 2026-09-23 pour la stack dev : `5432`, `8000`, `8080`, `8443` — **à revérifier
   au moment de chaque déploiement**, jamais tenus pour acquis.
 - Pas de clé GitHub sur la machine : cloner en HTTPS (dépôt public).
-- Harpocrate n'y est **pas encore déployé** (état au 2026-09-29).
+- **Harpocrate déployé** le 2026-10-03 (branche `dev`, `dev-deploy.sh`) : clone `/root/harpocrate`, journal
+  `/root/harpocrate-deploy.log`, UI `https://192.168.10.179:8443` (cert auto-signé), conteneurs
+  `harpocrate-backend|frontend|postgres`, Postgres publié sur `0.0.0.0:5432`.
+- Admin local de l'instance de test : identifiants dans `/root/harpocrate/.env` (**à faire tourner** :
+  le mot de passe a été affiché dans une session le 2026-10-03) ; crypto initialisée, passphrase de test
+  dans `/root/harpocrate-test-passphrase` (600). Ne jamais afficher ces valeurs : les lire sur la machine.
+- Script de validation UI réutilisable : `/root/harpocrate-ui-check.py` (pilote `browserless` sur
+  `127.0.0.1:3000`, sans jeton ; clics par le DOM, les contrôles Mantine n'étant pas cliquables par Puppeteer).
+- **Base jetable de tests d'intégration** : conteneur `harpocrate-testdb` (`postgres:16-alpine`,
+  labels `projet=harpocrate`, `usage=tests-jetables`), `127.0.0.1:55433`, utilisateur `harpo` ; bases
+  `harpocrate_test`, `harpocrate_existing`, `harpocrate_blank`, `harpocrate_032`. Accès depuis le
+  devcontainer par tunnel `ssh -fN -L 127.0.0.1:55433:127.0.0.1:55433 test1`. À supprimer quand il ne sert plus.
 
 ## Autres ressources
 

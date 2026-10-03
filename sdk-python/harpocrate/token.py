@@ -211,3 +211,18 @@ def truncate_token_for_transport(token: str) -> str:
         f"_{_DKEY_PLACEHOLDER}"
         f"_{parsed.hmac_b64}"
     )
+
+
+def with_decryption_key(token: str, dkey_b64: str) -> str:
+    """Réinsère la vraie `dkey` dans un token signé avec le segment de substitution.
+
+    Inverse de `truncate_token_for_transport` : c'est ainsi que l'assistant
+    « Se connecter avec Harpocrate » reconstitue la clé, le serveur l'ayant signée
+    sans jamais voir la dkey. Le HMAC ne couvre pas ce segment ; le token rendu est
+    revalidé par `parse_token` (lève `InvalidTokenError` si la dkey est mal formée).
+    """
+    truncated = truncate_token_for_transport(token)
+    tail = len(_DKEY_PLACEHOLDER) + 1 + _HMAC_LEN
+    rebuilt = f"{truncated[:-tail]}{dkey_b64}{truncated[-(_HMAC_LEN + 1):]}"
+    parse_token(rebuilt)
+    return rebuilt

@@ -67,3 +67,11 @@ class SecretRefreshFailed(HarpocrateError):
         super().__init__(f"Failed to refresh secret '{secret_name}': {reason}")
         self.secret_name = secret_name
         self.reason = reason
+
+
+class ConnectError(HarpocrateError):
+    """Échec du parcours « Se connecter avec Harpocrate » (refus, code invalide, scellé)."""
+
+    def __init__(self, error_code: str, message: str = "") -> None:
+        super().__init__(message or error_code)
+        self.error_code = error_code

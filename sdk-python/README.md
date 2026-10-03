@@ -87,6 +87,35 @@ new_value = client.secrets.get("anthropic_api_key", force_refresh=True)
 
 - `SecretRefreshFailed` : le refresh a échoué (secret supprimé, API key révoquée)
 
+## Se connecter avec Harpocrate (≥ 0.8.0)
+
+Pour qu'une application obtienne une API key sans copier-coller : l'application doit
+être déclarée par un admin Harpocrate (registre des applications, URL de retour exacte).
+
+```python
+from harpocrate import connect
+
+# Backend de l'application, au clic sur « Connecter » :
+browser_url, pending = connect.start(
+    base_url="https://vault.example",
+    client_id="ragflow",
+    redirect_uri="https://rag.example/harpocrate/callback",
+    permissions=0x01,  # read
+    ttl_days=90,
+)
+session["harpocrate_connect"] = pending.to_dict()  # côté serveur uniquement
+# → rediriger le navigateur vers browser_url
+
+# Sur redirect_uri :
+if "error" in request.args:  # access_denied : l'utilisateur a refusé
+    ...
+pending = connect.ConnectState.from_dict(session.pop("harpocrate_connect"))
+result = connect.finish(pending, code=request.args["code"], state=request.args["state"])
+# result.token : API key complète, à chiffrer au repos ; result.wallet_id, result.api_key_id
+```
+
+Le code de retour vaut 60 s et ne s'échange qu'une fois ; la demande vaut 15 min.
+
 ## CLI harpocrate-gen
 
 ```bash

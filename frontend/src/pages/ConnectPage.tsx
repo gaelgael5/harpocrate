@@ -13,8 +13,13 @@ import { Center, Loader } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 
 import { ConnectStatusCard } from "@/components/ConnectStatusCard";
+import { ConnectConsentForm } from "@/components/ConnectConsentForm";
 import { ConnectRequestPanel } from "@/components/ConnectRequestPanel";
-import { useConnectRequest } from "@/hooks/useConnectFlow";
+import {
+  useApproveConnect,
+  useConnectRequest,
+  useDenyConnect,
+} from "@/hooks/useConnectFlow";
 import { useLocalLoginAvailable } from "@/hooks/useLocalLoginAvailable";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -27,6 +32,33 @@ import { ConnectUnavailablePage } from "@/pages/ConnectUnavailablePage";
 import { useCryptoStore } from "@/stores/crypto";
 
 type AuthState = "checking" | "redirecting" | "authenticated";
+
+/** Erreurs expliquées à l'utilisateur ; les autres reçoivent un message générique. */
+const KNOWN_ERRORS = new Set([
+  "request_not_found",
+  "request_expired",
+  "request_not_pending",
+  "local_admin_not_allowed",
+  "permissions_exceed_request",
+  "ttl_exceeds_request",
+  "wallet_not_found",
+  "missing_share_permission",
+  "api_key_already_created",
+  "unexpected_redirect",
+  "crypto_locked",
+]);
+
+function errorKey(err: unknown): string {
+  const code =
+    err instanceof ApiError
+      ? err.code
+      : err instanceof Error
+        ? err.message
+        : "generic";
+  return KNOWN_ERRORS.has(code)
+    ? `connect.errors.${code}`
+    : "connect.errors.generic";
+}
 
 /** Erreurs définitives de la demande : la reprise est abandonnée. */
 const TERMINAL_ERRORS = new Set([
@@ -82,6 +114,8 @@ export function ConnectPage() {
     params,
     auth === "authenticated" && isUnlocked,
   );
+  const approve = useApproveConnect(params, request.data);
+  const deny = useDenyConnect(params, request.data);
 
   useEffect(() => {
     if (params) saveConnectResume(params);
@@ -117,23 +151,37 @@ export function ConnectPage() {
     if (errorCode === "first_login") {
       return <Navigate to="/first-login" replace />;
     }
-    const key =
-      errorCode && TERMINAL_ERRORS.has(errorCode)
-        ? `connect.errors.${errorCode}`
-        : "connect.errors.generic";
     return (
       <ConnectStatusCard
         title={t("connect.errorTitle")}
-        message={t(key)}
+        message={t(errorKey(request.error))}
         color="red"
       />
     );
   }
   if (!request.data) return <Waiting />;
+  const view = request.data;
 
+  /** Retour vers l'application (URL déclarée, vérifiée par la mutation) ; reprise close. */
+  function leaveTo(redirectTo: string) {
+    clearConnectResume();
+    window.location.assign(redirectTo);
+  }
+
+  const actionError = approve.error ?? deny.error;
   return (
     <ConnectStatusCard title={t("connect.title")}>
-      <ConnectRequestPanel request={request.data} />
+      <ConnectRequestPanel request={view} />
+      <ConnectConsentForm
+        request={view}
+        onApprove={(decision) =>
+          approve.mutate(decision, { onSuccess: leaveTo })
+        }
+        onDeny={() => deny.mutate(undefined, { onSuccess: leaveTo })}
+        approving={approve.isPending || approve.isSuccess}
+        denying={deny.isPending || deny.isSuccess}
+        error={actionError ? t(errorKey(actionError)) : null}
+      />
     </ConnectStatusCard>
   );
 }

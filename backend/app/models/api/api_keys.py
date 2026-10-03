@@ -17,13 +17,12 @@ _AUTH_SALT_BYTES = 16
 # ─── Requêtes ─────────────────────────────────────────────────────────────────
 
 
-class ApiKeyCreateRequest(BaseModel):
-    """Corps de POST /v1/wallets/{id}/api-keys."""
+class ApiKeyMaterial(BaseModel):
+    """Éléments cryptographiques d'une API key, calculés par le navigateur.
 
-    name: str
-    description: str | None = None
-    permissions: int
-    expires_at: datetime.datetime | None = None
+    Partagés par la création manuelle (page API keys) et par le flux « Se connecter avec
+    Harpocrate » ; seule la création manuelle y ajoute la `decryption_key` en clair.
+    """
 
     # Argon2id hash du auth_secret (calculé côté client)
     auth_secret: str           # base64url — envoyé une seule fois, jamais stocké
@@ -37,41 +36,6 @@ class ApiKeyCreateRequest(BaseModel):
     encrypted_wallet_key: str                    # base64
     # Chiffrement de la decryption_key pour que l'owner puisse la récupérer
     encrypted_decryption_key_for_owner: str      # base64
-    # decryption_key en clair — jamais stocké en DB, sert uniquement au HMAC
-    decryption_key: str                          # base64url — inclus dans le token
-
-    @field_validator("name")
-    @classmethod
-    def _name_valid(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("name must not be empty")
-        if len(stripped) > 256:
-            raise ValueError("name must not exceed 256 characters")
-        return stripped
-
-    @field_validator("description")
-    @classmethod
-    def _desc_valid(cls, v: str | None) -> str | None:
-        if v is not None and len(v) > 1000:
-            raise ValueError("description must not exceed 1000 characters")
-        return v
-
-    @field_validator("permissions")
-    @classmethod
-    def _perms_valid(cls, v: int) -> int:
-        if v <= 0 or v > 0x3F:
-            raise ValueError("permissions must be between 1 and 63")
-        return v
-
-    @field_validator("expires_at")
-    @classmethod
-    def _expires_future(cls, v: datetime.datetime | None) -> datetime.datetime | None:
-        if v is not None:
-            now = datetime.datetime.now(tz=datetime.UTC)
-            if v <= now:
-                raise ValueError("expires_at must be in the future")
-        return v
 
     @field_validator("auth_salt")
     @classmethod
@@ -109,11 +73,63 @@ class ApiKeyCreateRequest(BaseModel):
         return v
 
     @field_validator("auth_hash", "auth_secret", "encrypted_wallet_key",
-                     "encrypted_decryption_key_for_owner", "decryption_key")
+                     "encrypted_decryption_key_for_owner")
     @classmethod
     def _not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("field must not be empty")
+        return v
+
+
+class ApiKeyCreateRequest(ApiKeyMaterial):
+    """Corps de POST /v1/wallets/{id}/api-keys."""
+
+    name: str
+    description: str | None = None
+    permissions: int
+    expires_at: datetime.datetime | None = None
+
+    # decryption_key en clair — jamais stocké en DB, sert uniquement au HMAC
+    decryption_key: str                          # base64url — inclus dans le token
+
+    @field_validator("decryption_key")
+    @classmethod
+    def _dkey_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("field must not be empty")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def _name_valid(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be empty")
+        if len(stripped) > 256:
+            raise ValueError("name must not exceed 256 characters")
+        return stripped
+
+    @field_validator("description")
+    @classmethod
+    def _desc_valid(cls, v: str | None) -> str | None:
+        if v is not None and len(v) > 1000:
+            raise ValueError("description must not exceed 1000 characters")
+        return v
+
+    @field_validator("permissions")
+    @classmethod
+    def _perms_valid(cls, v: int) -> int:
+        if v <= 0 or v > 0x3F:
+            raise ValueError("permissions must be between 1 and 63")
+        return v
+
+    @field_validator("expires_at")
+    @classmethod
+    def _expires_future(cls, v: datetime.datetime | None) -> datetime.datetime | None:
+        if v is not None:
+            now = datetime.datetime.now(tz=datetime.UTC)
+            if v <= now:
+                raise ValueError("expires_at must be in the future")
         return v
 
 
@@ -153,6 +169,13 @@ class ApiKeyCreateResponse(BaseModel):
     token: str  # hrpv_1_... complet, jamais re-montré
 
 
+class ApiKeyConnectClient(BaseModel):
+    """Application qui a obtenu la clé par « Se connecter avec Harpocrate » (D14)."""
+
+    client_id: str
+    name: str
+
+
 class ApiKeyItem(BaseModel):
     """Item dans GET /v1/wallets/{id}/api-keys — métadonnées uniquement."""
 
@@ -165,6 +188,8 @@ class ApiKeyItem(BaseModel):
     revoked_at: datetime.datetime | None
     last_used_at: datetime.datetime | None
     created_at: datetime.datetime
+    # null pour une clé créée à la main depuis la page API keys.
+    connect_client: ApiKeyConnectClient | None = None
 
 
 class ApiKeyListResponse(BaseModel):

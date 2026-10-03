@@ -35,7 +35,13 @@ vi.mock("@/lib/oidc", () => ({
   getUserManager: vi.fn(),
   startLogin: vi.fn(() => Promise.resolve()),
 }));
-vi.mock("@/lib/connectApi", () => ({ fetchConnectRequest: vi.fn() }));
+vi.mock("@/lib/connectApi", () => ({
+  fetchConnectRequest: vi.fn(),
+  fetchAllWallets: vi.fn(() => Promise.resolve([])),
+  denyConnectRequest: vi.fn(),
+  createConnectApiKey: vi.fn(),
+  sealConnectRequest: vi.fn(),
+}));
 vi.mock("@/hooks/useLocalLoginAvailable", () => ({
   useLocalLoginAvailable: vi.fn(),
 }));

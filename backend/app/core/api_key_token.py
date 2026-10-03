@@ -25,6 +25,12 @@ _AUTH_SECRET_LEN = 43  # 32 bytes → base64url sans padding
 _DKEY_LEN = 43         # 32 bytes → base64url sans padding
 _HMAC_LEN = 22         # 16 bytes → base64url sans padding
 
+# Segment `dkey` de substitution : le HMAC ne couvrant pas la dkey, un token peut être
+# signé SANS elle (split-token du SDK, et création de clé par le flux « Se connecter
+# avec Harpocrate », où le serveur ne voit jamais la dkey). Même valeur que le SDK
+# (`harpocrate.token._DKEY_PLACEHOLDER`).
+DKEY_PLACEHOLDER = "A" * _DKEY_LEN
+
 
 @dataclass(frozen=True)
 class ParsedToken:

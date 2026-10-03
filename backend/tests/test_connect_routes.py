@@ -256,3 +256,126 @@ def test_loggable_path_redacts_connect_request_reference() -> None:
         loggable_path(f"/v1/connect/requests/{ref}/deny") == "/v1/connect/requests/[redacted]/deny"
     )
     assert loggable_path("/v1/wallets/abc") == "/v1/wallets/abc"
+
+
+# ─── Refus, création, scellé, échange (features 3 à 5) ───────────────────────
+
+
+async def _opened(conn: Any, client: AsyncClient) -> tuple[str, Any]:
+    """Demande déposée puis ouverte par l'utilisateur ; renvoie (request_uri, wallet_id)."""
+    from tests._connect_helpers import insert_wallet
+
+    uri = await _deposit(conn, client)
+    await _insert_user_with_sub(conn)
+    user_id = await conn.fetchval("SELECT id FROM users WHERE keycloak_sub = $1", _SUB)
+    wallet = await insert_wallet(conn, user_id)
+    return uri, wallet
+
+
+def _key_json(wallet: Any, **extra: Any) -> dict[str, Any]:
+    from tests._connect_helpers import api_key_body
+
+    body = api_key_body(wallet).model_dump(mode="json")
+    body.update(extra)
+    return body
+
+
+async def test_deny_route_returns_access_denied_redirect(conn: Any, client: AsyncClient) -> None:
+    uri, _ = await _opened(conn, client)
+    r = await client.post(
+        f"/v1/connect/requests/{uri}/deny",
+        params={"client_id": "ragflow"},
+        headers=_bearer(make_jwt_token(sub=_SUB)),
+    )
+    assert r.status_code == 200
+    assert r.json()["redirect_to"].startswith(REDIRECT_URI + "?error=access_denied&state=")
+
+
+async def test_api_key_route_refuses_a_decryption_key(conn: Any, client: AsyncClient) -> None:
+    uri, wallet = await _opened(conn, client)
+    r = await client.post(
+        f"/v1/connect/requests/{uri}/api-key",
+        params={"client_id": "ragflow"},
+        json=_key_json(wallet, decryption_key="B" * 43),
+        headers=_bearer(make_jwt_token(sub=_SUB)),
+    )
+    assert r.status_code == 422
+    assert await conn.fetchval("SELECT count(*) FROM api_keys") == 0
+
+
+async def test_api_key_route_refuses_local_admin(conn: Any, client: AsyncClient) -> None:
+    uri, wallet = await _opened(conn, client)
+    r = await client.post(
+        f"/v1/connect/requests/{uri}/api-key",
+        params={"client_id": "ragflow"},
+        json=_key_json(wallet),
+        headers=_bearer(_local_admin_token()),
+    )
+    assert r.status_code == 403
+
+
+async def test_full_flow_over_http(conn: Any, client: AsyncClient) -> None:
+    from urllib.parse import parse_qs, urlsplit
+
+    from tests._connect_helpers import fake_jwe, insert_wallet, par_body_with_verifier
+
+    await insert_client(conn)
+    body, verifier = par_body_with_verifier()
+    par = await client.post("/v1/connect/par", json=body.model_dump(mode="json", exclude_none=True))
+    uri = par.json()["request_uri"]
+    await _insert_user_with_sub(conn)
+    user_id = await conn.fetchval("SELECT id FROM users WHERE keycloak_sub = $1", _SUB)
+    wallet = await insert_wallet(conn, user_id)
+    auth = _bearer(make_jwt_token(sub=_SUB))
+    base = f"/v1/connect/requests/{uri}"
+    q = {"client_id": "ragflow"}
+
+    assert (await client.get(base, params=q, headers=auth)).status_code == 200
+    created = await client.post(f"{base}/api-key", params=q, json=_key_json(wallet), headers=auth)
+    assert created.status_code == 201
+    jwe = fake_jwe()
+    sealed = await client.post(f"{base}/sealed", params=q, json={"jwe": jwe}, headers=auth)
+    assert sealed.status_code == 200
+    code = parse_qs(urlsplit(sealed.json()["redirect_to"]).query)["code"][0]
+
+    token = {
+        "client_id": "ragflow",
+        "code": code,
+        "code_verifier": verifier,
+        "redirect_uri": REDIRECT_URI,
+    }
+    exchanged = await client.post("/v1/connect/token", json=token)
+    assert exchanged.status_code == 200
+    assert exchanged.json() == {
+        "jwe": jwe,
+        "api_key_id": created.json()["api_key_id"],
+        "wallet_id": str(wallet),
+    }
+    replay = await client.post("/v1/connect/token", json=token)
+    assert replay.status_code == 400 and replay.json()["detail"]["error"] == "invalid_grant"
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        {"alg": "RSA-OAEP", "enc": "A256GCM"},
+        {"alg": "ECDH-ES", "enc": "A128GCM"},
+        {"alg": "ECDH-ES", "enc": "A256GCM", "epk": {"kty": "OKP", "crv": "X25519"}},
+    ],
+)
+async def test_sealed_route_rejects_unexpected_jwe_algorithms(
+    conn: Any, client: AsyncClient, header: dict[str, Any]
+) -> None:
+    import json
+
+    from tests._connect_helpers import b64url
+
+    uri, _ = await _opened(conn, client)
+    jwe = f"{b64url(json.dumps(header).encode())}..aaaa.bbbb.cccc"
+    r = await client.post(
+        f"/v1/connect/requests/{uri}/sealed",
+        params={"client_id": "ragflow"},
+        json={"jwe": jwe},
+        headers=_bearer(make_jwt_token(sub=_SUB)),
+    )
+    assert r.status_code == 422

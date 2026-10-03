@@ -27,3 +27,20 @@ export const ConnectRequestViewSchema = z.object({
   expires_at: z.string(),
 });
 export type ConnectRequestView = z.infer<typeof ConnectRequestViewSchema>;
+
+export const ConnectRedirectSchema = z.object({ redirect_to: z.string() });
+
+export const ConnectApiKeyResponseSchema = z.object({
+  api_key_id: z.string().uuid(),
+  token: z.string(),
+});
+export type ConnectApiKeyResponse = z.infer<typeof ConnectApiKeyResponseSchema>;
+
+/** Choix de l'utilisateur à l'écran de consentement (D3 : il ne peut que réduire). */
+export interface ConnectDecision {
+  wallet:
+    | { kind: "existing"; walletId: string }
+    | { kind: "new"; name: string };
+  permissions: number;
+  ttlDays: number | null;
+}

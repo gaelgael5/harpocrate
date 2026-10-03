@@ -48,6 +48,11 @@ export const ApiKeyItemSchema = z.object({
   revoked_at: z.string().datetime({ offset: true }).nullable(),
   last_used_at: z.string().datetime({ offset: true }).nullable(),
   created_at: z.string().datetime({ offset: true }),
+  // Application qui a obtenu la clé par « Se connecter avec Harpocrate » ; null sinon.
+  connect_client: z
+    .object({ client_id: z.string(), name: z.string() })
+    .nullable()
+    .optional(),
 });
 
 export const ApiKeyListResponseSchema = z.object({

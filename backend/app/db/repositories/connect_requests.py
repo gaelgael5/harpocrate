@@ -14,7 +14,11 @@ from uuid import UUID
 
 import asyncpg
 
-from app.models.db.connect_request import ConnectRequestRow
+from app.models.db.connect_request import (
+    ConnectRequestRow,
+    ConnectRequestWithCode,
+    UndeliveredKey,
+)
 
 
 def _to_row(row: Any) -> ConnectRequestRow:
@@ -138,3 +142,121 @@ async def db_claim(
         user_id,
     )
     return result == "UPDATE 1"
+
+
+async def db_set_status(
+    conn: asyncpg.Connection[asyncpg.Record], request_id: UUID, status: str
+) -> None:
+    """Change l'état d'une demande (les valeurs admises sont garanties par un CHECK)."""
+    await conn.execute(
+        "UPDATE connect_requests SET status = $2 WHERE id = $1",
+        request_id,
+        status,
+    )
+
+
+async def db_attach_key(
+    conn: asyncpg.Connection[asyncpg.Record],
+    request_id: UUID,
+    *,
+    wallet_id: UUID,
+    api_key_id: UUID,
+) -> None:
+    """Rattache à la demande le wallet choisi et la clé créée pour elle."""
+    await conn.execute(
+        "UPDATE connect_requests SET wallet_id = $2, api_key_id = $3 WHERE id = $1",
+        request_id,
+        wallet_id,
+        api_key_id,
+    )
+
+
+async def db_seal(
+    conn: asyncpg.Connection[asyncpg.Record],
+    request_id: UUID,
+    *,
+    sealed_jwe: str,
+    code_hash: bytes,
+    code_expires_at: datetime.datetime,
+) -> None:
+    """Dépose le scellé et l'empreinte du code à usage unique (contrainte
+    `connect_requests_sealed_complete` : les trois vont ensemble)."""
+    await conn.execute(
+        """
+        UPDATE connect_requests
+           SET status = 'sealed', sealed_jwe = $2, code_hash = $3, code_expires_at = $4
+         WHERE id = $1
+        """,
+        request_id,
+        sealed_jwe,
+        code_hash,
+        code_expires_at,
+    )
+
+
+async def db_get_by_code_hash_for_update(
+    conn: asyncpg.Connection[asyncpg.Record], code_hash: bytes
+) -> ConnectRequestWithCode | None:
+    """Demande par empreinte du code, verrouillée : deux échanges concurrents du même
+    code se sérialisent, le second voit la demande déjà livrée."""
+    row = await conn.fetchrow(
+        """
+        SELECT r.id, r.client_pk, c.client_id, c.name AS client_name,
+               c.description AS client_description, c.active AS client_active,
+               r.redirect_uri, r.state, r.code_challenge, r.requested_permissions,
+               r.requested_ttl_days, r.app_public_jwk, r.status, r.user_id,
+               r.wallet_id, r.api_key_id, r.expires_at, r.created_at,
+               r.sealed_jwe, r.code_expires_at
+          FROM connect_requests r
+          JOIN connect_clients c ON c.id = r.client_pk
+         WHERE r.code_hash = $1
+           FOR UPDATE OF r
+        """,
+        code_hash,
+    )
+    if row is None:
+        return None
+    base = _to_row(row)
+    return ConnectRequestWithCode(
+        **base.model_dump(),
+        sealed_jwe=row["sealed_jwe"],
+        code_expires_at=row["code_expires_at"],
+    )
+
+
+async def db_mark_delivered(conn: asyncpg.Connection[asyncpg.Record], request_id: UUID) -> None:
+    """Scellé remis : il est effacé dans la même écriture (contrainte
+    `connect_requests_delivered_erased`). L'empreinte du code reste, pour reconnaître un rejeu."""
+    await conn.execute(
+        "UPDATE connect_requests SET status = 'delivered', sealed_jwe = NULL WHERE id = $1",
+        request_id,
+    )
+
+
+async def db_list_expired_undelivered_keys(
+    conn: asyncpg.Connection[asyncpg.Record], now: datetime.datetime
+) -> list[UndeliveredKey]:
+    rows = await conn.fetch(
+        """
+        SELECT r.id AS request_id, r.api_key_id, r.wallet_id, c.client_id
+          FROM connect_requests r
+          JOIN connect_clients c ON c.id = r.client_pk
+         WHERE r.expires_at <= $1
+           AND r.status IN ('pending', 'sealed')
+           AND r.api_key_id IS NOT NULL
+           AND r.wallet_id IS NOT NULL
+        """,
+        now,
+    )
+    return [UndeliveredKey(**dict(r)) for r in rows]
+
+
+async def db_delete_expired(
+    conn: asyncpg.Connection[asyncpg.Record], now: datetime.datetime
+) -> int:
+    """Supprime les demandes arrivées à échéance, quel que soit leur état ; renvoie leur nombre."""
+    result: str = await conn.execute(
+        "DELETE FROM connect_requests WHERE expires_at <= $1",
+        now,
+    )
+    return int(result.split()[-1])

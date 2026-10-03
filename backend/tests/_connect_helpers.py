@@ -99,3 +99,67 @@ async def insert_client(
         redirect_uris=[REDIRECT_URI],
         created_by_user_id=None,
     )
+
+
+def par_body_with_verifier(**overrides: Any) -> tuple[ConnectParRequest, str]:
+    """Demande PAR et son `code_verifier`, pour aller jusqu'à l'échange du code."""
+    verifier, challenge = make_pkce()
+    return par_body(code_challenge=challenge, **overrides), verifier
+
+
+async def insert_wallet(
+    conn: asyncpg.Connection[asyncpg.Record], user_id: UUID, permissions: int = 0x3F
+) -> UUID:
+    """Wallet dont `user_id` est propriétaire, avec un grant portant `permissions`."""
+    wallet_id = cast(
+        UUID,
+        await conn.fetchval(
+            "INSERT INTO wallets (name, owner_user_id) VALUES ($1, $2) RETURNING id",
+            f"wallet-{uuid.uuid4()}",
+            user_id,
+        ),
+    )
+    await conn.execute(
+        """
+        INSERT INTO wallet_grants
+            (wallet_id, grantee_user_id, encrypted_wallet_key, permissions, granted_by_user_id)
+        VALUES ($1, $2, '\\x00', $3, $2)
+        """,
+        wallet_id,
+        user_id,
+        permissions,
+    )
+    return wallet_id
+
+
+def api_key_body(wallet_id: UUID, permissions: int = 0x01, ttl_days: int | None = 30) -> Any:
+    """Corps de création de clé tel que l'enverrait le navigateur — SANS dkey."""
+    from app.core.config import settings
+    from app.models.api.connect_flow import ConnectApiKeyCreate
+
+    return ConnectApiKeyCreate.model_validate(
+        {
+            "wallet_id": str(wallet_id),
+            "permissions": permissions,
+            "ttl_days": ttl_days,
+            "auth_secret": b64url(secrets.token_bytes(32)),
+            "auth_hash": base64.b64encode(b"$argon2id$fake").decode(),
+            "auth_salt": base64.b64encode(secrets.token_bytes(16)).decode(),
+            "auth_kdf_memory_kb": settings.kdf_memory_kb,
+            "auth_kdf_iterations": settings.kdf_iterations,
+            "auth_kdf_parallelism": settings.kdf_parallelism,
+            "encrypted_wallet_key": base64.b64encode(b"enc-wallet-key").decode(),
+            "encrypted_decryption_key_for_owner": base64.b64encode(b"enc-dkey").decode(),
+        }
+    )
+
+
+def fake_jwe() -> str:
+    """JWE compact de la bonne forme (en-tête ECDH-ES / A256GCM) ; le serveur ne le lit pas."""
+    import json
+
+    _, jwk = make_jwk()
+    header = {"alg": "ECDH-ES", "enc": "A256GCM", "epk": jwk}
+    protected = b64url(json.dumps(header).encode())
+    iv, tag = b64url(secrets.token_bytes(12)), b64url(secrets.token_bytes(16))
+    return f"{protected}..{iv}.{b64url(b'ciphertext')}.{tag}"

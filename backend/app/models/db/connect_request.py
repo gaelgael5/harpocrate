@@ -34,3 +34,19 @@ class ConnectRequestRow(BaseModel):
     api_key_id: UUID | None
     expires_at: datetime.datetime
     created_at: datetime.datetime
+
+
+class ConnectRequestWithCode(ConnectRequestRow):
+    """Demande retrouvée par son code : de quoi vérifier l'échange et remettre le scellé."""
+
+    sealed_jwe: str | None
+    code_expires_at: datetime.datetime | None
+
+
+class UndeliveredKey(BaseModel):
+    """Clé créée pour une demande expirée sans que l'application l'ait jamais reçue (D13)."""
+
+    request_id: UUID
+    api_key_id: UUID
+    wallet_id: UUID
+    client_id: str

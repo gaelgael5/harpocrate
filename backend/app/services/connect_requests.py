@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import secrets
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import asyncpg
@@ -102,6 +103,34 @@ def _check_usable(
     return row
 
 
+async def lock_request_for_user(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    request_uri: str,
+    client_id: str,
+    user_id: UUID,
+    now: datetime.datetime,
+) -> ConnectRequestRow:
+    """Verrouille une demande en attente et la rattache à l'utilisateur connecté.
+
+    À appeler DANS une transaction : chaque réponse à la demande (lecture, refus,
+    création de la clé, scellement) la lit puis la réécrit sous ce verrou.
+    Le premier utilisateur qui l'ouvre se l'approprie : une référence fuitée (journal,
+    historique) ne permet pas à un autre compte de répondre à sa place.
+    """
+    row = _check_usable(
+        await repo.db_get_by_ref_hash(conn, ref_hash(request_uri), for_update=True),
+        client_id,
+        now,
+    )
+    if row.user_id is None:
+        await repo.db_claim(conn, row.id, user_id)
+        return row.model_copy(update={"user_id": user_id})
+    if row.user_id != user_id:
+        raise _error(404, "request_not_found", "Connect request not found")
+    return row
+
+
 async def open_request(
     conn: asyncpg.Connection[asyncpg.Record],
     *,
@@ -110,20 +139,41 @@ async def open_request(
     user_id: UUID,
     now: datetime.datetime,
 ) -> ConnectRequestRow:
-    """Ouvre une demande en attente pour l'utilisateur connecté.
-
-    Le premier utilisateur qui l'ouvre se l'approprie : une référence fuitée (journal,
-    historique) ne permet pas à un autre compte de répondre à sa place.
-    """
+    """Ouvre une demande en attente pour l'utilisateur connecté (écran de consentement)."""
     async with conn.transaction():
-        row = _check_usable(
-            await repo.db_get_by_ref_hash(conn, ref_hash(request_uri), for_update=True),
-            client_id,
-            now,
+        return await lock_request_for_user(
+            conn, request_uri=request_uri, client_id=client_id, user_id=user_id, now=now
         )
-        if row.user_id is None:
-            await repo.db_claim(conn, row.id, user_id)
-            return row.model_copy(update={"user_id": user_id})
-        if row.user_id != user_id:
-            raise _error(404, "request_not_found", "Connect request not found")
-    return row
+
+
+def redirect_with(redirect_uri: str, params: dict[str, str]) -> str:
+    """URL de retour DÉCLARÉE complétée de paramètres (elle peut déjà porter une requête)."""
+    parts = urlsplit(redirect_uri)
+    query = urlencode(parse_qsl(parts.query, keep_blank_values=True) + list(params.items()))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+
+
+async def deny_request(
+    conn: asyncpg.Connection[asyncpg.Record],
+    *,
+    request_uri: str,
+    client_id: str,
+    user_id: UUID,
+    now: datetime.datetime,
+    actor_ip: str | None,
+) -> str:
+    """Refus de l'utilisateur : aucune clé, retour `error=access_denied` avec le `state`
+    inchangé (invariants 5 et 6 du cadrage). Renvoie l'URL où renvoyer le navigateur."""
+    async with conn.transaction():
+        row = await lock_request_for_user(
+            conn, request_uri=request_uri, client_id=client_id, user_id=user_id, now=now
+        )
+        await repo.db_set_status(conn, row.id, "denied")
+        await audit_log_insert(
+            conn,
+            "connect_request.denied",
+            actor_user_id=user_id,
+            actor_ip=actor_ip,
+            metadata={"client_id": row.client_id},
+        )
+    return redirect_with(row.redirect_uri, {"error": "access_denied", "state": row.state})

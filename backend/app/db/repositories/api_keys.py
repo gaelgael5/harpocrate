@@ -7,7 +7,7 @@ from uuid import UUID
 
 import asyncpg
 
-from app.models.api.api_keys import ApiKeyItem
+from app.models.api.api_keys import ApiKeyConnectClient, ApiKeyItem
 from app.models.db.api_key import ApiKeyRow
 
 # ─── Mapping helpers ──────────────────────────────────────────────────────────
@@ -46,6 +46,11 @@ def _row_to_api_key_item(row: Any) -> ApiKeyItem:
         revoked_at=row["revoked_at"],
         last_used_at=row["last_used_at"],
         created_at=row["created_at"],
+        connect_client=(
+            ApiKeyConnectClient(client_id=row["connect_client_id"], name=row["connect_client_name"])
+            if row["connect_client_id"] is not None
+            else None
+        ),
     )
 
 
@@ -68,8 +73,13 @@ async def insert_api_key(
     encrypted_decryption_key_for_owner: bytes,
     permissions: int,
     expires_at: datetime.datetime | None,
+    connect_client_id: UUID | None = None,
 ) -> UUID:
-    """Insère une nouvelle API key. Retourne son UUID."""
+    """Insère une nouvelle API key. Retourne son UUID.
+
+    `connect_client_id` : application qui l'a obtenue par « Se connecter avec
+    Harpocrate » (D14) ; None pour une clé créée à la main.
+    """
     result: UUID = await conn.fetchval(
         """
         INSERT INTO api_keys (
@@ -77,8 +87,8 @@ async def insert_api_key(
             auth_hash, auth_salt,
             auth_kdf_memory_kb, auth_kdf_iterations, auth_kdf_parallelism,
             encrypted_wallet_key, encrypted_decryption_key_for_owner,
-            permissions, expires_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            permissions, expires_at, connect_client_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING id
         """,
         wallet_id,
@@ -94,6 +104,7 @@ async def insert_api_key(
         encrypted_decryption_key_for_owner,
         permissions,
         expires_at,
+        connect_client_id,
     )
     return result
 
@@ -109,11 +120,13 @@ async def list_api_keys_for_wallet(
     """Retourne toutes les API keys d'un wallet (métadonnées uniquement)."""
     rows = await conn.fetch(
         """
-        SELECT id, name, description, owner_user_id, permissions,
-               expires_at, revoked_at, last_used_at, created_at
-        FROM api_keys
-        WHERE wallet_id = $1
-        ORDER BY created_at ASC
+        SELECT k.id, k.name, k.description, k.owner_user_id, k.permissions,
+               k.expires_at, k.revoked_at, k.last_used_at, k.created_at,
+               c.client_id AS connect_client_id, c.name AS connect_client_name
+        FROM api_keys k
+        LEFT JOIN connect_clients c ON c.id = k.connect_client_id
+        WHERE k.wallet_id = $1
+        ORDER BY k.created_at ASC
         """,
         wallet_id,
     )

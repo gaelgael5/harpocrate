@@ -57,7 +57,7 @@ from app.db.pool import close_pool, get_pool, init_pool
 from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.middleware.db_availability import db_availability_middleware
-from app.services import local_admin_bootstrap
+from app.services import connect_purge, local_admin_bootstrap
 from app.services import replication as replication_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
 from app.services import seed_types as seed_svc
@@ -198,6 +198,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     recovery_expire_task = asyncio.create_task(_recovery_expire_loop())
 
+    # « Se connecter avec Harpocrate » — demandes échues purgées, clés non livrées révoquées.
+    connect_purge_task = asyncio.create_task(connect_purge.run_purge_loop())
+
     try:
         yield
     finally:
@@ -207,12 +210,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("shutdown_initiated", instance_id=settings.instance_id)
         purge_task.cancel()
         recovery_expire_task.cancel()
+        connect_purge_task.cancel()
         replication_refresh_task.cancel()
         replication_purge_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await purge_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await recovery_expire_task
+        with contextlib.suppress(asyncio.CancelledError):
+            await connect_purge_task
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await replication_refresh_task
         with contextlib.suppress(asyncio.CancelledError, Exception):

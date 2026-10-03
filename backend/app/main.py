@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, Response
 from app.api.v1 import (
     admin_anomalies,
     admin_backups,
+    admin_connect_clients,
     admin_install_mode,
     admin_maintenance,
     admin_pairing_exec,
@@ -337,6 +338,7 @@ app.include_router(admin_secret_types.public_router, prefix="/v1")
 app.include_router(admin_system.router, prefix="/v1")
 app.include_router(admin_users.router, prefix="/v1")
 app.include_router(admin_anomalies.router, prefix="/v1")
+app.include_router(admin_connect_clients.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")
 app.include_router(config_keycloak.router, prefix="/v1")

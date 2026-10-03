@@ -43,6 +43,7 @@ import { AdminRemoteBackupsPage } from "@/pages/AdminRemoteBackupsPage";
 import { AdminReplicationPage } from "@/pages/AdminReplicationPage";
 import { AdminReplicationNodeDetailPage } from "@/pages/AdminReplicationNodeDetailPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
+import { AdminConnectClientsPage } from "@/pages/AdminConnectClientsPage";
 import { AdminUserDetailPage } from "@/pages/AdminUserDetailPage";
 import { AdminSystemPage } from "@/pages/AdminSystemPage";
 import { AdminSnapshotsPage } from "@/pages/AdminSnapshotsPage";
@@ -273,6 +274,10 @@ export default function App() {
                 <Route
                   path="/admin/anomalies"
                   element={<AdminAnomaliesPage />}
+                />
+                <Route
+                  path="/admin/connect-clients"
+                  element={<AdminConnectClientsPage />}
                 />
                 <Route path="/export-all" element={<ExportAllPage />} />
                 <Route path="/admin/env" element={<AdminEnvPage />} />

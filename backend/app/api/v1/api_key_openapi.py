@@ -1,11 +1,14 @@
-"""Expose un contrat OpenAPI filtre pour les seules routes acceptant une API key.
+"""Expose des contrats OpenAPI filtres, publies aux projets consommateurs.
 
 - GET /v1/openapi-api-key.json  -> schema OpenAPI reduit (endpoints hrpv_* OK)
+- GET /v1/openapi-connect.json  -> flux « Se connecter avec Harpocrate » : les seules
+                                   routes appelees par le backend d'une application
 - GET /v1/api-docs               -> Swagger UI standalone pointant vers le schema
 
 Reference : docflow harpocrate, article HARPOCRATE_OVERVIEW (document de cadrage),
 section 6 (table d'eligibilite JWT vs API key).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -48,35 +51,62 @@ _API_KEY_ENDPOINTS: set[tuple[str, str]] = {
 }
 
 
-@router.get("/openapi-api-key.json", include_in_schema=False)
-async def api_key_openapi_schema(request: Request) -> dict[str, Any]:
-    """Retourne le schema OpenAPI filtre aux endpoints utilisables par API key."""
-    full: dict[str, Any] = request.app.openapi()
+# Flux « Se connecter avec Harpocrate » : ce que le BACKEND de l'application appelle.
+# Les routes /v1/connect/requests/* servent l'ecran de consentement de Harpocrate,
+# pas les applications : elles ne font pas partie de leur contrat.
+_CONNECT_ENDPOINTS: set[tuple[str, str]] = {
+    ("/v1/connect/par", "post"),
+    ("/v1/connect/token", "post"),
+}
+
+
+def _filtered_schema(
+    full: dict[str, Any], endpoints: set[tuple[str, str]], title: str, description: str
+) -> dict[str, Any]:
     filtered_paths: dict[str, Any] = {}
     for path, methods in full.get("paths", {}).items():
         kept = {
-            method: spec
-            for method, spec in methods.items()
-            if (path, method.lower()) in _API_KEY_ENDPOINTS
+            method: spec for method, spec in methods.items() if (path, method.lower()) in endpoints
         }
         if kept:
             filtered_paths[path] = kept
-
     return {
         **full,
         "paths": filtered_paths,
-        "info": {
-            **full.get("info", {}),
-            "title": "Harpocrate — API Key endpoints",
-            "description": (
-                "Sous-ensemble des endpoints Harpocrate accessibles avec un token "
-                "API key (prefixe `hrpv_*`). Authentification : header "
-                "`Authorization: Bearer hrpv_<token>`. Les endpoints reserves aux "
-                "humains (gestion de wallets, grants, api-keys, /me/*) ne sont pas "
-                "exposes ici."
-            ),
-        },
+        "info": {**full.get("info", {}), "title": title, "description": description},
     }
+
+
+@router.get("/openapi-api-key.json", include_in_schema=False)
+async def api_key_openapi_schema(request: Request) -> dict[str, Any]:
+    """Retourne le schema OpenAPI filtre aux endpoints utilisables par API key."""
+    return _filtered_schema(
+        request.app.openapi(),
+        _API_KEY_ENDPOINTS,
+        "Harpocrate — API Key endpoints",
+        "Sous-ensemble des endpoints Harpocrate accessibles avec un token "
+        "API key (prefixe `hrpv_*`). Authentification : header "
+        "`Authorization: Bearer hrpv_<token>`. Les endpoints reserves aux "
+        "humains (gestion de wallets, grants, api-keys, /me/*) ne sont pas "
+        "exposes ici.",
+    )
+
+
+@router.get("/openapi-connect.json", include_in_schema=False)
+async def connect_openapi_schema(request: Request) -> dict[str, Any]:
+    """Contrat du flux « Se connecter avec Harpocrate » pour le backend d'une application."""
+    return _filtered_schema(
+        request.app.openapi(),
+        _CONNECT_ENDPOINTS,
+        "Harpocrate — Se connecter avec Harpocrate",
+        "Routes appelees par le BACKEND d'une application declaree dans le registre : "
+        "depot de la demande (PAR, RFC 9126) puis echange du code a usage unique contre "
+        "l'API key scellee (JWE ECDH-ES / A256GCM pour la cle publique ephemere de "
+        "l'application). Entre les deux, le navigateur est envoye sur "
+        "`/connect?client_id=…&request_uri=…`. Aucune authentification de "
+        "l'application : PKCE S256, URL de retour declaree et scelle en tiennent lieu. "
+        "Guide : docs/vault.md, section « Se connecter avec Harpocrate ».",
+    )
 
 
 @router.get("/api-docs", include_in_schema=False)

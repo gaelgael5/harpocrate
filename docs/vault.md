@@ -116,6 +116,40 @@ Quel que soit le format, **cette table contient des credentials sensibles** :
 - Si possible, chiffrement au repos
 
 
+## Obtenir l'API key sans copier-coller — « Se connecter avec Harpocrate »
+
+Plutôt que de demander à l'utilisateur de créer une API key dans Harpocrate puis de la coller dans la table ci-dessus, l'application peut l'obtenir par un parcours du même genre qu'OAuth : bouton « Connecter » → Harpocrate (connexion Keycloak, déverrouillage, choix ou création du wallet, permissions et durée réductibles) → retour avec un code à usage unique que **le backend** de l'application échange contre la clé. Harpocrate n'est pas un fournisseur d'identité : ce qui est délivré est une API key `hrpv_1_*` sur un wallet, rien d'autre.
+
+**Prérequis** : l'application est **déclarée** par un admin Harpocrate (écran « Applications connectées » : `client_id`, nom, URLs de retour **exactes**) ; l'instance a Keycloak (sans lui, le parcours affiche « indisponible » et l'API key se crée à la main).
+
+**Contrat** : `GET /v1/openapi-connect.json` (deux routes, appelées par le backend de l'application, sans authentification).
+
+**Avec le SDK Python ≥ 0.8.0** :
+
+```python
+from harpocrate import connect
+
+browser_url, pending = connect.start(base_url, "ragflow", redirect_uri, permissions=0x01, ttl_days=90)
+session["harpocrate_connect"] = pending.to_dict()   # côté serveur uniquement
+# … redirection du navigateur vers browser_url, puis, sur redirect_uri :
+if "error" in request.args:                         # access_denied : refus de l'utilisateur
+    ...
+result = connect.finish(connect.ConnectState.from_dict(session.pop("harpocrate_connect")),
+                        code=request.args["code"], state=request.args["state"])
+# result.token → la table de configuration ci-dessus (chiffré au repos)
+```
+
+**Sans SDK** :
+
+1. Générer un `code_verifier` (43 à 128 caractères), son `code_challenge` S256, un `state` aléatoire et une **paire de clés éphémère EC P-256**.
+2. `POST /v1/connect/par` avec `client_id`, `redirect_uri` (identique à une URL déclarée, au caractère près), `state`, `code_challenge`, `code_challenge_method: "S256"`, `permissions` (bitmap 1..63), `ttl_days` (ou `null`), `app_public_jwk` (clé **publique** seule : `kty`, `crv`, `x`, `y`). Réponse : `request_uri` (valable 15 min).
+3. Envoyer le navigateur sur `{harpocrate}/connect?client_id=…&request_uri=…` (paramètres encodés).
+4. Retour sur `redirect_uri` : `?code=…&state=…`, ou `?error=access_denied&state=…`. **Vérifier que `state` est celui de la session de l'utilisateur** avant tout échange.
+5. Dans les 60 s : `POST /v1/connect/token` avec `client_id`, `code`, `code_verifier`, `redirect_uri`. Réponse : `jwe`, `api_key_id`, `wallet_id`. Le code ne s'échange qu'**une** fois (`invalid_grant` sinon, et le rejeu est signalé aux admins).
+6. Déchiffrer le `jwe` (compact, `alg: ECDH-ES`, `enc: A256GCM`) avec la clé privée éphémère : contenu JSON `{"token": …, "dkey": …}`. Le `token` est signé avec un segment `dkey` de substitution (43 × `A`) : y remettre la `dkey` reçue donne l'API key complète. Jeter ensuite la clé privée éphémère.
+
+**Obligations** : `code_verifier` et clé privée éphémère restent côté serveur (session), jamais dans un cookie lisible ni dans l'URL ; le `state` est lié à la session de l'utilisateur ; ni le token, ni la `dkey`, ni le `jwe` ne sont journalisés. Une clé créée mais jamais échangée (onglet fermé, application en panne) est révoquée par Harpocrate à l'échéance de la demande.
+
 ## Loader de résolution
 
 L'application doit avoir un **mécanisme de résolution** qui :

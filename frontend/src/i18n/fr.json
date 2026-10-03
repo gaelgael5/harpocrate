@@ -1503,6 +1503,7 @@
       "request_expired": "Cette demande a expiré (15 minutes). Relancez la connexion depuis l'application.",
       "request_not_pending": "Cette demande a déjà reçu une réponse.",
       "local_admin_not_allowed": "Le compte administrateur de secours ne peut pas connecter une application. Connectez-vous avec votre compte personnel.",
+      "keycloak_unreachable": "Le fournisseur d'identité (Keycloak) est injoignable depuis cette page. Réessayez plus tard, ou créez l'API key à la main depuis la page « API keys » du coffre.",
       "generic": "Une erreur est survenue. Réessayez dans un instant."
     }
   },

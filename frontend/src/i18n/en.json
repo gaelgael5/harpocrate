@@ -1502,6 +1502,7 @@
       "request_expired": "This request has expired (15 minutes). Start the connection again from the application.",
       "request_not_pending": "This request has already been answered.",
       "local_admin_not_allowed": "The break-glass administrator account cannot connect an application. Sign in with your personal account.",
+      "keycloak_unreachable": "The identity provider (Keycloak) cannot be reached from this page. Try again later, or create the API key manually from the wallet's “API keys” page.",
       "generic": "Something went wrong. Please try again in a moment."
     }
   },

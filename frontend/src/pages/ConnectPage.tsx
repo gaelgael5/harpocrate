@@ -31,7 +31,7 @@ import { getUserManager, startLogin } from "@/lib/oidc";
 import { ConnectUnavailablePage } from "@/pages/ConnectUnavailablePage";
 import { useCryptoStore } from "@/stores/crypto";
 
-type AuthState = "checking" | "redirecting" | "authenticated";
+type AuthState = "checking" | "redirecting" | "authenticated" | "unreachable";
 
 /** Erreurs expliquées à l'utilisateur ; les autres reçoivent un message générique. */
 const KNOWN_ERRORS = new Set([
@@ -73,6 +73,9 @@ function useKeycloakSession(enabled: boolean): AuthState {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    const unreachable = () => {
+      if (!cancelled) setState("unreachable");
+    };
     void getUserManager()
       .getUser()
       .then((user) => {
@@ -82,9 +85,11 @@ function useKeycloakSession(enabled: boolean): AuthState {
           setState("authenticated");
         } else {
           setState("redirecting");
-          void startLogin();
+          // Keycloak injoignable ou mal configuré : on le dit, au lieu d'attendre sans fin.
+          startLogin().catch(unreachable);
         }
-      });
+      })
+      .catch(unreachable);
     return () => {
       cancelled = true;
     };
@@ -130,7 +135,7 @@ export function ConnectPage() {
   }, [errorCode]);
   useEffect(() => {
     // Session Keycloak expirée entre-temps : on repasse par Keycloak, la demande est gardée.
-    if (sessionLost) void startLogin();
+    if (sessionLost) startLogin().catch(() => clearConnectResume());
   }, [sessionLost]);
 
   if (!params) {
@@ -143,6 +148,15 @@ export function ConnectPage() {
     );
   }
   if (oidcAvailable === false) return <ConnectUnavailablePage />;
+  if (auth === "unreachable") {
+    return (
+      <ConnectStatusCard
+        title={t("connect.errorTitle")}
+        message={t("connect.errors.keycloak_unreachable")}
+        color="red"
+      />
+    );
+  }
   if (auth !== "authenticated") return <Waiting />;
   if (!isUnlocked) return <Navigate to="/unlock" replace />;
 

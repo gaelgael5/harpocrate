@@ -188,3 +188,16 @@ describe("ConnectPage", () => {
     await waitFor(() => expect(peekConnectResume()).toBeNull());
   });
 });
+
+describe("ConnectPage — Keycloak injoignable", () => {
+  it("l'explique au lieu d'attendre sans fin", async () => {
+    mockSession(false);
+    vi.mocked(startLogin).mockRejectedValueOnce(
+      new TypeError("Failed to fetch"),
+    );
+    renderAt(connectPath(PARAMS));
+    expect(
+      await screen.findByText(fr.connect.errors.keycloak_unreachable),
+    ).toBeTruthy();
+  });
+});

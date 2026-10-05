@@ -10,6 +10,16 @@
       "artifacts": [
         {
           "kind": "wheel",
+          "version": "0.8.0",
+          "filename": "harpocrate-0.8.0-py3-none-any.whl"
+        },
+        {
+          "kind": "sdist",
+          "version": "0.8.0",
+          "filename": "harpocrate-sdk-0.8.0.tar.gz"
+        },
+        {
+          "kind": "wheel",
           "version": "0.6.0",
           "filename": "harpocrate-0.6.0-py3-none-any.whl"
         },

@@ -93,6 +93,10 @@ sync_repo_file() {
 echo "[*] Sync des fichiers de déploiement..."
 sync_repo_file "$(pwd)/docker-compose.yml" "${RAW_BASE}/docker-compose.yml"
 sync_repo_file "$(pwd)/apps.json" "${RAW_BASE}/apps.json"
+# Configs des collecteurs d'observabilité, montées par docker-compose.yml.
+mkdir -p "$(pwd)/alloy"
+sync_repo_file "$(pwd)/alloy/collector.alloy" "${RAW_BASE}/infra/alloy-collector/config.alloy"
+sync_repo_file "$(pwd)/alloy/metrics.alloy" "${RAW_BASE}/infra/alloy-metrics/config.alloy"
 
 # Auto-update du script lui-même : si refresh.sh distant diffère, on remplace
 # et on relance pour que les changements (nouvelles étapes, fonctions) soient
@@ -118,12 +122,41 @@ if [ -z "${REFRESH_SELF_UPDATED:-}" ]; then
     fi
 fi
 
+# ── Observabilité : compléter .env sans jamais écraser ───────────────────────
+# Standard « Gestion des logs » : un Alloy par hôte, sinon l'hôte est un angle
+# mort (incident rag du 2026-10-20, indiagnosticable faute de journaux). Les
+# collecteurs sont dans docker-compose.yml (profil `observability`). Une clé
+# déjà présente dans .env n'est JAMAIS modifiée : l'opérateur garde la main.
+# Défauts : la stack Loki/VictoriaMetrics du portail, celle que lit l'outil MCP
+# `logs_query` — et non l'ancienne stack 192.168.10.110 de infra/alloy-agent/.
+ensure_env_default() {
+    local key="$1" value="$2"
+    if ! grep -qE "^${key}=" .env; then
+        # Un .env sans fin de ligne finale collerait la clé à la dernière valeur.
+        if [ -n "$(tail -c1 .env)" ]; then echo >> .env; fi
+        if [ -z "${OBS_ENV_HEADER_WRITTEN:-}" ]; then
+            printf '\n# Observabilité (ajouté par refresh.sh le %s)\n' "$(date +%F)" >> .env
+            OBS_ENV_HEADER_WRITTEN=1
+        fi
+        printf '%s=%s\n' "${key}" "${value}" >> .env
+        echo "  -> .env : ${key} ajouté (${value})"
+    fi
+}
+
+echo "[1/8] Configuration de l'observabilité..."
+ensure_env_default LOKI_URL "http://192.168.10.164:3100/loki/api/v1/push"
+ensure_env_default METRICS_URL "http://192.168.10.164:8428/api/v1/write"
+ensure_env_default ALLOY_HOSTNAME "$(hostname)"
+ensure_env_default ALLOY_ROLE "prod"
+# Profil des collecteurs : sans lui, `docker compose up` ne les démarre pas.
+export COMPOSE_PROFILES=observability
+
 # ── 5. Sync releases/ depuis le repo Git (index.json + artefacts + docs) ─────
 RELEASES_DIR="$(pwd)/releases"
 DOCS_DIR="${RELEASES_DIR}/docs"
 mkdir -p "${DOCS_DIR}"
 
-echo "[1/6] Sync releases/index.json depuis ${RAW_BASE}..."
+echo "[2/8] Sync releases/index.json depuis ${RAW_BASE}..."
 INDEX_PATH="${RELEASES_DIR}/index.json"
 INDEX_TMP="${INDEX_PATH}.tmp"
 if curl -fsSL -o "${INDEX_TMP}" "${RAW_BASE}/releases/index.json"; then
@@ -136,7 +169,7 @@ else
 fi
 
 if [ -f "${INDEX_PATH}" ] && command -v jq >/dev/null 2>&1; then
-    echo "[2/6] Telechargement des artefacts manquants..."
+    echo "[3/8] Telechargement des artefacts manquants..."
     # Extrait toutes les filenames d'artefacts (un par ligne)
     while IFS= read -r FNAME; do
         [ -z "${FNAME}" ] && continue
@@ -159,7 +192,7 @@ if [ -f "${INDEX_PATH}" ] && command -v jq >/dev/null 2>&1; then
     # (python-fr.md…) : les sauter quand elles existent les figeait pour toujours
     # (constate le 2026-10-05, page Integration restee sur l'ancienne doc). Elles sont
     # donc retelechargees a chaque passage ; en cas d'echec, la version en place reste.
-    echo "[3/6] Mise a jour des docs..."
+    echo "[4/8] Mise a jour des docs..."
     while IFS= read -r FNAME; do
         [ -z "${FNAME}" ] && continue
         DEST="${DOCS_DIR}/${FNAME}"
@@ -182,13 +215,27 @@ else
 fi
 
 # ── 4. Pull + up ─────────────────────────────────────────────────────────────
-echo "[4/6] Pull des images..."
+echo "[5/8] Pull des images..."
 docker compose pull
 
-echo "[5/6] Redemarrage des services..."
+echo "[6/8] Redemarrage des services..."
 docker compose up -d --remove-orphans
 
-echo "[6/6] Cleanup + status :"
+# Un collecteur arrêté ne produit aucune erreur, il ne produit rien : on le
+# constate ici plutôt qu'au prochain incident. Pas d'échec du refresh pour
+# autant — l'application, elle, est à jour et doit rester servie.
+echo "[7/8] Vérification des collecteurs d'observabilité..."
+running="$(docker compose ps --status running --services 2>/dev/null || true)"
+for svc in alloy-collector alloy-metrics; do
+    if printf '%s\n' "${running}" | grep -qx "${svc}"; then
+        echo "  -> ${svc} en marche."
+    else
+        echo "  [!] ${svc} NE TOURNE PAS : journaux/métriques de cet hôte absents."
+        echo "      Diagnostic : docker compose logs --tail 50 ${svc}"
+    fi
+done
+
+echo "[8/8] Cleanup + status :"
 docker image prune -f >/dev/null
 docker compose ps
 

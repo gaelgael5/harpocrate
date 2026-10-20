@@ -8,36 +8,28 @@
 
 | Alias SSH | Nom d'hôte réel | Attribuée le | Usage | Constaté |
 |---|---|---|---|---|
-| `test1` | `host-test-23` | 2026-09-23 | Livrer, tester et valider Harpocrate (`dev-deploy.sh`) | voir ci-dessous |
+| `test1` | `host-test-36` | 2026-10-20 | Livrer, tester et valider Harpocrate (`dev-deploy.sh`) | voir ci-dessous |
 
 ### `test1` — état constaté
 
+- **Réattribuée le 2026-10-20 : nouvelle machine `host-test-36`** (l'ancienne `host-test-23` est reprise,
+  avec son instance, ses scripts de recette et sa base jetable `harpocrate-testdb` : tout est à recréer).
 - Accès : bloc « portal test-vm test1 » de `~/.ssh/config`, via le rebond `devflow-jump`.
-- Constaté le 2026-09-23 : Debian 12, Docker 29.8, **git 2.39.5** (piège HTTP/2 → 401 contre
-  GitHub, cf. docflow « Fragment — Déploiement »).
-- **Machine partagée** : héberge déjà `wsportal-dev-*` (portail, caddy, postgres, zulip, grafana,
-  loki, victoriametrics), `devpod-alloy-*`, `browserless-chromium`, une CI `ci-fable5` dans `/root`.
-- Ports libres le 2026-09-23 pour la stack dev : `5432`, `8000`, `8080`, `8443` — **à revérifier
-  au moment de chaque déploiement**, jamais tenus pour acquis.
-- Pas de clé GitHub sur la machine : cloner en HTTPS (dépôt public).
-- **2026-10-20 : bloc SSH `test1` absent de `~/.ssh/config`** (`ssh test1` → « Could not resolve hostname ») ; machine considérée comme non attribuée tant que le portail ne la renotifie pas.
-- **Harpocrate déployé** le 2026-10-03 (branche `dev`, `dev-deploy.sh`) : clone `/root/harpocrate`, journal
-  `/root/harpocrate-deploy.log`, UI `https://192.168.10.179:8443` (cert auto-signé), conteneurs
-  `harpocrate-backend|frontend|postgres`, Postgres publié sur `0.0.0.0:5432`.
-- Admin local de l'instance de test : identifiants dans `/root/harpocrate/.env` (**à faire tourner** :
-  le mot de passe a été affiché dans une session le 2026-10-03) ; crypto initialisée, passphrase de test
-  dans `/root/harpocrate-test-passphrase` (600). Ne jamais afficher ces valeurs : les lire sur la machine.
-- Script de validation UI réutilisable : `/root/harpocrate-ui-check.py` (pilote `browserless` sur
-  `127.0.0.1:3000`, sans jeton ; clics par le DOM, les contrôles Mantine n'étant pas cliquables par Puppeteer).
-- Recette « Se connecter avec Harpocrate » (2026-10-03) : `/root/harpocrate-connect-check.py` (API, exécuté DANS
-  `harpocrate-backend` : `docker cp` puis `docker exec … python`, identifiants lus dans l'environnement du conteneur ;
-  laisse une application `recette-*` désactivée dans le registre) et `/root/harpocrate-connect-ui-check.py`
-  (navigateur, `/connect`). La Keycloak configurée sur l'instance (`keycloak.yoops.org`, realm `yoops`) refuse l'origine
-  `https://192.168.10.179:8443` (CORS) : le parcours complet demande un client Keycloak public valide pour cette origine.
-- **Base jetable de tests d'intégration** : conteneur `harpocrate-testdb` (`postgres:16-alpine`,
-  labels `projet=harpocrate`, `usage=tests-jetables`), `127.0.0.1:55433`, utilisateur `harpo` ; bases
-  `harpocrate_test`, `harpocrate_existing`, `harpocrate_blank`, `harpocrate_032`. Accès depuis le
-  devcontainer par tunnel `ssh -fN -L 127.0.0.1:55433:127.0.0.1:55433 test1`. À supprimer quand il ne sert plus.
+- Constaté le 2026-10-20 : Debian 12, Docker 29.9, **git 2.39.5** sans `/etc/git/http2-github.inc`
+  (piège HTTP/2 → 401 contre GitHub possible, cf. skill `test-machine-deployment`) ; 40 Go disque, 7 Go RAM.
+- **Machine partagée** : photoreader, tutor, tutor-mobile, miles, `devpod-alloy-agent`,
+  `devpod-alloy-metrics`, `browserless-chromium` (`:3000`). Ports pris le 2026-10-20 : 1883, 3000, 5445,
+  8030, **8080** (miles-frontend), 8081, 8090. `dev-deploy.sh` choisit désormais un port libre et le
+  persiste dans `.env` (`HARPOCRATE_DEV_*_PORT`).
+- Pas de clé GitHub sur la machine : clone HTTPS (dépôt public) dans `/root/harpocrate`, journal
+  `/root/harpocrate-deploy.log`.
+- Instance déployée le 2026-10-20 (`dev-deploy.sh dev`) : UI `https://192.168.10.203:8443`, HTTP local
+  `127.0.0.1:8082` (8080/8081 pris), API `127.0.0.1:8000`, Postgres `0.0.0.0:5432`. Keycloak non configuré
+  (`/v1/health` « degraded », `jwks_loaded=false`) : le parcours `/connect` complet n'y est pas jouable.
+  Le mot de passe admin local a été affiché dans le journal de déploiement et la session : **à faire tourner**.
+- Tests backend sur vraie base : `scripts/run-integration-tests.sh /root/harpocrate [args pytest]`
+  (base jetable créée puis détruite). 2026-10-20 : 1054 passés, 16 échecs = les 11 du bug « tests
+  périmés » + 5 Google Drive / oauth_pending (bug JSONB), aucun autre.
 
 ## Autres ressources
 

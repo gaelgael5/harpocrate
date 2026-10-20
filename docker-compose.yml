@@ -10,6 +10,9 @@
 #                         override : `TAG=v1.2.0 docker compose up -d`).
 #   POSTGRES_*          = credentials DB (.env)
 #   HARPOCRATE_*        = config app (.env, voir .env.example)
+#   LOKI_URL, METRICS_URL, ALLOY_HOSTNAME, ALLOY_ROLE
+#                       = collecteurs d'observabilité (profil `observability`,
+#                         activé et renseigné par scripts/refresh.sh)
 #
 # Pour le DEV LOCAL : `docker-compose.override.yml` (auto-loaded par Compose
 # quand il existe à côté du compose principal) override les images GHCR pour
@@ -140,3 +143,59 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+
+  # ── Observabilité (standard « Gestion des logs » : un Alloy par hôte) ──────
+  # Profil `observability` : démarrés par scripts/refresh.sh sur le serveur
+  # (COMPOSE_PROFILES), jamais par un `docker compose up` de dev local, qui
+  # n'a ni Loki ni TSDB à joindre. Services et configs repris de la référence
+  # ag-flow/ressources (composes/alloy-collector, composes/alloy-metrics).
+  # Pas de `${VAR:?}` ici : Compose interpole tout le fichier, profils inactifs
+  # compris — un `:?` casserait le dev local. refresh.sh vérifie ces variables.
+  alloy-collector:
+    image: grafana/alloy:v1.5.1
+    container_name: harpocrate-alloy-collector
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+    environment:
+      LOKI_URL: ${LOKI_URL:-}
+      HOSTNAME: ${ALLOY_HOSTNAME:-}
+      MODULE: harpocrate
+      ROLE: ${ALLOY_ROLE:-}
+    volumes:
+      - ./alloy/collector.alloy:/etc/alloy/config.alloy:ro
+      # Lecture des journaux de TOUS les conteneurs de l'hôte : le socket Docker
+      # vaut accès root à l'hôte. Assumé par le standard (aucun autre moyen de lire
+      # les flux) ; le conteneur ne publie aucun port.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - alloy_collector_data:/var/lib/alloy/data
+
+  alloy-metrics:
+    image: grafana/alloy:v1.5.1
+    container_name: harpocrate-alloy-metrics
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12346
+    environment:
+      METRICS_URL: ${METRICS_URL:-}
+      HOSTNAME: ${ALLOY_HOSTNAME:-}
+      MODULE: harpocrate
+      ROLE: ${ALLOY_ROLE:-}
+    volumes:
+      - ./alloy/metrics.alloy:/etc/alloy/config.alloy:ro
+      - alloy_metrics_data:/var/lib/alloy/data
+
+volumes:
+  alloy_collector_data:
+  alloy_metrics_data:

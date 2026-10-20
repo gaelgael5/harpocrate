@@ -35,9 +35,7 @@ def _uuid_to_b32(uid: uuid.UUID) -> str:
 _TEST_ID_B32 = _uuid_to_b32(_TEST_API_KEY_ID)
 _TEST_AUTH_SECRET = "A" * 43
 _TEST_HMAC = "B" * 22
-_TEST_TOKEN = (
-    f"hrpv_1_{_TEST_ID_B32}_0_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
-)
+_TEST_TOKEN = f"hrpv_1_{_TEST_ID_B32}_0_3f_{_TEST_AUTH_SECRET}_{_TEST_DKEY_B64}_{_TEST_HMAC}"
 
 
 def _fake_response(status: int = 200, payload: Any = None) -> MagicMock:

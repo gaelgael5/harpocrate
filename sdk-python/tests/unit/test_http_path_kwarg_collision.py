@@ -31,7 +31,12 @@ from harpocrate.http import VaultHttpClient
 
 # Token réel hrpv_* (depuis SDK ≥0.7, VaultHttpClient parse le token au boot
 # pour le tronquer — un placeholder court comme "hrpv_test" lève désormais).
-_TEST_ID_B32 = base64.b32encode(uuid.UUID("12345678-1234-5678-1234-567812345678").bytes).decode().lower().rstrip("=")
+_TEST_ID_B32 = (
+    base64.b32encode(uuid.UUID("12345678-1234-5678-1234-567812345678").bytes)
+    .decode()
+    .lower()
+    .rstrip("=")
+)
 _TEST_DKEY_B64 = base64.urlsafe_b64encode(bytes(range(32))).rstrip(b"=").decode()
 _TEST_TOKEN = f"hrpv_1_{_TEST_ID_B32}_0_3f_{'A' * 43}_{_TEST_DKEY_B64}_{'B' * 22}"
 

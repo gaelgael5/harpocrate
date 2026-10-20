@@ -1,4 +1,5 @@
 """Tests RotationRegistry + intégration VaultClient (LOT_22)."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -113,9 +114,7 @@ def _make_fake_client() -> Any:
             exp=None,
         )
         http = MagicMock()
-        http.get = MagicMock(
-            return_value={"wallet_id": "11111111-1111-1111-1111-111111111111"}
-        )
+        http.get = MagicMock(return_value={"wallet_id": "11111111-1111-1111-1111-111111111111"})
         http_cls.return_value = http
         client = VaultClient(token="hrpv_x", base_url="http://t")
         return client
@@ -136,9 +135,7 @@ async def test_notify_auth_error_calls_get_with_force_refresh_and_fires_callback
     new_value = await client.notify_auth_error("anthropic_api_key")
     assert new_value == "new-rotated-key"
     assert captured == ["new-rotated-key"]
-    client.secrets.get.assert_called_once_with(
-        "anthropic_api_key", force_refresh=True
-    )
+    client.secrets.get.assert_called_once_with("anthropic_api_key", force_refresh=True)
 
 
 @pytest.mark.asyncio

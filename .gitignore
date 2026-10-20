@@ -228,3 +228,7 @@ __marimo__/
 .streamlit/secrets.toml
 frontend/node_modules/
 frontend/dist/
+
+# Wiki = dépôt séparé (gaelgael5/harpocrate.wiki). Un clone local ici ne doit pas
+# être ajouté : un gitlink sans .gitmodules casse actions/checkout (2026-10-20).
+/harpocrate.wiki/

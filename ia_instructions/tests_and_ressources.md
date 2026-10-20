@@ -20,6 +20,7 @@
 - Ports libres le 2026-09-23 pour la stack dev : `5432`, `8000`, `8080`, `8443` — **à revérifier
   au moment de chaque déploiement**, jamais tenus pour acquis.
 - Pas de clé GitHub sur la machine : cloner en HTTPS (dépôt public).
+- **2026-10-20 : bloc SSH `test1` absent de `~/.ssh/config`** (`ssh test1` → « Could not resolve hostname ») ; machine considérée comme non attribuée tant que le portail ne la renotifie pas.
 - **Harpocrate déployé** le 2026-10-03 (branche `dev`, `dev-deploy.sh`) : clone `/root/harpocrate`, journal
   `/root/harpocrate-deploy.log`, UI `https://192.168.10.179:8443` (cert auto-signé), conteneurs
   `harpocrate-backend|frontend|postgres`, Postgres publié sur `0.0.0.0:5432`.

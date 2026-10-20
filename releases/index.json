@@ -1,6 +1,6 @@
 {
-  "schema_version": "1.0",
-  "_comment": "Source de vérité unique des SDKs Harpocrate. Maintenu à la main : ajouter/retirer un SDK = éditer ce fichier + déposer les .whl/.tar.gz/.md correspondants dans releases/ et releases/docs/. Le backend lit ce fichier au runtime et marque available=false les artefacts dont le fichier n'est pas physiquement présent en local.",
+  "schema_version": "1.1",
+  "_comment": "Source de vérité unique des SDKs Harpocrate. Maintenu à la main : ajouter/retirer un SDK = éditer ce fichier + déposer les .whl/.tar.gz/.md correspondants dans releases/ et releases/docs/. Le backend lit ce fichier au runtime et marque available=false les artefacts dont le fichier n'est pas physiquement présent en local. Schéma 1.1 : un SDK publié sur le registre officiel de son langage déclare `registry` {name, package, version} ; l'URL et les commandes d'installation sont dérivées par le backend (services/sdk_registry.py), et la page Intégration n'affiche alors plus ses fichiers.",
   "sdks": [
     {
       "id": "python",
@@ -31,6 +31,11 @@
       ],
       "docs": {
         "fr": "python-fr.md"
+      },
+      "registry": {
+        "name": "pypi",
+        "package": "harpocrate",
+        "version": "0.8.0"
       }
     },
     {

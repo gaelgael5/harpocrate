@@ -393,7 +393,7 @@
   },
   "integration": {
     "title": "Integration & SDK",
-    "subtitle": "Download the SDK and CLI clients to automate access to your secrets from scripts and pipelines.",
+    "subtitle": "Install the SDK and CLI clients to automate access to your secrets from scripts and pipelines.",
     "downloads": "Downloads",
     "download": "Download",
     "available": "Available",
@@ -427,7 +427,11 @@
     "noArtifact": "No artifact available. Check the deployment.",
     "artifactMissing": "File listed in index.json but missing from the deployment.",
     "docNotAvailable": "Documentation unavailable.",
-    "emptyManifest": "No SDK declared. Check that releases/index.json is deployed."
+    "emptyManifest": "No SDK declared. Check that releases/index.json is deployed.",
+    "registry": {
+      "installFrom": "Install from {{registry}}",
+      "viewPackage": "View the package on {{registry}}"
+    }
   },
   "nav": {
     "wallets": "Vaults",

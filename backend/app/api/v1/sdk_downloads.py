@@ -13,9 +13,9 @@ Endpoints :
 - `GET /v1/sdk/doc/{filename}`              → sert un fichier markdown
 - `GET /v1/sdk/{key}`                       → legacy keys (python-wheel, python-sdist, cli-bash)
 
-Schéma `index.json` (v1.0) :
+Schéma `index.json` (v1.1 ; un fichier 1.0 reste lu tel quel) :
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "sdks": [
     {
       "id": "python",                        // identifiant unique
@@ -27,7 +27,10 @@ Schéma `index.json` (v1.0) :
           "version": "0.4.0",
           "filename": "harpocrate-0.4.0-py3-none-any.whl" }
       ],
-      "docs": { "fr": "python-fr.md", "en": "python-en.md" }
+      "docs": { "fr": "python-fr.md", "en": "python-en.md" },
+      // 1.1, facultatif : SDK publié sur le registre officiel de son langage.
+      // Le manifest y ajoute label, url et install_commands (cf. services/sdk_registry).
+      "registry": { "name": "pypi", "package": "harpocrate", "version": "0.8.0" }
     }
   ]
 }
@@ -42,6 +45,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+
+from app.services.sdk_registry import resolve_registry_distribution
 
 router = APIRouter()
 
@@ -120,6 +125,9 @@ def _annotate_sdks(raw_sdks: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "status": sdk.get("status", "planned"),
                 "artifacts": artifacts_out,
                 "docs": docs_out,
+                "registry": resolve_registry_distribution(
+                    str(sdk.get("id") or ""), sdk.get("registry")
+                ),
             }
         )
     return annotated

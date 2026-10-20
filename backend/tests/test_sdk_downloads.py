@@ -49,6 +49,7 @@ def fake_releases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                     },
                 ],
                 "docs": {"fr": "python-fr.md"},
+                "registry": {"name": "pypi", "package": "harpocrate", "version": "0.8.0"},
             },
             {
                 "id": "bash",
@@ -130,6 +131,21 @@ def test_annotate_marks_missing_artifacts_unavailable(fake_releases: Path) -> No
     rust = next(s for s in annotated if s["id"] == "rust")
     assert rust["artifacts"][0]["available"] is False
     assert rust["artifacts"][0]["size_bytes"] is None
+
+
+def test_annotate_exposes_registry_distribution(fake_releases: Path) -> None:
+    annotated = sd._annotate_sdks(sd._load_index()["sdks"])
+    python = next(s for s in annotated if s["id"] == "python")
+    assert python["registry"]["url"] == "https://pypi.org/project/harpocrate/"
+    assert python["registry"]["install_commands"][0] == "pip install harpocrate"
+
+
+def test_annotate_without_registry_is_none(fake_releases: Path) -> None:
+    """Index 1.0 ou SDK distribué par fichier : `registry` vaut null, rien ne casse."""
+    annotated = sd._annotate_sdks(sd._load_index()["sdks"])
+    bash = next(s for s in annotated if s["id"] == "bash")
+    assert bash["registry"] is None
+    assert bash["artifacts"][0]["available"] is True
 
 
 def test_annotate_propagates_status(fake_releases: Path) -> None:

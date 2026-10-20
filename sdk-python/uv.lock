@@ -361,7 +361,6 @@ wheels = [
 
 [[package]]
 name = "harpocrate"
-version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },

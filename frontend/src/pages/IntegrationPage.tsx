@@ -25,6 +25,10 @@ import { z } from "zod";
 import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import {
+  RegistrySchema,
+  SdkRegistryInstall,
+} from "@/components/SdkRegistryInstall";
 
 // ─── Schema (manifest backend) ───────────────────────────────────────────────
 
@@ -51,6 +55,9 @@ const SdkSchema = z.object({
   status: z.enum(["available", "planned"]),
   artifacts: z.array(ArtifactSchema),
   docs: z.record(z.string(), DocSchema),
+  // Absent d'un backend antérieur au manifest 1.1. Un bloc registre mal formé
+  // retombe à null plutôt que de faire échouer tout le catalogue.
+  registry: RegistrySchema.nullable().optional().catch(null),
 });
 
 const ManifestSchema = z.object({
@@ -292,8 +299,13 @@ function SdkPanel({ sdk, lang }: { sdk: Sdk; lang: string }) {
           </Group>
         </Group>
 
-        {/* Downloads */}
-        {latestByKind.length > 0 ? (
+        {/* Le registre officiel, quand il existe, est LE canal d'installation :
+            les fichiers encore listés pour ce SDK (anciens wheels servis par
+            l'instance) ne sont plus proposés, pour ne pas inviter à installer
+            une version périmée hors du registre. */}
+        {sdk.registry ? (
+          <SdkRegistryInstall registry={sdk.registry} />
+        ) : latestByKind.length > 0 ? (
           <Stack gap="xs">
             <Text size="sm" c="dimmed">
               {t("integration.latestVersion")}{" "}

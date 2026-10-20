@@ -4,13 +4,16 @@ Client Python avec déchiffrement E2E côté client, cache `wallet_key` et 9 gé
 
 ## Installation
 
-```bash
-# Depuis le wheel téléchargé
-pip install harpocrate-0.8.0-py3-none-any.whl
+Le SDK est publié sur [PyPI](https://pypi.org/project/harpocrate/) :
 
-# Ou directement depuis le vault
-pip install https://vault.yoops.org/v1/sdk/python-wheel
+```bash
+pip install harpocrate
+# ou, dans un projet géré par uv
+uv add harpocrate
 ```
+
+Dans un projet, déclarer la dépendance avec une borne de version, par exemple
+`harpocrate>=0.8,<0.9` dans `pyproject.toml` ou `requirements.txt`.
 
 ## Démarrage rapide
 

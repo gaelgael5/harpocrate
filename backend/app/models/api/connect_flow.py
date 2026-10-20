@@ -29,6 +29,10 @@ def _b64url_int(value: str) -> int:
     return int.from_bytes(base64.urlsafe_b64decode(value + "="), "big")
 
 
+def _is_absent(value: object) -> bool:
+    return value is None
+
+
 class AppPublicJwk(BaseModel):
     """Clé publique éphémère EC P-256 de l'application (RFC 7517).
 
@@ -42,9 +46,14 @@ class AppPublicJwk(BaseModel):
     crv: Literal["P-256"]
     x: str = Field(pattern=B64URL_32_PATTERN)
     y: str = Field(pattern=B64URL_32_PATTERN)
-    use: Literal["enc"] | None = None
-    alg: Literal["ECDH-ES"] | None = None
-    kid: str | None = Field(default=None, max_length=128)
+    # En JWK (RFC 7517) un membre absent est OMIS, jamais `null` : le front (Zod) et les
+    # bibliothèques JOSE rejettent `"use": null`. Sans `exclude_if`, la JWK sans
+    # `use`/`alg`/`kid` du SDK Python revenait avec des `null` et /connect tombait en
+    # erreur générique (incident rag, 2026-10-20). `exclude_if` plutôt qu'un
+    # `model_serializer` : ce dernier réduisait le schéma OpenAPI publié à un objet libre.
+    use: Literal["enc"] | None = Field(default=None, exclude_if=_is_absent)
+    alg: Literal["ECDH-ES"] | None = Field(default=None, exclude_if=_is_absent)
+    kid: str | None = Field(default=None, max_length=128, exclude_if=_is_absent)
 
     @model_validator(mode="after")
     def _point_on_curve(self) -> AppPublicJwk:

@@ -155,21 +155,24 @@ if [ -f "${INDEX_PATH}" ] && command -v jq >/dev/null 2>&1; then
         fi
     done < <(jq -r '.sdks[].artifacts[]?.filename // empty' "${INDEX_PATH}")
 
-    echo "[3/6] Telechargement des docs manquantes..."
+    # Les docs, contrairement aux artefacts, ne portent pas de version dans leur nom
+    # (python-fr.md…) : les sauter quand elles existent les figeait pour toujours
+    # (constate le 2026-10-05, page Integration restee sur l'ancienne doc). Elles sont
+    # donc retelechargees a chaque passage ; en cas d'echec, la version en place reste.
+    echo "[3/6] Mise a jour des docs..."
     while IFS= read -r FNAME; do
         [ -z "${FNAME}" ] && continue
         DEST="${DOCS_DIR}/${FNAME}"
-        if [ -f "${DEST}" ]; then
-            echo "  -> docs/${FNAME} deja present."
-            continue
-        fi
-        echo "  -> Telechargement docs/${FNAME}..."
         if curl -fsSL -o "${DEST}.tmp" "${RAW_BASE}/releases/docs/${FNAME}"; then
             mv "${DEST}.tmp" "${DEST}"
-            echo "     OK"
+            echo "  -> docs/${FNAME} a jour."
         else
             rm -f "${DEST}.tmp"
-            echo "     [!] Echec download docs/${FNAME} (pas grave : doc marquee indisponible)."
+            if [ -f "${DEST}" ]; then
+                echo "  [!] Echec download docs/${FNAME} : version en place conservee."
+            else
+                echo "  [!] Echec download docs/${FNAME} (pas grave : doc marquee indisponible)."
+            fi
         fi
     done < <(jq -r '.sdks[].docs | values[]?' "${INDEX_PATH}")
 else

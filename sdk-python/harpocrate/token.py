@@ -205,12 +205,7 @@ def truncate_token_for_transport(token: str) -> str:
     # car ParsedToken ne les expose pas en brut.
     suffix_len = _AUTH_SECRET_LEN + 1 + _DKEY_LEN + 1 + _HMAC_LEN
     prefix_part = token[: -(suffix_len + 1)]  # "hrpv_1_id_exp_perms"
-    return (
-        f"{prefix_part}"
-        f"_{parsed.auth_secret_b64}"
-        f"_{_DKEY_PLACEHOLDER}"
-        f"_{parsed.hmac_b64}"
-    )
+    return f"{prefix_part}_{parsed.auth_secret_b64}_{_DKEY_PLACEHOLDER}_{parsed.hmac_b64}"
 
 
 def with_decryption_key(token: str, dkey_b64: str) -> str:
@@ -223,6 +218,6 @@ def with_decryption_key(token: str, dkey_b64: str) -> str:
     """
     truncated = truncate_token_for_transport(token)
     tail = len(_DKEY_PLACEHOLDER) + 1 + _HMAC_LEN
-    rebuilt = f"{truncated[:-tail]}{dkey_b64}{truncated[-(_HMAC_LEN + 1):]}"
+    rebuilt = f"{truncated[:-tail]}{dkey_b64}{truncated[-(_HMAC_LEN + 1) :]}"
     parse_token(rebuilt)
     return rebuilt

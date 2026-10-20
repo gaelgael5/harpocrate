@@ -33,12 +33,17 @@ Harpocrate est **end-to-end encrypted** : le serveur ne stocke et ne déchiffre 
 
 ## SDK officiel
 
-Télécharge le SDK adapté au langage du projet depuis le coffre lui-même :
+Installe le SDK adapté au langage du projet depuis le registre officiel du langage
+quand il y est publié, sinon depuis le coffre lui-même :
 
-| Langage | Endpoint de téléchargement | Usage |
+| Langage | Où l'obtenir | Installation |
 |---|---|---|
-| Python | `GET /v1/sdk/python-wheel` | `pip install harpocrate-*.whl` |
-| Bash / Shell | `GET /v1/sdk/cli-bash` | `harpocrate-cli get SECRET_NAME` |
+| Python | PyPI, paquet [`harpocrate`](https://pypi.org/project/harpocrate/) | `pip install harpocrate` ou `uv add harpocrate` |
+| Bash / Shell | `GET /v1/sdk/cli-bash` (coffre) | `harpocrate-cli get SECRET_NAME` |
+
+Déclare la dépendance Python comme toute autre (`pyproject.toml`, `requirements.txt`),
+avec une borne de version : ne télécharge plus le wheel servi par le coffre
+(`GET /v1/sdk/python-wheel`), cette route est appelée à disparaître.
 
 Si le projet est dans un langage non couvert par un SDK officiel, fais des appels directs à l'API décrite dans le spec OpenAPI (`/v1/openapi-api-key.json`). Dans ce cas : envoie le token complet `hrpv_1_*` dans `Authorization: Bearer`, et utilise la clé de déchiffrement extraite du token (champ `dkey_b64url` selon le format documenté dans le spec) pour déchiffrer les `encrypted_value` reçues avec AES-256-GCM.
 

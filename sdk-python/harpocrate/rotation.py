@@ -30,9 +30,7 @@ logger = logging.getLogger("harpocrate.rotation")
 
 # Type alias : callback peut être sync ou async, signature varie
 SpecificCallback = Callable[[str], None] | Callable[[str], Awaitable[None]]
-GlobalCallback = (
-    Callable[[str, str], None] | Callable[[str, str], Awaitable[None]]
-)
+GlobalCallback = Callable[[str, str], None] | Callable[[str, str], Awaitable[None]]
 
 
 class RotationRegistry:
@@ -61,10 +59,10 @@ class RotationRegistry:
 
         Les exceptions des callbacks sont loggées mais NE bloquent PAS l'enchaînement.
         """
-        for cb in self._specific.get(secret_name, []):
-            await self._invoke(cb, secret_name, new_value)
-        for cb in self._global:
-            await self._invoke(cb, secret_name, new_value, global_=True)
+        for specific_cb in self._specific.get(secret_name, []):
+            await self._invoke(specific_cb, secret_name, new_value)
+        for global_cb in self._global:
+            await self._invoke(global_cb, secret_name, new_value, global_=True)
 
     @staticmethod
     async def _invoke(
@@ -75,9 +73,7 @@ class RotationRegistry:
         global_: bool = False,
     ) -> None:
         try:
-            result = (
-                callback(secret_name, new_value) if global_ else callback(new_value)
-            )
+            result = callback(secret_name, new_value) if global_ else callback(new_value)
             if inspect.isawaitable(result):
                 await result
         except Exception as exc:

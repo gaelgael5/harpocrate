@@ -156,7 +156,8 @@ class SecretsClient:
         Retourne un dict avec : path, secrets_at_this_level_count, folders.
         """
         tree_path = f"/v1/wallets/{self._wallet_id}/tree"
-        return self._http.get(tree_path, path=path)  # type: ignore[return-value]
+        tree: dict[str, Any] = self._http.get(tree_path, path=path)
+        return tree
 
     def create(
         self,
@@ -470,9 +471,7 @@ class VaultClient:
 
     # ─── LOT_22 — détection rotation par auth_error ──────────────────────────
 
-    def on_auth_error(
-        self, secret_name: str
-    ) -> Callable[[SpecificCallback], SpecificCallback]:
+    def on_auth_error(self, secret_name: str) -> Callable[[SpecificCallback], SpecificCallback]:
         """Décorateur : enregistre un callback déclenché sur rotation détectée.
 
         Usage :
@@ -485,8 +484,10 @@ class VaultClient:
         globaux. Une exception dans un callback est loggée et n'interrompt pas
         l'enchaînement.
         """
+
         def _decorator(callback: SpecificCallback) -> SpecificCallback:
             return self._rotation.register_specific(secret_name, callback)
+
         return _decorator
 
     def on_any_auth_error(self, callback: GlobalCallback) -> GlobalCallback:
@@ -545,6 +546,7 @@ class _UsingSecret:
             if retry:
                 return await self._client.notify_auth_error(self._secret_name)
             return self._client.secrets.get(self._secret_name)
+
         return _get
 
     async def __aexit__(self, *_args: object) -> None:

@@ -1,19 +1,25 @@
 # Harpocrate — Packages distribuables
 
-Artefacts générés à partir du repo (branche `feat/local-admin-auth`).
+Catalogue des SDK affiché par la page Intégration (`/integration`), décrit par
+`index.json`. Un SDK publié sur le registre officiel de son langage n'y figure plus que
+par sa déclaration `registry` : on l'installe depuis ce registre, pas depuis ce dossier.
 
 ## Contenu
 
-| Fichier | Quoi |
+| SDK | Où l'obtenir |
 |---|---|
-| `harpocrate-0.1.0-py3-none-any.whl` | SDK Python (wheel installable via `pip install`) |
-| `harpocrate-sdk-0.1.0.tar.gz` | SDK Python (sdist source) |
-| `harpocrate-cli-0.1.0.tar.gz` | CLI bash (script `harpocrate-cli` + helper `lib/harpocrate-gen.py`) |
+| SDK Python | [PyPI](https://pypi.org/project/harpocrate/) — `pip install harpocrate` / `uv add harpocrate` (publication : `sdk-python/RELEASING.md`) |
+| CLI bash | `harpocrate-cli-<version>.tar.gz` ici (script `harpocrate-cli` + helper `lib/harpocrate-gen.py`) |
+
+Les fichiers `harpocrate-*.whl` encore présents ici sont les anciennes livraisons du SDK
+Python ; ils ne sont plus proposés par la page Intégration et seront retirés.
 
 ## Installation SDK Python
 
 ```bash
-pip install harpocrate-0.1.0-py3-none-any.whl
+pip install harpocrate
+# ou
+uv add harpocrate
 ```
 
 Usage minimal :
@@ -50,8 +56,8 @@ tar -xzf harpocrate-cli-0.1.0.tar.gz -C ~/bin
 export PATH="$PATH:$HOME/bin"
 chmod +x ~/bin/harpocrate-cli
 
-# Pré-requis : pip install harpocrate (pour le helper Python qui fait la crypto)
-pip install harpocrate-0.1.0-py3-none-any.whl
+# Pré-requis : le SDK Python (pour le helper qui fait la crypto)
+pip install harpocrate
 
 # Configuration via env
 export HARPOCRATE_TOKEN=hrpv_...
@@ -77,6 +83,5 @@ ou consulte la page d'intégration `/integration` (à venir).
 
 ## Versions
 
-- SDK Python : `0.1.0`
-- CLI bash : `0.1.0`
-- Compatible avec backend Harpocrate `0.1.0`
+Les versions courantes sont celles déclarées dans `index.json` (et, pour le SDK Python,
+celle publiée sur PyPI).

@@ -394,7 +394,7 @@
   },
   "integration": {
     "title": "Intégration & SDK",
-    "subtitle": "Téléchargez les clients SDK et CLI pour automatiser l'accès à vos secrets depuis vos scripts et pipelines.",
+    "subtitle": "Installez les SDK et le CLI pour automatiser l'accès à vos secrets depuis vos scripts et pipelines.",
     "downloads": "Téléchargements",
     "download": "Télécharger",
     "available": "Disponible",
@@ -428,7 +428,11 @@
     "noArtifact": "Aucun artefact disponible. Vérifier le déploiement.",
     "artifactMissing": "Fichier listé dans index.json mais absent du déploiement.",
     "docNotAvailable": "Documentation indisponible.",
-    "emptyManifest": "Aucun SDK déclaré. Vérifier que releases/index.json est bien déployé."
+    "emptyManifest": "Aucun SDK déclaré. Vérifier que releases/index.json est bien déployé.",
+    "registry": {
+      "installFrom": "Installation depuis {{registry}}",
+      "viewPackage": "Voir le paquet sur {{registry}}"
+    }
   },
   "nav": {
     "wallets": "Coffres",
@@ -1504,7 +1508,8 @@
       "request_not_pending": "Cette demande a déjà reçu une réponse.",
       "local_admin_not_allowed": "Le compte administrateur de secours ne peut pas connecter une application. Connectez-vous avec votre compte personnel.",
       "keycloak_unreachable": "Le fournisseur d'identité (Keycloak) est injoignable depuis cette page. Réessayez plus tard, ou créez l'API key à la main depuis la page « API keys » du coffre.",
-      "generic": "Une erreur est survenue. Réessayez dans un instant."
+      "generic": "Une erreur est survenue. Réessayez dans un instant.",
+      "reference": "Référence : {{reference}}"
     }
   },
   "footer": {

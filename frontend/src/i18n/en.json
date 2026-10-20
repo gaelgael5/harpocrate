@@ -393,7 +393,7 @@
   },
   "integration": {
     "title": "Integration & SDK",
-    "subtitle": "Download the SDK and CLI clients to automate access to your secrets from scripts and pipelines.",
+    "subtitle": "Install the SDK and CLI clients to automate access to your secrets from scripts and pipelines.",
     "downloads": "Downloads",
     "download": "Download",
     "available": "Available",
@@ -427,7 +427,11 @@
     "noArtifact": "No artifact available. Check the deployment.",
     "artifactMissing": "File listed in index.json but missing from the deployment.",
     "docNotAvailable": "Documentation unavailable.",
-    "emptyManifest": "No SDK declared. Check that releases/index.json is deployed."
+    "emptyManifest": "No SDK declared. Check that releases/index.json is deployed.",
+    "registry": {
+      "installFrom": "Install from {{registry}}",
+      "viewPackage": "View the package on {{registry}}"
+    }
   },
   "nav": {
     "wallets": "Vaults",
@@ -1503,7 +1507,8 @@
       "request_not_pending": "This request has already been answered.",
       "local_admin_not_allowed": "The break-glass administrator account cannot connect an application. Sign in with your personal account.",
       "keycloak_unreachable": "The identity provider (Keycloak) cannot be reached from this page. Try again later, or create the API key manually from the wallet's “API keys” page.",
-      "generic": "Something went wrong. Please try again in a moment."
+      "generic": "Something went wrong. Please try again in a moment.",
+      "reference": "Reference: {{reference}}"
     }
   },
   "footer": {

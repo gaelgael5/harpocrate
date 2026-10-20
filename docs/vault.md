@@ -15,7 +15,7 @@ Ta mission : nettoyer toute la logique existante de gestion de secrets et la rem
 
 **Spec OpenAPI** : `GET /v1/openapi-api-key.json` (ou Swagger UI sur `GET /v1/api-docs`)
 
-Commence par lire ce spec OpenAPI. Il décrit tous les endpoints utilisables avec une API key et leurs schémas de requête/réponse. Les SDKs officiels sont téléchargeables depuis `GET /v1/sdk/python-wheel` (wheel Python) et `GET /v1/sdk/cli-bash` (CLI Bash).
+Commence par lire ce spec OpenAPI. Il décrit tous les endpoints utilisables avec une API key et leurs schémas de requête/réponse. Le SDK Python s'installe depuis PyPI (`pip install harpocrate`) ; le CLI Bash se télécharge depuis `GET /v1/sdk/cli-bash`.
 
 
 ## Modèle cryptographique (à comprendre avant de coder)
@@ -42,8 +42,9 @@ quand il y est publié, sinon depuis le coffre lui-même :
 | Bash / Shell | `GET /v1/sdk/cli-bash` (coffre) | `harpocrate-cli get SECRET_NAME` |
 
 Déclare la dépendance Python comme toute autre (`pyproject.toml`, `requirements.txt`),
-avec une borne de version : ne télécharge plus le wheel servi par le coffre
-(`GET /v1/sdk/python-wheel`), cette route est appelée à disparaître.
+avec une borne de version. Le coffre ne sert plus de wheel : `GET /v1/sdk/python-wheel`
+et `GET /v1/sdk/python-sdist` répondent **410** (`sdk_moved_to_registry`) avec la commande
+d'installation PyPI.
 
 Si le projet est dans un langage non couvert par un SDK officiel, fais des appels directs à l'API décrite dans le spec OpenAPI (`/v1/openapi-api-key.json`). Dans ce cas : envoie le token complet `hrpv_1_*` dans `Authorization: Bearer`, et utilise la clé de déchiffrement extraite du token (champ `dkey_b64url` selon le format documenté dans le spec) pour déchiffrer les `encrypted_value` reçues avec AES-256-GCM.
 

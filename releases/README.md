@@ -11,8 +11,8 @@ par sa déclaration `registry` : on l'installe depuis ce registre, pas depuis ce
 | SDK Python | [PyPI](https://pypi.org/project/harpocrate/) — `pip install harpocrate` / `uv add harpocrate` (publication : `sdk-python/RELEASING.md`) |
 | CLI bash | `harpocrate-cli-<version>.tar.gz` ici (script `harpocrate-cli` + helper `lib/harpocrate-gen.py`) |
 
-Les fichiers `harpocrate-*.whl` encore présents ici sont les anciennes livraisons du SDK
-Python ; ils ne sont plus proposés par la page Intégration et seront retirés.
+Le SDK Python n'est plus livré ici : ses anciens wheels et sdists ont été retirés, et
+`GET /v1/sdk/python-wheel` / `python-sdist` répondent 410 avec la commande PyPI.
 
 ## Installation SDK Python
 

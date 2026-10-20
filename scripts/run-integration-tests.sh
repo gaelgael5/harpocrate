@@ -8,7 +8,6 @@
 # La base (postgres:16-alpine + db/init, comme la stack) est créée, migrée par
 # migrations/apply_migrations.py, puis détruite en sortie, même en cas d'échec.
 # Le mot de passe est aléatoire et ne quitte pas la machine.
-# Usage : run-db-tests.sh <chemin du dépôt> [args pytest...]
 set -euo pipefail
 REPO="$1"; shift
 NAME="harpocrate-testdb-$$"

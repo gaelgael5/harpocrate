@@ -1,5 +1,14 @@
 # Alloy — collecteur de logs (module harpocrate)
 
+> **Hôte applicatif Harpocrate : ne plus utiliser cet agent** (2026-10-20). Les
+> collecteurs de logs et de métriques font désormais partie de la stack
+> (`docker-compose.yml`, services `alloy-collector` et `alloy-metrics`, configs
+> `infra/alloy-collector/` et `infra/alloy-metrics/` reprises de `ag-flow/ressources`)
+> et sont démarrés par `scripts/refresh.sh`. Les deux ensemble sur un même hôte
+> enverraient chaque ligne deux fois. Cet agent ne reste utile que pour un hôte
+> **sans** la stack (nœud de cluster Patroni/etcd) ; il vise encore l'ancienne
+> stack `192.168.10.110`, que n'interroge pas `logs_query`.
+
 Agent Grafana Alloy qui collecte les logs Docker et journald du LXC hôte et les pousse vers la stack Loki centralisée.
 
 ## Architecture

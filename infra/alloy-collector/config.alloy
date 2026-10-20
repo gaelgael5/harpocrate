@@ -1,0 +1,72 @@
+// Repris tel quel de ag-flow/ressources, composes/alloy-collector/config.alloy (commit 1e0e2cf, 2026-10-20).
+// Ne pas diverger : corriger d'abord la référence, puis recopier ici.
+
+// Collecteur Alloy — devpod-ui (spec 30 §3.1)
+// Envoie les logs Docker + journald vers Loki avec labeling structuré.
+
+// ── Source 1 : conteneurs Docker ─────────────────────────────────────────────
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.containers.output
+  forward_to    = [loki.write.central.receiver]
+  relabel_rules = discovery.relabel.containers.rules
+}
+
+// ── Source 2 : journald (logs système + kernel + Docker daemon) ───────────────
+
+discovery.relabel "journal" {
+  targets = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.source.journal "system" {
+  path          = "/run/log/journal"
+  forward_to    = [loki.write.central.receiver]
+  relabel_rules = discovery.relabel.journal.rules
+
+  labels = {
+    host = env("HOSTNAME"),
+    job  = "journal",
+  }
+}
+
+// ── Sortie Loki ──────────────────────────────────────────────────────────────
+
+loki.write "central" {
+  endpoint {
+    url = env("LOKI_URL")
+  }
+
+  external_labels = {
+    host   = env("HOSTNAME"),
+    module = env("MODULE"),
+    role   = env("ROLE"),
+  }
+}

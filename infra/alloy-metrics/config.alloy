@@ -1,0 +1,74 @@
+// Repris tel quel de ag-flow/ressources, composes/alloy-metrics/config.alloy (commit 1e0e2cf, 2026-10-20).
+// Ne pas diverger : corriger d'abord la référence, puis recopier ici.
+
+// Collecteur de métriques Alloy — miroir de `alloy-collector` côté métriques.
+// Node exporter intégré → scrape local → remote_write vers le TSDB central.
+//
+// Syntaxe vérifiée contre la documentation d'Alloy v1.5.x :
+//   - `prometheus.exporter.unix "<label>" { }` exporte `.targets`
+//   - la concaténation de plusieurs jeux de targets est `array.concat(...)`
+//     (et non `concat(...)`, qui était la forme de l'ancien Agent Flow)
+//   - `prometheus.remote_write` porte `external_labels` et un bloc `endpoint`
+
+// ── Métriques de la machine ──────────────────────────────────────────────────
+//
+// LIMITE ASSUMÉE — collecteurs désactivés parce qu'ils mesureraient le CONTENEUR
+// et non la MACHINE. Le portail n'autorise, pour un template importé, que quatre
+// bind-mounts absolus : /var/run/docker.sock, /var/log, /run/log/journal et
+// /etc/machine-id (compose/validation.py, `_BUILTIN_ALLOWED_BINDS`). Ni `/`, ni
+// `/proc`, ni `/sys` ne peuvent être montés, donc `rootfs_path` / `procfs_path` /
+// `sysfs_path` n'ont rien d'utile à pointer.
+//
+// Ce qui reste juste sans montage : Docker ne cloisonne pas /proc/stat,
+// /proc/meminfo ni /proc/loadavg — CPU, mémoire, charge et uptime remontent bien
+// les valeurs de l'hôte. Ce qui serait faux : le système de fichiers (overlay du
+// conteneur au lieu de la racine de la machine) et le réseau (veth du conteneur
+// au lieu des interfaces de l'hôte).
+//
+// Ces collecteurs sont donc coupés PLUTÔT QUE laissés à produire des séries
+// plausibles et fausses. Les rallumer suppose d'élargir la liste blanche côté
+// portail — ticket ouvert séparément.
+
+prometheus.exporter.unix "host" {
+  disable_collectors = [
+    // Mesureraient le conteneur, pas la machine
+    "filesystem",
+    "diskstats",
+    "mountstats",
+    "netdev",
+    "netclass",
+    // Systèmes de fichiers absents de ce parc — bruit pur
+    "btrfs",
+    "xfs",
+    "zfs",
+    "nfs",
+    "nfsd",
+    "infiniband",
+    "ipvs",
+  ]
+}
+
+// ── Scrape local ─────────────────────────────────────────────────────────────
+
+prometheus.scrape "local" {
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.remote_write.central.receiver]
+  scrape_interval = "30s"
+}
+
+// ── Sortie remote_write ──────────────────────────────────────────────────────
+
+prometheus.remote_write "central" {
+  endpoint {
+    url = env("METRICS_URL")
+  }
+
+  // Cardinalité volontairement bornée : host / module / role, comme le
+  // collecteur de logs. Surtout pas d'identifiant de workspace ou de
+  // déploiement ici — le nombre de séries exploserait.
+  external_labels = {
+    host   = env("HOSTNAME"),
+    module = env("MODULE"),
+    role   = env("ROLE"),
+  }
+}

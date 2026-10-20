@@ -169,12 +169,14 @@ detect_frontend_https_port() {
     fi
   fi
 
-  # Source 2 : compose YAML (avant le up)
-  port=$(grep -oE '"[0-9.]+:[0-9]+:443"' "$COMPOSE_FILE" 2>/dev/null \
-         | head -1 | awk -F: '{print $2}')
-  if [ -n "$port" ]; then
-    echo "$port"
-    return
+  # Source 2 : surcharge du .env (avant le up). Le compose ne porte plus de
+  # port en dur (`${HARPOCRATE_DEV_HTTPS_PORT:-8443}`) : c'est le .env qui décide.
+  if [ -f ".env" ]; then
+    port=$(awk -F'=' '/^HARPOCRATE_DEV_HTTPS_PORT=/ {print $2}' .env | tr -d '\r')
+    if [ -n "$port" ]; then
+      echo "$port"
+      return
+    fi
   fi
 
   # Fallback
@@ -321,6 +323,56 @@ if [ "$RESET_DATA" = "1" ]; then
   fi
   echo "      ✓ data/postgres supprimé — Postgres se réinitialisera avec POSTGRES_PASSWORD du .env"
 fi
+
+# ─── 5b) Ports hôte libres — sondés APRÈS l'arrêt de la stack ───────────────
+# Sondés avant, nos propres conteneurs passeraient pour des conflits et un port
+# de repli serait persisté à tort. Sur une machine partagée, un autre projet peut
+# tenir un port par défaut (2026-10-20 : 8080 pris par miles-frontend sur
+# host-test-36) : on prend alors le suivant libre et on le PERSISTE dans .env,
+# pour qu'il reste stable d'un déploiement à l'autre. Un port déjà choisi dans
+# .env n'est jamais changé en silence : s'il est pris, on échoue en le disant.
+port_in_use() {
+  ss -ltnH "( sport = :$1 )" 2>/dev/null | grep -q .
+}
+
+resolve_dev_port() {
+  local key="$1" default="$2" configured="" candidate
+  [ -f ".env" ] && configured=$(awk -F'=' -v k="$key" '$1==k {print $2}' .env | tr -d '\r')
+  if [ -n "$configured" ]; then
+    if port_in_use "$configured"; then
+      echo "✗ ${key}=${configured} (fixé dans .env) est occupé par un autre service." >&2
+      echo "  Diagnostic : ss -ltnp '( sport = :${configured} )'" >&2
+      exit 1
+    fi
+    return 0
+  fi
+  port_in_use "$default" || return 0
+  candidate=$((default + 1))
+  while port_in_use "$candidate"; do
+    candidate=$((candidate + 1))
+    if [ "$candidate" -gt $((default + 100)) ]; then
+      echo "✗ Aucun port libre entre ${default} et $((default + 100)) pour ${key}." >&2
+      exit 1
+    fi
+  done
+  # Un .env sans fin de ligne finale collerait la clé à la dernière valeur.
+  if [ -n "$(tail -c1 .env)" ]; then echo >> .env; fi
+  printf '%s=%s\n' "$key" "$candidate" >> .env
+  echo "      ⚠  port ${default} occupé → ${key}=${candidate} persisté dans .env"
+  if [ "$key" = "HARPOCRATE_DEV_HTTPS_PORT" ]; then
+    echo "      ⚠  Vérifie HARPOCRATE_PUBLIC_URL dans .env : elle doit porter le port ${candidate}."
+  fi
+}
+
+if ! command -v ss >/dev/null 2>&1; then
+  echo "✗ 'ss' introuvable (sonde des ports) : sudo apt install iproute2" >&2
+  exit 1
+fi
+echo "      Sonde des ports hôte..."
+resolve_dev_port HARPOCRATE_DEV_PG_PORT 5432
+resolve_dev_port HARPOCRATE_DEV_API_PORT 8000
+resolve_dev_port HARPOCRATE_DEV_HTTP_PORT 8080
+resolve_dev_port HARPOCRATE_DEV_HTTPS_PORT 8443
 
 # ─── 6) Pull images registry restantes (postgres) puis up ──────────────────
 

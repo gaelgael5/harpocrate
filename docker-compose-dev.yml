@@ -45,7 +45,7 @@ services:
     # en dev sur réseau interne ; en prod, restreindre via firewall ou
     # tunneliser via WireGuard.
     ports:
-      - "5432:5432"
+      - "${HARPOCRATE_DEV_PG_PORT:-5432}:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -111,7 +111,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${HARPOCRATE_DEV_API_PORT:-8000}:8000"
     volumes:
       # Cross-app launcher menu — éditable côté repo sans rebuild.
       - ./apps.json:/app/apps.json:ro
@@ -152,8 +152,10 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8080:80"
-      - "0.0.0.0:8443:443"
+      # Ports hôte surchargeables (.env) : sur une machine de test partagée,
+      # dev-deploy.sh choisit un port libre et le persiste s'il le faut.
+      - "127.0.0.1:${HARPOCRATE_DEV_HTTP_PORT:-8080}:80"
+      - "0.0.0.0:${HARPOCRATE_DEV_HTTPS_PORT:-8443}:443"
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:80/ || exit 1"]
       interval: 10s

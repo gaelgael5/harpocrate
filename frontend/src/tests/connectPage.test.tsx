@@ -189,6 +189,36 @@ describe("ConnectPage", () => {
   });
 });
 
+describe("ConnectPage — erreur non expliquée", () => {
+  it("affiche une référence technique sous le message générique", async () => {
+    mockSession(true);
+    useCryptoStore.setState({ isUnlocked: true });
+    vi.mocked(fetchConnectRequest).mockRejectedValue(
+      new ApiError(
+        403,
+        "invalid_audience",
+        "Audience doesn't match: secret-xyz",
+      ),
+    );
+    renderAt(connectPath(PARAMS));
+    expect(await screen.findByText(fr.connect.errors.generic)).toBeTruthy();
+    expect(screen.getByText(/HTTP 403 · invalid_audience/)).toBeTruthy();
+    // Le message libre du serveur n'est jamais affiché : il peut porter n'importe quoi.
+    expect(screen.queryByText(/secret-xyz/)).toBeNull();
+  });
+
+  it("ne référence que le type d'une erreur hors API", async () => {
+    mockSession(true);
+    useCryptoStore.setState({ isUnlocked: true });
+    vi.mocked(fetchConnectRequest).mockRejectedValue(
+      new TypeError("Failed to fetch https://x/?token=abc"),
+    );
+    renderAt(connectPath(PARAMS));
+    expect(await screen.findByText(/TypeError/)).toBeTruthy();
+    expect(screen.queryByText(/token=abc/)).toBeNull();
+  });
+});
+
 describe("ConnectPage — Keycloak injoignable", () => {
   it("l'explique au lieu d'attendre sans fin", async () => {
     mockSession(false);

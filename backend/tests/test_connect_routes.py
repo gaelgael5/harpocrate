@@ -205,6 +205,8 @@ async def test_get_request_shows_declared_name_to_keycloak_user(
     assert data["redirect_uri"] == REDIRECT_URI
     assert data["requested_permissions"] == 3
     assert data["app_public_jwk"]["crv"] == "P-256"
+    # Membres JWK absents omis, jamais `null` (incident rag du 2026-10-20).
+    assert None not in data["app_public_jwk"].values()
 
 
 async def test_get_request_refuses_local_admin(conn: Any, client: AsyncClient) -> None:

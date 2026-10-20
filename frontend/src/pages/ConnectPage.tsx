@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { Center, Loader } from "@mantine/core";
+import { Center, Loader, Text } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 
 import { ConnectStatusCard } from "@/components/ConnectStatusCard";
@@ -58,6 +58,25 @@ function errorKey(err: unknown): string {
   return KNOWN_ERRORS.has(code)
     ? `connect.errors.${code}`
     : "connect.errors.generic";
+}
+
+/**
+ * Référence technique d'une erreur NON expliquée, à afficher sous le message générique :
+ * sans elle, un échec en production est indiagnosticable (incident rag du 2026-10-20).
+ * On n'expose que le statut HTTP et le code d'erreur de l'API, ou le seul type d'une
+ * erreur locale — jamais leur message libre, qui peut porter une URL ou un jeton.
+ */
+function errorReference(err: unknown): string | null {
+  if (err instanceof ApiError) {
+    return KNOWN_ERRORS.has(err.code)
+      ? null
+      : `HTTP ${err.status} · ${err.code}`;
+  }
+  if (err instanceof Error) {
+    // Les erreurs locales expliquées portent leur code dans `message` (cf. errorKey).
+    return KNOWN_ERRORS.has(err.message) ? null : err.name;
+  }
+  return "unknown";
 }
 
 /** Erreurs définitives de la demande : la reprise est abandonnée. */
@@ -165,12 +184,19 @@ export function ConnectPage() {
     if (errorCode === "first_login") {
       return <Navigate to="/first-login" replace />;
     }
+    const reference = errorReference(request.error);
     return (
       <ConnectStatusCard
         title={t("connect.errorTitle")}
         message={t(errorKey(request.error))}
         color="red"
-      />
+      >
+        {reference && (
+          <Text size="xs" c="dimmed">
+            {t("connect.errors.reference", { reference })}
+          </Text>
+        )}
+      </ConnectStatusCard>
     );
   }
   if (!request.data) return <Waiting />;
@@ -180,6 +206,14 @@ export function ConnectPage() {
   function leaveTo(redirectTo: string) {
     clearConnectResume();
     window.location.assign(redirectTo);
+  }
+
+  function actionMessage(err: Error): string {
+    const reference = errorReference(err);
+    const message = t(errorKey(err));
+    return reference
+      ? `${message} ${t("connect.errors.reference", { reference })}`
+      : message;
   }
 
   const actionError = approve.error ?? deny.error;
@@ -194,7 +228,7 @@ export function ConnectPage() {
         onDeny={() => deny.mutate(undefined, { onSuccess: leaveTo })}
         approving={approve.isPending || approve.isSuccess}
         denying={deny.isPending || deny.isSuccess}
-        error={actionError ? t(errorKey(actionError)) : null}
+        error={actionError ? actionMessage(actionError) : null}
       />
     </ConnectStatusCard>
   );

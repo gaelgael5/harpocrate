@@ -4,9 +4,15 @@ Client Python zero-knowledge pour Harpocrate Vault.
 
 ## Installation
 
+Depuis [PyPI](https://pypi.org/project/harpocrate/) :
+
 ```bash
 pip install harpocrate
+# ou
+uv add harpocrate
 ```
+
+Python 3.10 ou plus récent.
 
 ## Usage rapide
 

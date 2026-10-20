@@ -24,6 +24,13 @@ secrets dans `repr`.
   `truncate_token_for_transport` : réinsère la dkey dans un token signé sans elle.
 - Nouvelle exception `ConnectError` (attribut `error_code`).
 
+### Distribution
+
+- Première version publiée sur PyPI (`pip install harpocrate`, `uv add harpocrate`),
+  par la CI GitHub Actions en Trusted Publishing — voir `RELEASING.md`. PyPI devient le
+  canal officiel ; le téléchargement du wheel depuis une instance Harpocrate sera retiré.
+- Le paquet déclare ses types (`py.typed`) et sa licence en expression SPDX.
+
 ### Dépendances
 
 - `joserfc>=1.7` (descellement JWE ; pas de primitive cryptographique maison).

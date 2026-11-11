@@ -475,6 +475,7 @@
     "nav_secret_types": "Secret types",
     "nav_anomalies": "Anomalies",
     "nav_connect_clients": "Connected applications",
+    "nav_cultures": "Cultures",
     "connectClients": {
       "title": "Connected applications",
       "intro": "Only applications declared here, with their exact return URLs, can request an API key on a wallet through “Sign in with Harpocrate”. Disabling an application blocks its new requests without revoking keys already issued.",
@@ -511,6 +512,25 @@
         "redirectUrisRequired": "At least one return URL is required",
         "tooManyRedirectUris": "At most 10 return URLs",
         "clientIdTaken": "This identifier is already declared"
+      }
+    },
+    "cultures": {
+      "title": "Cultures",
+      "intro": "ISO 639-1 languages available for configurable content such as email templates. An enabled culture can receive a template; the default culture is the fallback when a user's culture is not enabled or has no template. Enabling a culture does not translate the interface.",
+      "search": "Search by code or name",
+      "filterEnabled": "Enabled",
+      "filterAll": "All",
+      "empty": "No culture matches.",
+      "colCode": "Code",
+      "colName": "Language",
+      "colEnabled": "Enabled",
+      "colDefault": "Default",
+      "default": "Default",
+      "makeDefault": "Make default",
+      "toggleLabel": "Enable {{name}}",
+      "errors": {
+        "default_culture_cannot_be_disabled": "The default culture cannot be disabled: designate another default culture first.",
+        "culture_disabled": "Only an enabled culture can be the default."
       }
     },
     "anomalies": {

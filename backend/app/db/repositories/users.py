@@ -317,6 +317,14 @@ async def get_id_and_is_system_by_email(
     return row["id"], row["is_system"]
 
 
+async def get_preferred_locale(
+    conn: asyncpg.Connection[asyncpg.Record],
+    user_id: UUID,
+) -> str | None:
+    """Langue préférée du user (`users.preferred_locale`), ou None s'il n'existe plus."""
+    return await conn.fetchval("SELECT preferred_locale FROM users WHERE id = $1", user_id)
+
+
 async def get_id_is_system_sub_by_email(
     conn: asyncpg.Connection[asyncpg.Record],
     email: str,

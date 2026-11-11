@@ -16,6 +16,7 @@ from app.api.v1 import (
     admin_connect_clients,
     admin_cultures,
     admin_install_mode,
+    admin_listmonk,
     admin_maintenance,
     admin_pairing_exec,
     admin_remote_backups,
@@ -59,6 +60,7 @@ from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.middleware.db_availability import db_availability_middleware
 from app.services import connect_purge, local_admin_bootstrap
+from app.services import listmonk_templates as listmonk_templates_svc
 from app.services import replication as replication_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
 from app.services import seed_types as seed_svc
@@ -92,6 +94,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await seed_svc.seed_system_types(conn)
         # LOT_20 — s'assurer que la stratégie de réplication env est active.
         await replication_svc.ensure_env_strategy_active(conn)
+        # Reprise unique des ID de templates Listmonk du .env vers la base
+        # (épic « Cultures et templates Listmonk paramétrés en base »).
+        await listmonk_templates_svc.import_legacy_env_templates(conn)
 
     # LOT_56 — provisionne la row `users` du local-admin (is_system=TRUE) pour
     # qu'il puisse être référencé dans `audit_log.actor_user_id`. No-op si
@@ -349,6 +354,7 @@ app.include_router(admin_users.router, prefix="/v1")
 app.include_router(admin_anomalies.router, prefix="/v1")
 app.include_router(admin_connect_clients.router, prefix="/v1")
 app.include_router(admin_cultures.router, prefix="/v1")
+app.include_router(admin_listmonk.router, prefix="/v1")
 app.include_router(connect.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 app.include_router(config_public.router, prefix="/v1")

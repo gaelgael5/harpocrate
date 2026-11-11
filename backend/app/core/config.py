@@ -173,16 +173,25 @@ class Settings(BaseSettings):
     listmonk_user: str = Field(default="")
     listmonk_token: str = Field(default="", json_schema_extra={"is_secret": True})
 
-    # IDs des templates transactional listmonk pour les mails de recovery,
-    # par locale. À configurer côté admin listmonk avant le premier envoi.
-    # Pattern `*_<locale>` extensible : ajouter `..._es`, `..._de`, etc.
-    listmonk_template_recovery_en: int = Field(default=5)
-    listmonk_template_recovery_fr: int = Field(default=4)
+    # LEGACY — les ID de templates se paramètrent désormais en base, par culture
+    # (table listmonk_templates, écran « Paramétrage Listmonk »). Ces deux
+    # variables ne servent plus qu'à la reprise unique au boot
+    # (`listmonk_templates.import_legacy_env_templates`). Sans défaut, à
+    # dessein : les anciens défauts 4/5 seraient importés comme s'ils avaient
+    # été choisis, alors qu'ils ne correspondent à rien sur un nouveau serveur.
+    listmonk_template_recovery_en: int | None = Field(default=None)
+    listmonk_template_recovery_fr: int | None = Field(default=None)
+
+    @field_validator(
+        "listmonk_template_recovery_en", "listmonk_template_recovery_fr", mode="before"
+    )
+    @classmethod
+    def _empty_template_is_unset(cls, value: object) -> object:
+        # Le compose passe `${VAR:-}` : une variable absente arrive en chaîne vide.
+        return None if value == "" else value
 
     @property
     def listmonk_configured(self) -> bool:
-        # Les template_id ont des defaults non-zéro, donc l'unique check
-        # qui décide de l'activation est la présence des credentials.
         return bool(self.listmonk_url and self.listmonk_user and self.listmonk_token)
 
     # ─── Recovery passphrase (LOT_57) ─────────────────────────────────────────

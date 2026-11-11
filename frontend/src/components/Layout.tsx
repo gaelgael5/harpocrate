@@ -210,6 +210,11 @@ export function Layout({ children }: { children?: ReactNode }) {
             />
             <NavLink
               component={RouterNavLink}
+              to="/admin/listmonk"
+              label={t("admin.nav_listmonk")}
+            />
+            <NavLink
+              component={RouterNavLink}
               to="/admin/env"
               label={t("admin.nav_env")}
             />

@@ -476,6 +476,7 @@
     "nav_anomalies": "Anomalies",
     "nav_connect_clients": "Connected applications",
     "nav_cultures": "Cultures",
+    "nav_listmonk": "Listmonk settings",
     "connectClients": {
       "title": "Connected applications",
       "intro": "Only applications declared here, with their exact return URLs, can request an API key on a wallet through “Sign in with Harpocrate”. Disabling an application blocks its new requests without revoking keys already issued.",
@@ -531,6 +532,27 @@
       "errors": {
         "default_culture_cannot_be_disabled": "The default culture cannot be disabled: designate another default culture first.",
         "culture_disabled": "Only an enabled culture can be the default."
+      }
+    },
+    "listmonk": {
+      "title": "Listmonk settings",
+      "intro": "Listmonk template ID to use for each type of email, culture by culture. When sending, Harpocrate uses the template of the recipient's culture, otherwise the one of the default culture. Only enabled cultures are listed.",
+      "connection": "Listmonk connection",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "connectionHelp": "The Listmonk URL, user and token are set in the host's .env file (HARPOCRATE_LISTMONK_URL, _USER, _TOKEN), then by recreating the backend container.",
+      "purposes": {
+        "recovery": "Account recovery"
+      },
+      "colCulture": "Culture",
+      "colTemplateId": "Template ID",
+      "noTemplate": "None",
+      "templateIdLabel": "Template ID for {{name}}",
+      "save": "Save",
+      "remove": "Remove",
+      "missingDefault": "The default culture ({{name}}) has no template: no email of this type will be sent for cultures without a template.",
+      "errors": {
+        "cultureDisabled": "This culture was disabled in the meantime: enable it again in the Cultures screen."
       }
     },
     "anomalies": {

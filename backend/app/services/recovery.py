@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.db.repositories import recovery_sessions as repo
 from app.db.repositories import users as users_repo
+from app.services import listmonk_templates as listmonk_templates_svc
 from app.services import notification_delivery as delivery_svc
 from app.services import notify_listmonk
 from app.services.audit import audit_log_insert
@@ -166,10 +167,9 @@ async def start_session(
         # `notify_listmonk.trigger_recovery` swallow déjà ses erreurs.
         link_base = (public_url or settings.public_url).rstrip("/")
         recovery_link = f"{link_base}/recover/{session_id}"
-        # Payload consommé par le template listmonk via {{ data.* }}.
-        # Tous les champs sont stringifiés (listmonk Sprig templates ne font
-        # pas de coercion automatique). Locale du template à choisir plus
-        # tard depuis la préférence user.
+        # Payload consommé par le template transactional listmonk via
+        # {{ .Tx.Data.<clé> }}. Tous les champs sont stringifiés (les templates
+        # Go/Sprig de listmonk ne font pas de coercion automatique).
         listmonk_payload = {
             "appName": "Harpocrate",
             "expiresInMinutes": str(int(ttl.total_seconds() / 60)),
@@ -185,11 +185,36 @@ async def start_session(
         # via header custom `X-Harpocrate-Tx-Id` — listmonk le forward dans
         # ses webhooks de delivery, ce qui permettra plus tard la jointure.
         tx_id = str(uuid.uuid4())
+        recipient_id: UUID = user_id
 
         async def _persist_tx_and_trigger() -> None:
             from app.db.pool import get_pool
 
             pool = await get_pool()
+            # Template de la culture du user, sinon de la culture par défaut.
+            # Résolu AVANT de persister le tx_id : sans template, aucun mail ne
+            # part et la session ne doit pas porter la trace d'un envoi qui n'a
+            # pas eu lieu.
+            try:
+                async with pool.acquire() as bg_conn:
+                    template = await listmonk_templates_svc.resolve_template_for_user(
+                        bg_conn, listmonk_templates_svc.PURPOSE_RECOVERY, recipient_id
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "recovery_template_resolve_failed",
+                    session_id=str(session_id),
+                    error=str(exc),
+                )
+                return
+            if template is None:
+                logger.warning(
+                    "listmonk_template_missing",
+                    purpose=listmonk_templates_svc.PURPOSE_RECOVERY,
+                    session_id=str(session_id),
+                )
+                return
+
             try:
                 async with pool.acquire() as bg_conn:
                     await repo.set_novu_transaction_id(
@@ -212,7 +237,7 @@ async def start_session(
                 email=email,
                 tx_id=tx_id,
                 payload=listmonk_payload,
-                locale="fr",  # TODO: lire depuis users.preferred_locale quand dispo
+                template_id=template.template_id,
             )
             if not sent:
                 return

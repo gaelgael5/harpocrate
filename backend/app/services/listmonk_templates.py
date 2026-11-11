@@ -139,19 +139,25 @@ async def import_legacy_env_templates(conn: asyncpg.Connection[asyncpg.Record]) 
     qui supprime tous ses templates depuis l'UI les verrait revenir au redémarrage
     suivant tant que les variables traînent dans le .env. Les templates déjà en base ne
     sont jamais écrasés (`db_import_legacy`).
+
+    Le témoin n'est posé que si des variables étaient fournies : une instance qui
+    démarre sans elles (par exemple parce qu'elle comptait sur les anciens défauts du
+    compose) peut encore les poser dans le .env et voir la reprise au boot suivant.
     """
+    legacy = {
+        code: template_id
+        for code, template_id in (
+            ("en", settings.listmonk_template_recovery_en),
+            ("fr", settings.listmonk_template_recovery_fr),
+        )
+        if template_id is not None
+    }
+    if not legacy:
+        return
     async with conn.transaction():
         if await metadata_repo.get_value(conn, _LEGACY_IMPORT_MARKER):
             return
-        legacy = {
-            code: template_id
-            for code, template_id in (
-                ("en", settings.listmonk_template_recovery_en),
-                ("fr", settings.listmonk_template_recovery_fr),
-            )
-            if template_id is not None
-        }
-        inserted = await repo.db_import_legacy(conn, PURPOSE_RECOVERY, legacy) if legacy else 0
+        inserted = await repo.db_import_legacy(conn, PURPOSE_RECOVERY, legacy)
         await metadata_repo.set_value(conn, _LEGACY_IMPORT_MARKER, True)
     logger.info(
         "listmonk_legacy_templates_import",

@@ -92,3 +92,13 @@ async def test_cultures_code_format_is_enforced(
         await tx_conn.execute(
             "INSERT INTO cultures (code, english_name) VALUES ($1, 'Bogus')", code
         )
+
+
+async def test_cultures_default_switch_lock_runs_in_transaction(
+    tx_conn: asyncpg.Connection[asyncpg.Record],
+) -> None:
+    await repo.db_lock_default_switch(tx_conn)
+    held = await tx_conn.fetchval(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()"
+    )
+    assert held == 1

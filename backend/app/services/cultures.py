@@ -51,6 +51,10 @@ async def update_culture(
     l'invariant « la culture par défaut est activée ».
     """
     async with conn.transaction():
+        # Pris AVANT le verrou de ligne : deux bascules concurrentes s'ordonnent ici,
+        # et la seconde relit un état déjà commité (voir `db_lock_default_switch`).
+        if make_default:
+            await repo.db_lock_default_switch(conn)
         current = await repo.db_get(conn, code, for_update=True)
         if current is None:
             raise _not_found()

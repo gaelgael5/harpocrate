@@ -81,6 +81,18 @@ async def db_set_enabled(
     return _to_row(row) if row else None
 
 
+async def db_lock_default_switch(conn: asyncpg.Connection[asyncpg.Record]) -> None:
+    """Sérialise les changements de culture par défaut jusqu'à la fin de la transaction.
+
+    Verrouiller la seule ligne visée ne suffit pas : deux admins qui désignent chacun une
+    culture différente en même temps verraient le second `db_clear_default` relu après
+    le commit du premier, sans la nouvelle culture par défaut à effacer, et
+    `db_mark_default` heurterait l'index unique (500). Le verrou consultatif couvre la
+    bascule entière.
+    """
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtext('harpocrate.cultures.default'))")
+
+
 async def db_clear_default(conn: asyncpg.Connection[asyncpg.Record]) -> None:
     """Retire le drapeau à l'ancienne culture par défaut — à appeler dans la même
     transaction que `db_mark_default`, sinon l'index unique partiel refuse la bascule."""

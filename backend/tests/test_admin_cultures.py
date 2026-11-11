@@ -61,6 +61,7 @@ class _FakeRepo:
     migration : en (défaut) et fr activées, de désactivée."""
 
     def __init__(self) -> None:
+        self.calls: list[str] = []
         self.rows: dict[str, CultureRow] = {
             "de": _culture("de", "German"),
             "en": _culture("en", "English", enabled=True, default=True),
@@ -77,7 +78,11 @@ class _FakeRepo:
         return sorted(self.rows.values(), key=lambda r: r.english_name)
 
     async def db_get(self, conn: Any, code: str, *, for_update: bool = False) -> CultureRow | None:
+        self.calls.append("get")
         return self.rows.get(code)
+
+    async def db_lock_default_switch(self, conn: Any) -> None:
+        self.calls.append("lock_default_switch")
 
     async def db_set_enabled(self, conn: Any, code: str, enabled: bool) -> CultureRow | None:
         return self._replace(code, enabled=enabled)
@@ -98,7 +103,14 @@ def fake_repo(monkeypatch: pytest.MonkeyPatch) -> _FakeRepo:
     from app.db.repositories import cultures as repo_mod
 
     fake = _FakeRepo()
-    for name in ("db_list", "db_get", "db_set_enabled", "db_clear_default", "db_mark_default"):
+    for name in (
+        "db_list",
+        "db_get",
+        "db_lock_default_switch",
+        "db_set_enabled",
+        "db_clear_default",
+        "db_mark_default",
+    ):
         monkeypatch.setattr(repo_mod, name, getattr(fake, name))
     return fake
 
@@ -250,6 +262,16 @@ async def test_make_default_moves_flag_and_audits_previous(
     assert fake_repo.rows["en"].is_default is False
     assert audit.await_args.args[1] == "culture.default_changed"
     assert audit.await_args.kwargs["metadata"] == {"code": "fr", "previous_default": "en"}
+    # Bascules concurrentes sérialisées : le verrou passe avant la lecture de la ligne.
+    assert fake_repo.calls[:2] == ["lock_default_switch", "get"]
+
+
+async def test_enable_only_does_not_take_default_switch_lock(
+    fake_repo: _FakeRepo, audit: AsyncMock
+) -> None:
+    async with _make_client() as client:
+        await client.patch(f"{_URL}/de", headers=_admin(), json={"enabled": True})
+    assert "lock_default_switch" not in fake_repo.calls
 
 
 async def test_make_default_on_disabled_culture_returns_409(

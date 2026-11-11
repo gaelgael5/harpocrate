@@ -373,9 +373,11 @@ async def test_import_legacy_env_templates_imports_set_values_once(
     assert legacy["marker"] is True
 
 
-async def test_import_legacy_env_templates_without_values_sets_marker_only(
+async def test_import_legacy_env_templates_without_values_leaves_marker_unset(
     legacy: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Sans variables, rien n'est importé ET le témoin reste absent : les poser plus
+    tard dans le .env doit encore déclencher la reprise."""
     from app.core.config import settings
     from app.services import listmonk_templates as svc
 
@@ -383,6 +385,11 @@ async def test_import_legacy_env_templates_without_values_sets_marker_only(
     monkeypatch.setattr(settings, "listmonk_template_recovery_en", None)
     await svc.import_legacy_env_templates(_conn())
     assert legacy["imported"] == []
+    assert legacy["marker"] is None
+
+    monkeypatch.setattr(settings, "listmonk_template_recovery_fr", 5)
+    await svc.import_legacy_env_templates(_conn())
+    assert legacy["imported"] == [("recovery", {"fr": 5})]
     assert legacy["marker"] is True
 
 

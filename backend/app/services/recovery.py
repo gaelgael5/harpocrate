@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.db.repositories import recovery_sessions as repo
 from app.db.repositories import users as users_repo
+from app.services import listmonk_connection as listmonk_connection_svc
 from app.services import listmonk_templates as listmonk_templates_svc
 from app.services import notification_delivery as delivery_svc
 from app.services import notify_listmonk
@@ -191,12 +192,13 @@ async def start_session(
             from app.db.pool import get_pool
 
             pool = await get_pool()
-            # Template de la culture du user, sinon de la culture par défaut.
-            # Résolu AVANT de persister le tx_id : sans template, aucun mail ne
-            # part et la session ne doit pas porter la trace d'un envoi qui n'a
-            # pas eu lieu.
+            # Connexion Listmonk et template (culture du user, sinon culture par
+            # défaut), tous deux paramétrés en base. Résolus AVANT de persister le
+            # tx_id : sans eux, aucun mail ne part et la session ne doit pas
+            # porter la trace d'un envoi qui n'a pas eu lieu.
             try:
                 async with pool.acquire() as bg_conn:
+                    connection = await listmonk_connection_svc.resolve_connection(bg_conn)
                     template = await listmonk_templates_svc.resolve_template_for_user(
                         bg_conn, listmonk_templates_svc.PURPOSE_RECOVERY, recipient_id
                     )
@@ -206,6 +208,9 @@ async def start_session(
                     session_id=str(session_id),
                     error=str(exc),
                 )
+                return
+            if connection is None:
+                logger.warning("listmonk_not_configured", session_id=str(session_id))
                 return
             if template is None:
                 logger.warning(
@@ -234,6 +239,7 @@ async def start_session(
                 return
 
             sent = await notify_listmonk.trigger_recovery(
+                connection=connection,
                 email=email,
                 tx_id=tx_id,
                 payload=listmonk_payload,

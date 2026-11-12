@@ -3,8 +3,11 @@
  */
 import { api } from "@/lib/api-client";
 import {
+  ConnectionTestResultSchema,
   ListmonkSettingsSchema,
   ListmonkTemplateSchema,
+  type ConnectionTestResult,
+  type ListmonkConnectionBody,
   type ListmonkSettings,
   type ListmonkTemplate,
 } from "@/schemas/listmonk";
@@ -32,4 +35,18 @@ export async function deleteListmonkTemplate(
   cultureCode: string,
 ): Promise<void> {
   await api.delete<void>(`${BASE}/templates/${purpose}/${cultureCode}`);
+}
+
+export async function saveListmonkConnection(
+  body: ListmonkConnectionBody,
+): Promise<void> {
+  await api.put<void>(`${BASE}/connection`, body);
+}
+
+export async function testListmonkConnection(
+  body: ListmonkConnectionBody,
+): Promise<ConnectionTestResult> {
+  return ConnectionTestResultSchema.parse(
+    await api.post<unknown>(`${BASE}/connection/test`, body),
+  );
 }

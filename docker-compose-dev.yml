@@ -89,6 +89,7 @@ services:
       HARPOCRATE_DEV_MODE_LABEL: ${HARPOCRATE_DEV_MODE_LABEL:-DEV}
       # listmonk (LOT_57) — provider d'envoi de mails. Vide en dev par défaut
       # (no-op silencieux : la recovery UI marche, aucun mail ne part).
+      # LEGACY : reprise unique vers la base au boot (connexion réglée dans l'UI).
       HARPOCRATE_LISTMONK_URL: ${HARPOCRATE_LISTMONK_URL:-}
       HARPOCRATE_LISTMONK_USER: ${HARPOCRATE_LISTMONK_USER:-}
       HARPOCRATE_LISTMONK_TOKEN: ${HARPOCRATE_LISTMONK_TOKEN:-}

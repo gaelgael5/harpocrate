@@ -2,7 +2,8 @@
 templates Listmonk paramétrés en base », feature 2), et reprise des variables legacy.
 
 Les repositories sont remplacés par des tables en mémoire : la base réelle (résolution,
-import idempotent) est couverte par ``test_listmonk_templates_repository.py``.
+import idempotent) est couverte par ``test_listmonk_templates_repository.py``, la
+connexion par ``test_admin_listmonk_connection.py``.
 """
 
 from __future__ import annotations
@@ -46,16 +47,6 @@ def patch_jwks() -> Generator[None, None, None]:
     yield
     jwks_cache._keys.clear()
     jwks_cache._keys.update(backup)
-
-
-@pytest.fixture()
-def listmonk_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.core.config import settings
-
-    # URL avec identifiants embarqués : ils ne doivent jamais remonter à l'UI.
-    monkeypatch.setattr(settings, "listmonk_url", "https://api:pw@listmonk.example:9000/")
-    monkeypatch.setattr(settings, "listmonk_user", "harpocrate-api")
-    monkeypatch.setattr(settings, "listmonk_token", "very-secret-token")
 
 
 class _FakeStore:
@@ -127,6 +118,10 @@ def store(monkeypatch: pytest.MonkeyPatch) -> _FakeStore:
     monkeypatch.setattr(cultures_repo, "db_get", fake.db_get_culture)
     for name in ("db_list", "db_get_for_update", "db_upsert", "db_delete"):
         monkeypatch.setattr(repo, name, getattr(fake, name))
+    # Aucune connexion en base : couverte par test_admin_listmonk_connection.py.
+    from app.db.repositories import listmonk_connection as connection_repo
+
+    monkeypatch.setattr(connection_repo, "db_get", AsyncMock(return_value=None))
     return fake
 
 
@@ -206,17 +201,16 @@ async def test_listmonk_routes_non_admin_returns_403(
 # ─── Lecture ─────────────────────────────────────────────────────────────────
 
 
-async def test_get_listmonk_settings_never_exposes_credentials(
-    store: _FakeStore, audit: AsyncMock, listmonk_env: None
+async def test_get_listmonk_settings_lists_templates_without_connection(
+    store: _FakeStore, audit: AsyncMock
 ) -> None:
     async with _make_client() as client:
         await client.put(f"{_TPL}/en", headers=_admin(), json={"template_id": 5})
         r = await client.get(_URL, headers=_admin())
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"configured", "url", "purposes", "templates"}
-    assert body["configured"] is True
-    assert body["url"] == "https://listmonk.example:9000/"
+    assert set(body) == {"connection", "purposes", "templates"}
+    assert body["connection"] is None
     assert body["purposes"] == ["recovery"]
     assert body["templates"] == [
         {
@@ -226,21 +220,6 @@ async def test_get_listmonk_settings_never_exposes_credentials(
             "updated_at": "2026-11-11T00:00:00Z",
         }
     ]
-    assert "very-secret-token" not in r.text
-    assert "harpocrate-api" not in r.text
-    assert "pw@" not in r.text
-
-
-async def test_get_listmonk_settings_unconfigured(
-    store: _FakeStore, audit: AsyncMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "listmonk_url", "")
-    async with _make_client() as client:
-        r = await client.get(_URL, headers=_admin())
-    assert r.json()["configured"] is False
-    assert r.json()["url"] == ""
 
 
 # ─── Écriture ────────────────────────────────────────────────────────────────

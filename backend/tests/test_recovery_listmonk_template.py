@@ -13,8 +13,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from pydantic import SecretStr
 
+from app.models.db.listmonk_connection import ListmonkConnection
 from app.models.db.listmonk_template import ResolvedTemplate
+
+_CONNECTION = ListmonkConnection(
+    url="http://listmonk.test:9000", api_user="harpocrate-api", token=SecretStr("t")
+)
 
 
 def _pool() -> MagicMock:
@@ -30,10 +36,14 @@ def _pool() -> MagicMock:
     return pool
 
 
-async def _start_session_for_user(resolved: ResolvedTemplate | None) -> tuple[AsyncMock, AsyncMock]:
+async def _start_session_for_user(
+    resolved: ResolvedTemplate | None,
+    connection: ListmonkConnection | None = _CONNECTION,
+) -> tuple[AsyncMock, AsyncMock]:
     """Démarre une session pour un vrai user et attend la tâche d'envoi en arrière-plan.
     Retourne (trigger_recovery, set_novu_transaction_id)."""
     from app.db.repositories import recovery_sessions as repo
+    from app.services import listmonk_connection as connection_svc
     from app.services import listmonk_templates as tpl_svc
     from app.services import notify_listmonk
     from app.services import recovery as svc
@@ -53,6 +63,7 @@ async def _start_session_for_user(resolved: ResolvedTemplate | None) -> tuple[As
         patch.object(
             tpl_svc, "resolve_template_for_user", AsyncMock(return_value=resolved)
         ) as resolve,
+        patch.object(connection_svc, "resolve_connection", AsyncMock(return_value=connection)),
         patch.object(notify_listmonk, "trigger_recovery", trigger),
         patch("app.db.pool.get_pool", AsyncMock(return_value=_pool())),
     ):
@@ -69,6 +80,7 @@ async def test_recovery_mail_uses_resolved_template_id() -> None:
     )
     trigger.assert_awaited_once()
     assert trigger.await_args.kwargs["template_id"] == 42
+    assert trigger.await_args.kwargs["connection"] is _CONNECTION
     persist_tx.assert_awaited_once()
 
 
@@ -77,4 +89,13 @@ async def test_recovery_mail_without_template_sends_nothing() -> None:
     trigger, persist_tx = await _start_session_for_user(None)
     trigger.assert_not_called()
     # Pas de trace d'envoi pour un mail qui n'est pas parti.
+    persist_tx.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_recovery_mail_without_connection_sends_nothing() -> None:
+    trigger, persist_tx = await _start_session_for_user(
+        ResolvedTemplate(template_id=42, culture_code="fr"), connection=None
+    )
+    trigger.assert_not_called()
     persist_tx.assert_not_called()

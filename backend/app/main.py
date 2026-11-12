@@ -60,6 +60,7 @@ from app.db.repositories import recovery_sessions as recovery_repo
 from app.middleware.cluster_coherence import cluster_coherence_middleware
 from app.middleware.db_availability import db_availability_middleware
 from app.services import connect_purge, local_admin_bootstrap
+from app.services import listmonk_connection as listmonk_connection_svc
 from app.services import listmonk_templates as listmonk_templates_svc
 from app.services import replication as replication_svc
 from app.services import scheduled_backups_scheduler as scheduled_sched_svc
@@ -94,9 +95,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await seed_svc.seed_system_types(conn)
         # LOT_20 — s'assurer que la stratégie de réplication env est active.
         await replication_svc.ensure_env_strategy_active(conn)
-        # Reprise unique des ID de templates Listmonk du .env vers la base
-        # (épic « Cultures et templates Listmonk paramétrés en base »).
+        # Reprise unique des templates et de la connexion Listmonk du .env vers
+        # la base (épic « Cultures et templates Listmonk paramétrés en base »).
         await listmonk_templates_svc.import_legacy_env_templates(conn)
+        await listmonk_connection_svc.import_legacy_env_connection(conn)
 
     # LOT_56 — provisionne la row `users` du local-admin (is_system=TRUE) pour
     # qu'il puisse être référencé dans `audit_log.actor_user_id`. No-op si

@@ -1,15 +1,11 @@
 """Templates Listmonk par type de mail et par culture (épic « Cultures et templates
 Listmonk paramétrés en base », feature 2).
 
-Seuls les ID de templates vivent en base. L'URL et les credentials Listmonk restent dans
-le .env de l'hôte (secrets d'amorçage, décision de cadrage du 2026-11-11) : ce module ne
-renvoie jamais l'utilisateur ni le token, et n'expose l'URL que débarrassée de tout
-identifiant embarqué.
+La connexion (URL, utilisateur, token) est gérée par `listmonk_connection`.
 """
 
 from __future__ import annotations
 
-from urllib.parse import urlsplit
 from uuid import UUID
 
 import asyncpg
@@ -29,17 +25,6 @@ PURPOSES: tuple[str, ...] = ("recovery",)
 PURPOSE_RECOVERY = "recovery"
 
 _LEGACY_IMPORT_MARKER = "listmonk_legacy_templates_imported"
-
-
-def public_listmonk_url() -> str:
-    """URL Listmonk affichable : schéma, hôte, port et chemin seulement. Un
-    `https://user:pass@host` posé dans le .env ne doit pas fuiter vers l'UI."""
-    if not settings.listmonk_url:
-        return ""
-    parts = urlsplit(settings.listmonk_url)
-    host = parts.hostname or ""
-    port = f":{parts.port}" if parts.port else ""
-    return f"{parts.scheme}://{host}{port}{parts.path}"
 
 
 async def list_templates(conn: asyncpg.Connection[asyncpg.Record]) -> list[ListmonkTemplateRow]:

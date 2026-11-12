@@ -4,7 +4,9 @@ Harpocrate appelle `POST {LISTMONK_URL}/api/tx` avec le `template_id`
 paramétré en base par culture (écran « Paramétrage Listmonk »). Listmonk fait le
 rendu (Sprig templates), ajoute son tracking et envoie via son provider SMTP.
 
-Auth : header `Authorization: token {LISTMONK_USER}:{LISTMONK_TOKEN}`.
+Connexion (URL, utilisateur, token) paramétrée en base et résolue par l'appelant
+(`listmonk_connection.resolve_connection`). Auth : header
+`Authorization: token {api_user}:{token}`.
 
 Le `tx_id` (UUID Harpocrate) est passé via le custom header
 `X-Harpocrate-Tx-Id`. listmonk forward typiquement les headers custom dans
@@ -12,7 +14,6 @@ ses webhooks de delivery — c'est ce qui nous permettra de corréler les
 events reçus en retour avec la `recovery_session` correspondante.
 
 Comportement :
-- No-op silencieux si `listmonk_configured=False` (on log warning).
 - Échec HTTP/réseau : log warning, retourne False — pas de re-raise.
 - L'envoi est best-effort : la session de recovery existe en DB, le user
   peut retenter via `/start` si rien n'arrive.
@@ -23,22 +24,17 @@ from typing import Any
 
 import httpx
 
-from app.core.config import settings
 from app.core.logging import logger
+from app.models.db.listmonk_connection import ListmonkConnection
+from app.services.listmonk_connection import auth_header
 
 _TIMEOUT_SECONDS = 5.0
 _TX_ID_HEADER = "X-Harpocrate-Tx-Id"
 
 
-class ListmonkNotConfiguredError(RuntimeError):
-    """Levée uniquement si un caller force l'envoi sans config (tests)."""
-
-
-def _auth_header() -> str:
-    return f"token {settings.listmonk_user}:{settings.listmonk_token}"
-
-
-async def _ensure_subscriber(client: httpx.AsyncClient, email: str) -> bool:
+async def _ensure_subscriber(
+    client: httpx.AsyncClient, connection: ListmonkConnection, email: str
+) -> bool:
     """Crée le subscriber côté listmonk si absent (upsert idempotent).
 
     Listmonk refuse `POST /api/tx` si le `subscriber_email` n'existe pas
@@ -50,7 +46,7 @@ async def _ensure_subscriber(client: httpx.AsyncClient, email: str) -> bool:
     Retourne True si le subscriber est garanti exister à l'issue, False
     sinon (network/HTTP error → on remonte au caller).
     """
-    url = f"{settings.listmonk_url.rstrip('/')}/api/subscribers"
+    url = f"{connection.url}/api/subscribers"
     body = {
         "email": email,
         "name": email,  # listmonk exige un name non-vide
@@ -63,7 +59,7 @@ async def _ensure_subscriber(client: httpx.AsyncClient, email: str) -> bool:
             url,
             json=body,
             headers={
-                "Authorization": _auth_header(),
+                "Authorization": auth_header(connection),
                 "Content-Type": "application/json",
             },
         )
@@ -89,15 +85,16 @@ async def _ensure_subscriber(client: httpx.AsyncClient, email: str) -> bool:
 
 async def trigger_recovery(
     *,
+    connection: ListmonkConnection,
     email: str,
     tx_id: str,
     payload: dict[str, Any],
     template_id: int,
-    raise_if_unconfigured: bool = False,
 ) -> bool:
     """Déclenche le template transactional listmonk pour un mail de recovery.
 
     Args:
+        connection: connexion Listmonk résolue en base par l'appelant.
         email: adresse du destinataire (`subscriber_email` côté listmonk).
         tx_id: identifiant Harpocrate (UUID) propagé via header custom
             `X-Harpocrate-Tx-Id`. Persisté en DB AVANT l'appel pour la
@@ -108,44 +105,25 @@ async def trigger_recovery(
         template_id: ID du template transactional listmonk, résolu par
             l'appelant depuis la base selon la culture du destinataire
             (`listmonk_templates.resolve_template_for_user`).
-        raise_if_unconfigured: par défaut False → no-op si config absente.
-            À mettre True dans les tests qui veulent vérifier que la config
-            est bien chargée.
 
     Returns:
         True si listmonk a accepté la requête (HTTP 2xx). False si :
-          - listmonk non configuré (no-op silencieux)
           - HTTP 4xx/5xx (token invalide, template_id invalide, payload rejeté)
           - réseau (timeout, DNS, connect refused)
     """
-    if not settings.listmonk_configured:
-        if raise_if_unconfigured:
-            raise ListmonkNotConfiguredError(
-                "LISTMONK_* config incomplete — cannot trigger transactional"
-            )
-        logger.warning(
-            "listmonk_not_configured",
-            tx_id=tx_id,
-            note=(
-                "event skipped — set HARPOCRATE_LISTMONK_URL / _USER / "
-                "_TOKEN to enable"
-            ),
-        )
-        return False
-
     body = {
         "subscriber_email": email,
         "template_id": template_id,
         "data": payload,
         "headers": [{_TX_ID_HEADER: tx_id}],
     }
-    url = f"{settings.listmonk_url.rstrip('/')}/api/tx"
+    url = f"{connection.url}/api/tx"
 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
             # 1. Garantir que le subscriber existe côté listmonk
             #    (sinon /api/tx renvoie 400 "Subscriber not found").
-            if not await _ensure_subscriber(client, email):
+            if not await _ensure_subscriber(client, connection, email):
                 logger.warning(
                     "listmonk_trigger_aborted_subscriber_missing",
                     tx_id=tx_id,
@@ -158,7 +136,7 @@ async def trigger_recovery(
                 url,
                 json=body,
                 headers={
-                    "Authorization": _auth_header(),
+                    "Authorization": auth_header(connection),
                     "Content-Type": "application/json",
                 },
             )

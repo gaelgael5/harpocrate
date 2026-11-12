@@ -3,12 +3,14 @@
  * Listmonk paramétrés en base ».
  *
  * Couvre :
- * - état de la connexion (lecture seule), une ligne par culture activée seulement
+ * - connexion : préremplie sans token, test, enregistrement avec ou sans nouveau token
+ * - une ligne par culture activée seulement
  * - enregistrement d'un ID, refus d'un ID invalide, retrait d'un template
  * - alerte quand la culture par défaut n'a pas de template
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { notifications } from "@mantine/notifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
 import { I18nextProvider, initReactI18next } from "react-i18next";
@@ -20,10 +22,16 @@ import { useCultures } from "@/hooks/useCultures";
 import {
   useDeleteListmonkTemplate,
   useListmonkSettings,
+  useSaveListmonkConnection,
   useSetListmonkTemplate,
+  useTestListmonkConnection,
 } from "@/hooks/useListmonk";
 import type { Culture } from "@/schemas/cultures";
-import type { ListmonkTemplate } from "@/schemas/listmonk";
+import type {
+  ConnectionTestResult,
+  ListmonkConnection,
+  ListmonkTemplate,
+} from "@/schemas/listmonk";
 
 vi.mock("@/hooks/useCultures");
 vi.mock("@/hooks/useListmonk");
@@ -71,22 +79,30 @@ function template(cultureCode: string, templateId: number): ListmonkTemplate {
   };
 }
 
+const CONNECTION: ListmonkConnection = {
+  url: "http://mail.home.lan:9000",
+  api_user: "harpocrate-api",
+  token_readable: true,
+  updated_at: "2026-11-12T10:00:00Z",
+};
+
 const saveMutate = vi.fn();
 const deleteMutate = vi.fn();
+const saveConnectionMutate = vi.fn();
+const testConnectionMutate = vi.fn();
 
-function mockHooks(templates: ListmonkTemplate[], configured = true) {
+function mockHooks(
+  templates: ListmonkTemplate[],
+  connection: ListmonkConnection | null = CONNECTION,
+  testResult: ConnectionTestResult | undefined = undefined,
+) {
   vi.mocked(useCultures).mockReturnValue({
     data: { items: CULTURES },
     isLoading: false,
     error: null,
   } as unknown as ReturnType<typeof useCultures>);
   vi.mocked(useListmonkSettings).mockReturnValue({
-    data: {
-      configured,
-      url: configured ? "https://listmonk.example/" : "",
-      purposes: ["recovery"],
-      templates,
-    },
+    data: { connection, purposes: ["recovery"], templates },
     isLoading: false,
     error: null,
   } as unknown as ReturnType<typeof useListmonkSettings>);
@@ -98,6 +114,15 @@ function mockHooks(templates: ListmonkTemplate[], configured = true) {
     mutate: deleteMutate,
     isPending: false,
   } as unknown as ReturnType<typeof useDeleteListmonkTemplate>);
+  vi.mocked(useSaveListmonkConnection).mockReturnValue({
+    mutate: saveConnectionMutate,
+    isPending: false,
+  } as unknown as ReturnType<typeof useSaveListmonkConnection>);
+  vi.mocked(useTestListmonkConnection).mockReturnValue({
+    mutate: testConnectionMutate,
+    isPending: false,
+    data: testResult,
+  } as unknown as ReturnType<typeof useTestListmonkConnection>);
 }
 
 function renderPage() {
@@ -120,20 +145,16 @@ beforeEach(() => {
 });
 
 describe("AdminListmonkPage", () => {
-  it("affiche l'état de la connexion et une ligne par culture activée", () => {
+  it("affiche une ligne par culture activée", () => {
     mockHooks([template("en", 6)]);
     renderPage();
-    expect(
-      screen.getByText(t("admin.listmonk.configured")),
-    ).toBeInTheDocument();
-    expect(screen.getByText("https://listmonk.example/")).toBeInTheDocument();
     expect(input("English")).toHaveValue("6");
     expect(input("French")).toHaveValue("");
     expect(screen.queryByText("German")).not.toBeInTheDocument();
   });
 
   it("signale une connexion non configurée", () => {
-    mockHooks([template("en", 6)], false);
+    mockHooks([template("en", 6)], null);
     renderPage();
     expect(
       screen.getByText(t("admin.listmonk.notConfigured")),
@@ -145,8 +166,8 @@ describe("AdminListmonkPage", () => {
     renderPage();
     fireEvent.change(input("French"), { target: { value: "5" } });
     const saveButtons = screen.getAllByText(t("admin.listmonk.save"));
-    // Lignes dans l'ordre des cultures : English puis French.
-    fireEvent.click(saveButtons[1]!);
+    // Le premier « Enregistrer » est celui de la connexion ; puis English, French.
+    fireEvent.click(saveButtons[2]!);
     expect(saveMutate).toHaveBeenCalledWith(
       { purpose: "recovery", cultureCode: "fr", templateId: 5 },
       expect.anything(),
@@ -156,7 +177,7 @@ describe("AdminListmonkPage", () => {
   it("n'active pas l'enregistrement sans changement ni pour un ID nul", () => {
     mockHooks([template("en", 6)]);
     renderPage();
-    const [enSave, frSave] = screen
+    const [, enSave, frSave] = screen
       .getAllByText(t("admin.listmonk.save"))
       .map((el) => el.closest("button"));
     expect(enSave).toBeDisabled();
@@ -190,5 +211,88 @@ describe("AdminListmonkPage", () => {
         t("admin.listmonk.missingDefault", { name: "English" }),
       ),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ListmonkConnectionCard", () => {
+  const field = (key: string) => screen.getByLabelText(t(key));
+  const button = (key: string) => screen.getByText(t(key)).closest("button");
+  // Le bouton « Enregistrer » de la connexion est le premier de la page.
+  const saveConnection = () =>
+    screen.getAllByText(t("admin.listmonk.save"))[0]!.closest("button");
+
+  it("préremplit URL et utilisateur, jamais le token", () => {
+    mockHooks([template("en", 6)]);
+    renderPage();
+    expect(field("admin.listmonk.url")).toHaveValue(CONNECTION.url);
+    expect(field("admin.listmonk.apiUser")).toHaveValue(CONNECTION.api_user);
+    expect(field("admin.listmonk.token")).toHaveValue("");
+    expect(saveConnection()).toBeDisabled(); // rien n'a changé
+  });
+
+  it("enregistre une nouvelle URL en gardant le token", () => {
+    mockHooks([template("en", 6)]);
+    renderPage();
+    fireEvent.change(field("admin.listmonk.url"), {
+      target: { value: "https://listmonk.example" },
+    });
+    fireEvent.click(saveConnection()!);
+    expect(saveConnectionMutate).toHaveBeenCalledWith(
+      { url: "https://listmonk.example", api_user: "harpocrate-api" },
+      expect.anything(),
+    );
+  });
+
+  it("exige un token pour un premier réglage", () => {
+    mockHooks([template("en", 6)], null);
+    renderPage();
+    fireEvent.change(field("admin.listmonk.url"), {
+      target: { value: "http://mail.lan:9000" },
+    });
+    fireEvent.change(field("admin.listmonk.apiUser"), {
+      target: { value: "api" },
+    });
+    expect(saveConnection()).toBeDisabled();
+    expect(button("admin.listmonk.test")).toBeDisabled();
+    fireEvent.change(field("admin.listmonk.token"), {
+      target: { value: "s3cret" },
+    });
+    fireEvent.click(button("admin.listmonk.test")!);
+    expect(testConnectionMutate).toHaveBeenCalledWith(
+      { url: "http://mail.lan:9000", api_user: "api", token: "s3cret" },
+      expect.anything(),
+    );
+  });
+
+  it("exige de ressaisir un token devenu illisible", () => {
+    mockHooks([template("en", 6)], { ...CONNECTION, token_readable: false });
+    renderPage();
+    expect(
+      screen.getByText(t("admin.listmonk.tokenUnreadable")),
+    ).toBeInTheDocument();
+    expect(button("admin.listmonk.test")).toBeDisabled();
+  });
+
+  it("affiche le refus de Listmonk avec son statut HTTP", () => {
+    mockHooks([template("en", 6)], CONNECTION, { ok: false, http_status: 403 });
+    renderPage();
+    expect(
+      screen.getByText(t("admin.listmonk.testRefused", { status: "403" })),
+    ).toBeInTheDocument();
+  });
+
+  it("annonce l'enregistrement réussi", () => {
+    saveConnectionMutate.mockImplementation(
+      (_body, opts: { onSuccess: () => void }) => opts.onSuccess(),
+    );
+    mockHooks([template("en", 6)]);
+    renderPage();
+    fireEvent.change(field("admin.listmonk.token"), {
+      target: { value: "new-token" },
+    });
+    fireEvent.click(saveConnection()!);
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({ message: t("admin.listmonk.connectionSaved") }),
+    );
   });
 });

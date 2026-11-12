@@ -5,9 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   deleteListmonkTemplate,
   fetchListmonkSettings,
+  saveListmonkConnection,
   setListmonkTemplate,
+  testListmonkConnection,
 } from "@/lib/listmonkApi";
-import type { ListmonkSettings, ListmonkTemplate } from "@/schemas/listmonk";
+import type {
+  ConnectionTestResult,
+  ListmonkConnectionBody,
+  ListmonkSettings,
+  ListmonkTemplate,
+} from "@/schemas/listmonk";
 
 export const LISTMONK_QUERY_KEY = ["admin-listmonk"] as const;
 
@@ -46,5 +53,22 @@ export function useDeleteListmonkTemplate() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: LISTMONK_QUERY_KEY });
     },
+  });
+}
+
+export function useSaveListmonkConnection() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, ListmonkConnectionBody>({
+    mutationFn: saveListmonkConnection,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: LISTMONK_QUERY_KEY });
+    },
+  });
+}
+
+/** N'invalide rien : un test n'enregistre pas. */
+export function useTestListmonkConnection() {
+  return useMutation<ConnectionTestResult, Error, ListmonkConnectionBody>({
+    mutationFn: testListmonkConnection,
   });
 }

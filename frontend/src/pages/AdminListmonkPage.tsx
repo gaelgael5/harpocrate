@@ -2,18 +2,14 @@
  * Paramétrage Listmonk (épic « Cultures et templates Listmonk paramétrés en base »,
  * feature 2).
  *
- * L'URL et les identifiants Listmonk restent dans le .env de l'hôte (secrets
- * d'amorçage) : l'écran les montre en lecture seule. Ce qui se règle ici, c'est l'ID du
- * template de chaque type de mail, pour chaque culture activée. À l'envoi, le serveur
- * prend celui de la culture du destinataire, sinon celui de la culture par défaut.
+ * Tout se règle ici, sans éditer le .env de l'hôte : la connexion (feature 3) et l'ID
+ * du template de chaque type de mail, pour chaque culture activée. À l'envoi, le
+ * serveur prend celui de la culture du destinataire, sinon celui de la culture par
+ * défaut.
  */
 import {
   Alert,
-  Badge,
-  Card,
   Center,
-  Code,
-  Group,
   Loader,
   Stack,
   Table,
@@ -22,6 +18,7 @@ import {
 } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 
+import { ListmonkConnectionCard } from "@/components/ListmonkConnectionCard";
 import { ListmonkTemplateRow } from "@/components/ListmonkTemplateRow";
 import { useCultures } from "@/hooks/useCultures";
 import { useListmonkSettings } from "@/hooks/useListmonk";
@@ -105,7 +102,7 @@ export function AdminListmonkPage() {
   }
 
   const enabled = cultures.data.items.filter((c) => c.enabled);
-  const { configured, url, purposes, templates } = settings.data;
+  const { connection, purposes, templates } = settings.data;
 
   return (
     <Stack>
@@ -114,22 +111,12 @@ export function AdminListmonkPage() {
         {t("admin.listmonk.intro")}
       </Text>
 
-      <Card withBorder>
-        <Stack gap="xs">
-          <Group gap="xs">
-            <Text fw={500}>{t("admin.listmonk.connection")}</Text>
-            <Badge color={configured ? "green" : "gray"}>
-              {configured
-                ? t("admin.listmonk.configured")
-                : t("admin.listmonk.notConfigured")}
-            </Badge>
-          </Group>
-          {url && <Code>{url}</Code>}
-          <Text size="xs" c="dimmed">
-            {t("admin.listmonk.connectionHelp")}
-          </Text>
-        </Stack>
-      </Card>
+      <ListmonkConnectionCard
+        // Remontée après chaque enregistrement : brouillon et champ token repartent
+        // de la valeur serveur.
+        key={connection?.updated_at ?? "none"}
+        connection={connection}
+      />
 
       {purposes.map((purpose) => (
         <PurposeSection

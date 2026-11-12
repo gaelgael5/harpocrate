@@ -226,8 +226,8 @@ if [ ! -f ".env" ]; then
     cp .env.example .env
 
     # Secrets auto-générés : tout ce qui PEUT être random sans casser
-    # l'usage. Les autres valeurs (KEYCLOAK_*, PUBLIC_URL, listmonk) restent
-    # à éditer manuellement par l'admin.
+    # l'usage. Les autres valeurs (KEYCLOAK_*, PUBLIC_URL) restent à éditer
+    # manuellement par l'admin ; listmonk se règle dans l'UI d'admin.
     PG_PASS="$(gen_urlsafe 32)"
     HMAC_KEY="$(gen_b64_bytes 32)"
     ADMIN_PASS="$(gen_urlsafe 24)"
@@ -267,7 +267,7 @@ if [ ! -f ".env" ]; then
     echo
     echo "      ⚠  À ÉDITER MANUELLEMENT dans .env si nécessaire :"
     echo "         - HARPOCRATE_KEYCLOAK_URL / REALM / CLIENT_ID  (si auth OIDC)"
-    echo "         - HARPOCRATE_LISTMONK_*                         (si envoi mails recovery)"
+    echo "      Envoi des mails de récupération : UI d'admin → Paramétrage Listmonk."
   else
     echo "[2/6] ⚠  .env absent et .env.example introuvable — config requise pour démarrer"
   fi

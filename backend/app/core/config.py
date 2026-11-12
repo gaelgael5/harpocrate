@@ -169,6 +169,12 @@ class Settings(BaseSettings):
     #
     # Toutes les variables utilisent le préfixe global `HARPOCRATE_` (cf.
     # env_prefix). Cohérent avec le reste de la config Harpocrate.
+    #
+    # LEGACY — la connexion (URL, utilisateur, token) se paramètre désormais en
+    # base depuis l'IHM (table listmonk_connection, écran « Paramétrage
+    # Listmonk ») : le backend ne peut pas réécrire le .env de l'hôte. Ces trois
+    # variables ne servent plus qu'à la reprise unique au boot
+    # (`listmonk_connection.import_legacy_env_connection`).
     listmonk_url: str = Field(default="")
     listmonk_user: str = Field(default="")
     listmonk_token: str = Field(default="", json_schema_extra={"is_secret": True})
@@ -189,10 +195,6 @@ class Settings(BaseSettings):
     def _empty_template_is_unset(cls, value: object) -> object:
         # Le compose passe `${VAR:-}` : une variable absente arrive en chaîne vide.
         return None if value == "" else value
-
-    @property
-    def listmonk_configured(self) -> bool:
-        return bool(self.listmonk_url and self.listmonk_user and self.listmonk_token)
 
     # ─── Recovery passphrase (LOT_57) ─────────────────────────────────────────
     # Tous les seuils/limites du flow recovery sont configurables pour permettre

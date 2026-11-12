@@ -228,14 +228,31 @@ async def test_put_connection_without_token_keeps_stored_token(
         r = await client.put(
             _CONN_URL,
             headers=_admin(),
-            json={"url": "https://listmonk.example", "api_user": "other"},
+            json={"url": "http://mail.home.lan:9000", "api_user": "other"},
         )
     assert r.status_code == 204
     resolved = await svc.resolve_connection(MagicMock())
     assert resolved is not None
-    assert (resolved.url, resolved.api_user) == ("https://listmonk.example", "other")
+    assert resolved.api_user == "other"
     assert resolved.token.get_secret_value() == _TOKEN
     assert audit.await_args.kwargs["metadata"]["token_changed"] is False
+
+
+async def test_put_new_url_without_token_returns_422(
+    repo: _FakeConnectionRepo, audit: AsyncMock
+) -> None:
+    """Le token enregistré ne suit jamais une nouvelle URL : sinon il partirait en clair
+    vers un hôte choisi par l'admin, et le token « non relisible » se relirait."""
+    async with _make_client() as client:
+        await client.put(_CONN_URL, headers=_admin(), json=_BODY)
+        r = await client.put(
+            _CONN_URL,
+            headers=_admin(),
+            json={"url": "https://attacker.example", "api_user": "harpocrate-api"},
+        )
+    assert r.status_code == 422
+    assert r.json()["detail"]["error"] == "token_required"
+    assert repo.row is not None and repo.row.url == "http://mail.home.lan:9000"
 
 
 async def test_put_first_connection_without_token_returns_422(
@@ -285,6 +302,25 @@ async def test_undecryptable_token_is_reported_and_not_used(
         got = await client.get(_URL, headers=_admin())
     assert got.json()["connection"]["token_readable"] is False
     assert await svc.resolve_connection(MagicMock()) is None
+
+
+async def test_put_without_token_when_stored_token_unreadable_returns_422(
+    repo: _FakeConnectionRepo, audit: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import settings
+
+    async with _make_client() as client:
+        await client.put(_CONN_URL, headers=_admin(), json=_BODY)
+        audit.reset_mock()
+        monkeypatch.setattr(settings, "hmac_key", base64.b64encode(b"z" * 32).decode())
+        r = await client.put(
+            _CONN_URL,
+            headers=_admin(),
+            json={"url": "http://mail.home.lan:9000", "api_user": "other"},
+        )
+    assert r.status_code == 422
+    assert r.json()["detail"]["error"] == "token_required"
+    audit.assert_not_awaited()
 
 
 # ─── Test de connexion ───────────────────────────────────────────────────────
@@ -355,11 +391,28 @@ async def test_connection_test_without_token_uses_stored_token(
             r = await client.post(
                 f"{_CONN_URL}/test",
                 headers=_admin(),
-                json={"url": "http://other.lan", "api_user": "harpocrate-api"},
+                json={"url": "http://mail.home.lan:9000", "api_user": "harpocrate-api"},
             )
     assert r.json()["ok"] is True
-    assert calls[0]["url"] == "http://other.lan/api/health"
+    assert calls[0]["url"] == "http://mail.home.lan:9000/api/health"
     assert calls[0]["headers"]["Authorization"] == f"token harpocrate-api:{_TOKEN}"
+
+
+async def test_connection_test_other_url_without_token_never_sends_stored_token(
+    repo: _FakeConnectionRepo, audit: AsyncMock
+) -> None:
+    fake, calls = _fake_http(httpx.Response(200))
+    async with _make_client() as client:
+        await client.put(_CONN_URL, headers=_admin(), json=_BODY)
+        with patch("httpx.AsyncClient", return_value=fake):
+            r = await client.post(
+                f"{_CONN_URL}/test",
+                headers=_admin(),
+                json={"url": "https://attacker.example", "api_user": "harpocrate-api"},
+            )
+    assert r.status_code == 422
+    assert r.json()["detail"]["error"] == "token_required"
+    assert calls == []
 
 
 async def test_connection_test_without_any_token_returns_422(

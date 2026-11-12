@@ -90,6 +90,7 @@ const saveMutate = vi.fn();
 const deleteMutate = vi.fn();
 const saveConnectionMutate = vi.fn();
 const testConnectionMutate = vi.fn();
+const testConnectionReset = vi.fn();
 
 function mockHooks(
   templates: ListmonkTemplate[],
@@ -120,6 +121,7 @@ function mockHooks(
   } as unknown as ReturnType<typeof useSaveListmonkConnection>);
   vi.mocked(useTestListmonkConnection).mockReturnValue({
     mutate: testConnectionMutate,
+    reset: testConnectionReset,
     isPending: false,
     data: testResult,
   } as unknown as ReturnType<typeof useTestListmonkConnection>);
@@ -230,17 +232,36 @@ describe("ListmonkConnectionCard", () => {
     expect(saveConnection()).toBeDisabled(); // rien n'a changé
   });
 
-  it("enregistre une nouvelle URL en gardant le token", () => {
+  it("enregistre un nouvel utilisateur en gardant le token", () => {
+    mockHooks([template("en", 6)]);
+    renderPage();
+    fireEvent.change(field("admin.listmonk.apiUser"), {
+      target: { value: "other" },
+    });
+    fireEvent.click(saveConnection()!);
+    expect(saveConnectionMutate).toHaveBeenCalledWith(
+      { url: CONNECTION.url, api_user: "other" },
+      expect.anything(),
+    );
+  });
+
+  it("exige le token quand l'URL change", () => {
     mockHooks([template("en", 6)]);
     renderPage();
     fireEvent.change(field("admin.listmonk.url"), {
       target: { value: "https://listmonk.example" },
     });
-    fireEvent.click(saveConnection()!);
-    expect(saveConnectionMutate).toHaveBeenCalledWith(
-      { url: "https://listmonk.example", api_user: "harpocrate-api" },
-      expect.anything(),
-    );
+    expect(saveConnection()).toBeDisabled();
+    expect(button("admin.listmonk.test")).toBeDisabled();
+  });
+
+  it("efface le résultat du test dès qu'un champ change", () => {
+    mockHooks([template("en", 6)], CONNECTION, { ok: true, http_status: 200 });
+    renderPage();
+    fireEvent.change(field("admin.listmonk.apiUser"), {
+      target: { value: "other" },
+    });
+    expect(testConnectionReset).toHaveBeenCalled();
   });
 
   it("exige un token pour un premier réglage", () => {

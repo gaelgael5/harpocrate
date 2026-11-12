@@ -86,6 +86,37 @@ async def resolve_connection(
     return ListmonkConnection(url=row.url, api_user=row.api_user, token=SecretStr(token))
 
 
+def _token_required(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"error": "token_required", "message": message},
+    )
+
+
+async def _reusable_stored_token(
+    conn: asyncpg.Connection[asyncpg.Record], url: str
+) -> tuple[bytes, SecretStr]:
+    """Token enregistré, réutilisable seulement vers la MÊME URL.
+
+    RÈGLE DE SÉCURITÉ : sans cette condition, un admin pourrait pointer la connexion (ou
+    un simple test) vers un hôte qu'il contrôle et y recevoir le token en clair dans
+    l'en-tête Authorization — le token, censé ne jamais se relire, se relirait ainsi.
+    Changer d'URL impose donc de ressaisir le token. Un token devenu illisible (clé
+    serveur changée) n'est pas réutilisable non plus : l'enregistrer tel quel donnerait
+    une connexion « réussie » qui n'enverrait aucun mail.
+    """
+    row = await repo.db_get(conn)
+    if row is None:
+        raise _token_required("A token is required")
+    if row.url != url:
+        raise _token_required("A token is required when the URL changes")
+    try:
+        token = server_secret_box.unseal(row.token_encrypted, purpose=_TOKEN_PURPOSE)
+    except (InvalidTag, ValueError) as exc:
+        raise _token_required("The saved token can no longer be decrypted") from exc
+    return row.token_encrypted, SecretStr(token)
+
+
 async def get_connection_view(
     conn: asyncpg.Connection[asyncpg.Record],
 ) -> ListmonkConnectionView | None:
@@ -112,16 +143,11 @@ async def save_connection(
     actor_ip: str | None,
 ) -> None:
     """Enregistre la connexion. `token=None` garde le token déjà stocké (l'IHM ne le
-    connaît pas et ne peut donc pas le renvoyer)."""
+    connaît pas et ne peut donc pas le renvoyer), à condition que l'URL ne change pas
+    (voir `_reusable_stored_token`)."""
     async with conn.transaction():
-        current = await repo.db_get(conn)
         if token is None:
-            if current is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail={"error": "token_required", "message": "A token is required"},
-                )
-            token_encrypted = current.token_encrypted
+            token_encrypted, _ = await _reusable_stored_token(conn, url)
         else:
             token_encrypted = server_secret_box.seal(
                 token.get_secret_value(), purpose=_TOKEN_PURPOSE
@@ -150,15 +176,10 @@ async def resolve_test_connection(
     api_user: str,
     token: SecretStr | None,
 ) -> ConnectionTestResult:
-    """Teste des valeurs saisies avant enregistrement ; sans token, celui en base sert."""
+    """Teste des valeurs saisies avant enregistrement ; sans token, celui en base sert,
+    vers la même URL seulement (voir `_reusable_stored_token`)."""
     if token is None:
-        stored = await resolve_connection(conn)
-        if stored is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={"error": "token_required", "message": "A token is required"},
-            )
-        token = stored.token
+        _, token = await _reusable_stored_token(conn, url)
     return await check_credentials(ListmonkConnection(url=url, api_user=api_user, token=token))
 
 

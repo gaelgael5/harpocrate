@@ -47,9 +47,11 @@ export function ListmonkConnectionCard({
   const [apiUser, setApiUser] = useState(connection?.api_user ?? "");
   const [token, setToken] = useState("");
 
-  // Un token illisible (clé serveur changée) ne peut pas être conservé : il faut le
-  // ressaisir, comme lors d'un premier réglage.
-  const canKeepToken = connection?.token_readable === true;
+  // Le token enregistré ne se garde que vers la même URL et s'il est encore lisible
+  // (clé serveur inchangée) : le serveur refuse les autres cas (token_required) pour
+  // qu'un changement d'URL ne fasse jamais partir l'ancien token vers un autre hôte.
+  const canKeepToken =
+    connection?.token_readable === true && url.trim() === connection.url;
   const tokenMissing = !token && !canKeepToken;
   const complete = /^https?:\/\//.test(url.trim()) && apiUser.trim() !== "";
   const changed =
@@ -71,6 +73,11 @@ export function ListmonkConnectionCard({
     });
 
   const result = test.data;
+  // Un résultat de test ne vaut que pour les valeurs testées : toute saisie l'efface.
+  const edit = (setter: (value: string) => void) => (value: string) => {
+    test.reset();
+    setter(value);
+  };
 
   return (
     <Card withBorder>
@@ -90,12 +97,12 @@ export function ListmonkConnectionCard({
           label={t("admin.listmonk.url")}
           placeholder="http://mail.home.lan:9000"
           value={url}
-          onChange={(e) => setUrl(e.currentTarget.value)}
+          onChange={(e) => edit(setUrl)(e.currentTarget.value)}
         />
         <TextInput
           label={t("admin.listmonk.apiUser")}
           value={apiUser}
-          onChange={(e) => setApiUser(e.currentTarget.value)}
+          onChange={(e) => edit(setApiUser)(e.currentTarget.value)}
         />
         <PasswordInput
           label={t("admin.listmonk.token")}
@@ -105,7 +112,7 @@ export function ListmonkConnectionCard({
               : t("admin.listmonk.tokenRequiredHelp")
           }
           value={token}
-          onChange={(e) => setToken(e.currentTarget.value)}
+          onChange={(e) => edit(setToken)(e.currentTarget.value)}
           autoComplete="new-password"
         />
         {result && (

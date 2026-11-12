@@ -184,3 +184,37 @@ def test_validate_doc_filename_accepts_md_only() -> None:
     sd._validate_filename("python-fr.md", pattern=sd._SAFE_DOC_FILENAME)
     with pytest.raises(HTTPException):
         sd._validate_filename("python-fr.txt", pattern=sd._SAFE_DOC_FILENAME)
+
+
+# ─── Routes legacy du SDK Python retirées (feature 3 de l'epic SDK) ─────────
+
+
+@pytest.mark.parametrize("key", ["python-wheel", "python-sdist"])
+async def test_retired_python_key_answers_gone_with_pypi_install(
+    fake_releases: Path, key: str
+) -> None:
+    """Le wheel n'est plus servi par l'instance : 410 qui dit où installer, jamais un fichier."""
+    with pytest.raises(HTTPException) as exc:
+        await sd.download_sdk_artifact(key)
+    assert exc.value.status_code == 410
+    detail = exc.value.detail
+    assert detail["error"] == "sdk_moved_to_registry"
+    assert detail["install_commands"] == ["pip install harpocrate", "uv add harpocrate"]
+    assert detail["url"] == "https://pypi.org/project/harpocrate/"
+
+
+async def test_retired_python_key_is_gone_even_without_registry_declaration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Index absent ou sans `registry` : toujours 410 (jamais un vieux wheel resté sur disque)."""
+    (tmp_path / "harpocrate-0.4.0-py3-none-any.whl").write_bytes(b"old wheel")
+    monkeypatch.setattr(sd, "_RELEASES_DIR", tmp_path)
+    with pytest.raises(HTTPException) as exc:
+        await sd.download_sdk_artifact("python-wheel")
+    assert exc.value.status_code == 410
+    assert exc.value.detail["error"] == "sdk_moved_to_registry"
+
+
+async def test_cli_bash_legacy_key_still_served(fake_releases: Path) -> None:
+    response = await sd.download_sdk_artifact("cli-bash")
+    assert response.path.endswith("harpocrate-cli-0.1.0.tar.gz")

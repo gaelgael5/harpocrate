@@ -75,9 +75,21 @@ def resolve_registry_distribution(sdk_id: str, raw: Any) -> dict[str, Any] | Non
 
     return {
         "name": name,
-        "label": registry.label,
         "package": package,
         "version": version,
+        **registry_install_info(name, package),
+    }
+
+
+def registry_install_info(name: str, package: str) -> dict[str, Any]:
+    """Libellé, page du paquet et commandes d'installation pour un registre CONNU.
+
+    `package` doit déjà avoir été validé (nom constant du code ou `_PACKAGE_NAME`) :
+    il est substitué tel quel dans une URL et dans une commande à copier-coller.
+    """
+    registry = _REGISTRIES[name]
+    return {
+        "label": registry.label,
         "url": registry.package_url.format(package=package),
         "install_commands": [cmd.format(package=package) for cmd in registry.install_commands],
     }

@@ -46,6 +46,8 @@ import { AdminReplicationPage } from "@/pages/AdminReplicationPage";
 import { AdminReplicationNodeDetailPage } from "@/pages/AdminReplicationNodeDetailPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { AdminConnectClientsPage } from "@/pages/AdminConnectClientsPage";
+import { AdminCulturesPage } from "@/pages/AdminCulturesPage";
+import { AdminListmonkPage } from "@/pages/AdminListmonkPage";
 import { AdminUserDetailPage } from "@/pages/AdminUserDetailPage";
 import { AdminSystemPage } from "@/pages/AdminSystemPage";
 import { AdminSnapshotsPage } from "@/pages/AdminSnapshotsPage";
@@ -286,6 +288,8 @@ export default function App() {
                   path="/admin/connect-clients"
                   element={<AdminConnectClientsPage />}
                 />
+                <Route path="/admin/cultures" element={<AdminCulturesPage />} />
+                <Route path="/admin/listmonk" element={<AdminListmonkPage />} />
                 <Route path="/export-all" element={<ExportAllPage />} />
                 <Route path="/admin/env" element={<AdminEnvPage />} />
                 <Route path="/api-docs" element={<ApiDocsEmbeddedPage />} />

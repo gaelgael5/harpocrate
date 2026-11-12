@@ -11,7 +11,8 @@ Endpoints :
 - `GET /v1/sdk/manifest`                    → manifest enrichi (catalogue + dispo physique)
 - `GET /v1/sdk/by-filename/{filename}`      → télécharge un binaire SDK
 - `GET /v1/sdk/doc/{filename}`              → sert un fichier markdown
-- `GET /v1/sdk/{key}`                       → legacy keys (python-wheel, python-sdist, cli-bash)
+- `GET /v1/sdk/{key}`                       → legacy key `cli-bash` ; `python-wheel` et
+                                              `python-sdist` répondent 410 (SDK Python sur PyPI)
 
 Schéma `index.json` (v1.1 ; un fichier 1.0 reste lu tel quel) :
 {
@@ -46,7 +47,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
-from app.services.sdk_registry import resolve_registry_distribution
+from app.services.sdk_registry import registry_install_info, resolve_registry_distribution
 
 router = APIRouter()
 
@@ -58,11 +59,21 @@ _INDEX_FILENAME = "index.json"
 # legacy_key sert uniquement aux endpoints rétrocompat /v1/sdk/{key}.
 
 _KIND_META: dict[str, dict[str, str | None]] = {
-    "wheel": {"media_type": "application/octet-stream", "legacy_key": "python-wheel"},
-    "sdist": {"media_type": "application/gzip", "legacy_key": "python-sdist"},
+    "wheel": {"media_type": "application/octet-stream", "legacy_key": None},
+    "sdist": {"media_type": "application/gzip", "legacy_key": None},
     "cli": {"media_type": "application/gzip", "legacy_key": "cli-bash"},
 }
 _DEFAULT_MEDIA_TYPE = "application/octet-stream"
+
+# Clés legacy d'un SDK désormais publié sur le registre de son langage (epic « Livrer
+# les SDK par les registres officiels », feature 3, 2026-10-20) : (registre, paquet).
+# Elles répondent 410 avec la commande d'installation, plutôt qu'un 404 muet ou — pire —
+# un ancien wheel resté sur le disque d'une instance : servir une version périmée hors
+# du registre est exactement ce que le retrait doit empêcher. Rupture assumée et annoncée.
+_RETIRED_LEGACY_KEYS: dict[str, tuple[str, str]] = {
+    "python-wheel": ("pypi", "harpocrate"),
+    "python-sdist": ("pypi", "harpocrate"),
+}
 
 
 # ─── Lecture index.json ──────────────────────────────────────────────────────
@@ -245,13 +256,39 @@ async def download_doc(filename: str) -> PlainTextResponse:
     )
 
 
-@router.get("/sdk/{key}", include_in_schema=True)
+@router.get(
+    "/sdk/{key}",
+    include_in_schema=True,
+    responses={
+        410: {
+            "description": "SDK retiré de l'instance (python-wheel, python-sdist) : le corps "
+            "`detail` donne `error=sdk_moved_to_registry`, `url` et `install_commands`."
+        }
+    },
+)
 async def download_sdk_artifact(key: str) -> FileResponse:
-    """Rétrocompat : ancien endpoint par legacy_key (`python-wheel`, `python-sdist`, `cli-bash`).
+    """Rétrocompat : ancien endpoint par legacy_key (`cli-bash`).
+
+    `python-wheel` et `python-sdist` sont retirés : 410 + où installer (cf. _RETIRED_LEGACY_KEYS).
 
     Sert la version la plus récente trouvée dans index.json pour le kind correspondant.
     Préférer `/v1/sdk/by-filename/{filename}` pour les nouveaux clients.
     """
+    retired = _RETIRED_LEGACY_KEYS.get(key)
+    if retired is not None:
+        registry, package = retired
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail={
+                "error": "sdk_moved_to_registry",
+                "message": f"Ce SDK n'est plus servi par l'instance : installer `{package}` "
+                "depuis son registre officiel.",
+                "registry": registry,
+                "package": package,
+                **registry_install_info(registry, package),
+            },
+        )
+
     target_kind: str | None = None
     for kind, meta in _KIND_META.items():
         if meta.get("legacy_key") == key:

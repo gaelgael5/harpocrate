@@ -1,4 +1,5 @@
 """Tests du client listmonk (LOT_57)."""
+
 from __future__ import annotations
 
 import base64
@@ -27,8 +28,6 @@ def _enable_listmonk(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "listmonk_url", "http://listmonk.test:9000")
     monkeypatch.setattr(settings, "listmonk_user", "harpocrate-api")
     monkeypatch.setattr(settings, "listmonk_token", "secret-token")
-    monkeypatch.setattr(settings, "listmonk_template_recovery_en", 5)
-    monkeypatch.setattr(settings, "listmonk_template_recovery_fr", 4)
 
 
 def _disable_listmonk(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,6 +46,7 @@ async def test_no_op_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> Non
             email="x@y",
             tx_id="tx-1",
             payload={},
+            template_id=7,
         )
     assert ok is False
     mock_client.assert_not_called()
@@ -64,6 +64,7 @@ async def test_raises_when_unconfigured_strict(
             email="x@y",
             tx_id="tx-1",
             payload={},
+            template_id=7,
             raise_if_unconfigured=True,
         )
 
@@ -106,6 +107,7 @@ async def test_posts_correct_body_and_auth_header(
             email="g@example.com",
             tx_id="tx-abc",
             payload={"recoveryLink": "https://x/r/abc", "expiresInMinutes": "30"},
+            template_id=7,
         )
     assert ok is True
     assert len(calls) == 2
@@ -124,7 +126,7 @@ async def test_posts_correct_body_and_auth_header(
     tx_body = tx_call["json"]
     assert tx_body == {
         "subscriber_email": "g@example.com",
-        "template_id": 5,  # default EN
+        "template_id": 7,
         "data": {"recoveryLink": "https://x/r/abc", "expiresInMinutes": "30"},
         "headers": [{"X-Harpocrate-Tx-Id": "tx-abc"}],
     }
@@ -146,7 +148,7 @@ async def test_subscriber_409_already_exists_is_treated_as_success(
 
     with patch("httpx.AsyncClient", return_value=fake_client):
         ok = await notify_listmonk.trigger_recovery(
-            email="g@example.com", tx_id="tx-1", payload={}
+            email="g@example.com", tx_id="tx-1", payload={}, template_id=7
         )
     assert ok is True
 
@@ -166,7 +168,7 @@ async def test_aborts_when_subscriber_create_fails(
 
     with patch("httpx.AsyncClient", return_value=fake_client):
         ok = await notify_listmonk.trigger_recovery(
-            email="g@example.com", tx_id="tx-1", payload={}
+            email="g@example.com", tx_id="tx-1", payload={}, template_id=7
         )
     assert ok is False
     # Un seul call (subscribers), pas de tx
@@ -175,8 +177,11 @@ async def test_aborts_when_subscriber_create_fails(
 
 
 @pytest.mark.asyncio
-async def test_uses_fr_template_when_locale_fr(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Locale `fr` → template_id 4 (vs 5 par défaut EN)."""
+async def test_trigger_recovery_sends_given_template_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Le template_id reçu de l'appelant part tel quel : aucune sélection par
+    locale ici, elle se fait en base (`listmonk_templates.db_resolve`)."""
     _enable_listmonk(monkeypatch)
     from app.services import notify_listmonk
 
@@ -187,66 +192,9 @@ async def test_uses_fr_template_when_locale_fr(monkeypatch: pytest.MonkeyPatch) 
 
     with patch("httpx.AsyncClient", return_value=fake_client):
         await notify_listmonk.trigger_recovery(
-            email="g@example.com",
-            tx_id="tx-1",
-            payload={},
-            locale="fr",
+            email="g@example.com", tx_id="tx-1", payload={}, template_id=42
         )
-    # Le second call (tx) doit contenir template_id=4
-    tx_call = calls[1]
-    assert tx_call["json"]["template_id"] == 4
-
-
-@pytest.mark.asyncio
-async def test_locale_normalization_region_variants_match_fr(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`fr-FR`, `fr_FR` → matchent toujours le template FR (id=4)."""
-    _enable_listmonk(monkeypatch)
-    from app.services import notify_listmonk
-
-    captured_template_ids: list[int] = []
-
-    async def fake_post(url: str, json: dict[str, object], headers: dict[str, str]):
-        # Seul le call /api/tx contient template_id. Le subscriber upsert
-        # ne l'a pas — on filtre par présence de la clé.
-        if "template_id" in json:
-            captured_template_ids.append(int(json["template_id"]))
-        return httpx.Response(200, json={})
-
-    fake_client = AsyncMock()
-    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-    fake_client.__aexit__ = AsyncMock(return_value=None)
-    fake_client.post = AsyncMock(side_effect=fake_post)
-
-    with patch("httpx.AsyncClient", return_value=fake_client):
-        await notify_listmonk.trigger_recovery(
-            email="g@example.com", tx_id="tx-1", payload={}, locale="fr-FR"
-        )
-        await notify_listmonk.trigger_recovery(
-            email="g@example.com", tx_id="tx-2", payload={}, locale="fr_FR"
-        )
-    assert captured_template_ids == [4, 4]
-
-
-@pytest.mark.asyncio
-async def test_unknown_locale_falls_back_to_en(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _enable_listmonk(monkeypatch)
-    from app.services import notify_listmonk
-
-    fake_client, calls = _make_two_step_mock_client(
-        subscriber_response=httpx.Response(200, json={}),
-        tx_response=httpx.Response(200, json={}),
-    )
-
-    with patch("httpx.AsyncClient", return_value=fake_client):
-        await notify_listmonk.trigger_recovery(
-            email="g@example.com", tx_id="tx-1", payload={}, locale="es"
-        )
-    tx_call = calls[1]
-    assert tx_call["json"]["template_id"] == 5  # fallback EN
+    assert calls[1]["json"]["template_id"] == 42
 
 
 @pytest.mark.asyncio
@@ -261,7 +209,7 @@ async def test_returns_false_on_http_error(monkeypatch: pytest.MonkeyPatch) -> N
 
     with patch("httpx.AsyncClient", return_value=fake_client):
         ok = await notify_listmonk.trigger_recovery(
-            email="x@y", tx_id="tx-1", payload={}
+            email="x@y", tx_id="tx-1", payload={}, template_id=7
         )
     assert ok is False
 
@@ -280,6 +228,6 @@ async def test_returns_false_on_network_error(
 
     with patch("httpx.AsyncClient", return_value=fake_client):
         ok = await notify_listmonk.trigger_recovery(
-            email="x@y", tx_id="tx-1", payload={}
+            email="x@y", tx_id="tx-1", payload={}, template_id=7
         )
     assert ok is False

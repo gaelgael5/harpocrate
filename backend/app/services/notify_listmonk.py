@@ -1,8 +1,8 @@
 """Client listmonk — déclenche un template transactional (LOT_57).
 
 Harpocrate appelle `POST {LISTMONK_URL}/api/tx` avec le `template_id`
-configuré dans l'admin listmonk. Listmonk fait le rendu (Sprig templates),
-ajoute son tracking et envoie via son provider SMTP.
+paramétré en base par culture (écran « Paramétrage Listmonk »). Listmonk fait le
+rendu (Sprig templates), ajoute son tracking et envoie via son provider SMTP.
 
 Auth : header `Authorization: token {LISTMONK_USER}:{LISTMONK_TOKEN}`.
 
@@ -87,26 +87,12 @@ async def _ensure_subscriber(client: httpx.AsyncClient, email: str) -> bool:
     return False
 
 
-def _resolve_template_id(locale: str) -> int:
-    """Sélectionne le `template_id` listmonk selon la locale.
-
-    Pattern extensible : on ajoute `listmonk_template_recovery_<locale>`
-    dans Settings au fur et à mesure que les templates listmonk sont créés.
-    Fallback sur `_en` quand la locale demandée n'a pas de template dédié.
-    Normalise `fr-FR` / `fr_FR` → `fr` avant le lookup.
-    """
-    normalized = (locale or "").lower().replace("_", "-").split("-")[0]
-    if normalized == "fr":
-        return settings.listmonk_template_recovery_fr
-    return settings.listmonk_template_recovery_en
-
-
 async def trigger_recovery(
     *,
     email: str,
     tx_id: str,
     payload: dict[str, Any],
-    locale: str = "en",
+    template_id: int,
     raise_if_unconfigured: bool = False,
 ) -> bool:
     """Déclenche le template transactional listmonk pour un mail de recovery.
@@ -119,9 +105,9 @@ async def trigger_recovery(
         payload: variables consommées par le template listmonk (sous la
             clé `data` du body). La forme dépend du template configuré
             côté admin listmonk.
-        locale: code locale du destinataire — sélectionne le template_id
-            via `_resolve_template_id`. Fallback EN si la locale n'a pas
-            de template dédié.
+        template_id: ID du template transactional listmonk, résolu par
+            l'appelant depuis la base selon la culture du destinataire
+            (`listmonk_templates.resolve_template_for_user`).
         raise_if_unconfigured: par défaut False → no-op si config absente.
             À mettre True dans les tests qui veulent vérifier que la config
             est bien chargée.
@@ -146,8 +132,6 @@ async def trigger_recovery(
             ),
         )
         return False
-
-    template_id = _resolve_template_id(locale)
 
     body = {
         "subscriber_email": email,

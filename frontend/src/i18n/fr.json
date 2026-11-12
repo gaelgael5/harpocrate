@@ -476,6 +476,8 @@
     "nav_secret_types": "Types de secrets",
     "nav_anomalies": "Anomalies",
     "nav_connect_clients": "Applications connectées",
+    "nav_cultures": "Cultures",
+    "nav_listmonk": "Paramétrage Listmonk",
     "connectClients": {
       "title": "Applications connectées",
       "intro": "Seules les applications déclarées ici, avec leurs URLs de retour exactes, peuvent demander une API key sur un wallet via « Se connecter avec Harpocrate ». Désactiver une application bloque ses nouvelles demandes sans révoquer les clés déjà obtenues.",
@@ -512,6 +514,46 @@
         "redirectUrisRequired": "Au moins une URL de retour est obligatoire",
         "tooManyRedirectUris": "10 URLs de retour au maximum",
         "clientIdTaken": "Cet identifiant est déjà déclaré"
+      }
+    },
+    "cultures": {
+      "title": "Cultures",
+      "intro": "Langues ISO 639-1 disponibles pour les contenus paramétrés, comme les templates de mails. Une culture activée peut recevoir un template ; la culture par défaut sert de repli quand celle d'un utilisateur n'est pas activée ou n'a pas de template. Activer une culture ne traduit pas l'interface.",
+      "search": "Rechercher par code ou par nom",
+      "filterEnabled": "Activées",
+      "filterAll": "Toutes",
+      "empty": "Aucune culture ne correspond.",
+      "colCode": "Code",
+      "colName": "Langue",
+      "colEnabled": "Activée",
+      "colDefault": "Par défaut",
+      "default": "Par défaut",
+      "makeDefault": "Définir par défaut",
+      "toggleLabel": "Activer {{name}}",
+      "errors": {
+        "default_culture_cannot_be_disabled": "La culture par défaut ne peut pas être désactivée : désignez d'abord une autre culture par défaut.",
+        "culture_disabled": "Seule une culture activée peut être la culture par défaut."
+      }
+    },
+    "listmonk": {
+      "title": "Paramétrage Listmonk",
+      "intro": "ID du template Listmonk à utiliser pour chaque type de mail, culture par culture. À l'envoi, Harpocrate prend le template de la culture du destinataire, sinon celui de la culture par défaut. Seules les cultures activées sont listées.",
+      "connection": "Connexion Listmonk",
+      "configured": "Configurée",
+      "notConfigured": "Non configurée",
+      "connectionHelp": "L'URL, l'utilisateur et le token Listmonk se règlent dans le fichier .env de l'hôte (HARPOCRATE_LISTMONK_URL, _USER, _TOKEN), puis en recréant le conteneur backend.",
+      "purposes": {
+        "recovery": "Récupération de compte"
+      },
+      "colCulture": "Culture",
+      "colTemplateId": "ID du template",
+      "noTemplate": "Aucun",
+      "templateIdLabel": "ID du template pour {{name}}",
+      "save": "Enregistrer",
+      "remove": "Retirer",
+      "missingDefault": "La culture par défaut ({{name}}) n'a pas de template : aucun mail de ce type ne partira pour les cultures sans template.",
+      "errors": {
+        "cultureDisabled": "Cette culture a été désactivée entre-temps : réactivez-la dans l'écran Cultures."
       }
     },
     "anomalies": {
